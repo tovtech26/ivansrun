@@ -1,0 +1,12 @@
+dist/
+node_modules/
+.superpowers/
+.agents/
+.DS_Store
+Thumbs.db
+npm-debug.log*
+supabase/imports/
+Flyer Templates/*.psd
+Brand Manual/
+Logos/
+/Irunsvan_*.svg

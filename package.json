@@ -1,0 +1,13 @@
+{
+  "name": "irunsvan-reseller-site",
+  "version": "1.0.0",
+  "private": true,
+  "description": "IRUNSVAN public catalog, reseller portal, and admin operations frontend.",
+  "scripts": {
+    "build": "node scripts/build-static.js",
+    "check": "node --check src/app.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
