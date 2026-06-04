@@ -227,34 +227,20 @@ function storefront() {
       <section class="hero">
         <div class="hero-bg"></div>
         <div class="hero-blue-wash"></div>
-        <img class="hero-watermark" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="" aria-hidden="true" />
         <div class="hero-grid">
           <div class="hero-content">
-            <img class="hero-lockup" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="Ivansrun Africa" />
             <span class="eyebrow">Ivansrun Africa</span>
-            <h1>Performance footwear for Africa's reseller network.</h1>
+            <h1>Performance footwear for Africa.</h1>
             <p>Browse the public range, then unlock live wholesale inventory through an approved Ivansrun Africa reseller account.</p>
             <div class="hero-actions">
-              <a href="#catalog" class="button primary">View Catalog <span class="button-mark" aria-hidden="true">&nearr;</span></a>
-              <button class="button ghost" data-route="apply">Reseller Access <span class="button-mark" aria-hidden="true">&rarr;</span></button>
+              <a href="#catalog" class="button primary charge-button">View Catalog <span class="button-mark" aria-hidden="true">&nearr;</span></a>
+              <button class="button ghost charge-button subdued" data-route="apply">Reseller Access <span class="button-mark" aria-hidden="true">&rarr;</span></button>
             </div>
-          </div>
-          <aside class="hero-showcase" aria-label="Ivansrun Africa wholesale summary">
-            <img src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="Ivansrun Africa" />
-            <div>
-              <strong>Africa wholesale access</strong>
-              <p>Approved buyers see live stock by SKU, colour, and size.</p>
+            <div class="hero-meta" aria-label="Ivansrun Africa catalog summary">
+              <span>75 product lines</span>
+              <span>3,735 SKUs</span>
+              <span>Wholesale access after approval</span>
             </div>
-            <dl>
-              <div><dt>Catalog</dt><dd>75 lines</dd></div>
-              <div><dt>Inventory</dt><dd>3,735 SKUs</dd></div>
-              <div><dt>Orders</dt><dd>Approval based</dd></div>
-            </dl>
-          </aside>
-          <div class="hero-region-card">
-            <span>Region</span>
-            <strong>Africa</strong>
-            <p>Built for retailers, teams, and performance buyers across African markets.</p>
           </div>
         </div>
       </section>
@@ -813,7 +799,7 @@ function bindEvents() {
 
 function applyRevealMotion() {
   const targets = document.querySelectorAll(
-    ".hero-content, .hero-showcase, .hero-region-card, .product-card, .section-header, .lab-section > *, .detail-grid > *, .form-hero, .workflow-form, .process-panel, .metric-card, .inventory-panel, .order-sidebar, .admin-card, .import-panel, .product-overview, .timeline-panel, .email-card, .info-page section",
+    ".hero-content, .section-header, .lab-section > *, .detail-grid > *, .form-hero, .workflow-form, .process-panel, .metric-card, .inventory-panel, .order-sidebar, .admin-card, .import-panel, .product-overview, .timeline-panel, .email-card, .info-page section",
   );
 
   targets.forEach((target) => target.classList.add("reveal"));
