@@ -134,11 +134,9 @@ function logo(tone = "dark") {
   const src =
     tone === "light"
       ? "public/brand/Irunsvan_White-removebg-preview.svg"
-      : tone === "red"
-        ? "public/brand/Irunsvan_Red-removebg-preview.svg"
       : tone === "blue"
         ? "public/brand/Irunsvan_Blue-removebg-preview.svg"
-        : "public/brand/Irunsvan_Red-removebg-preview.svg";
+        : "public/brand/Irunsvan_Blue-removebg-preview.svg";
   return `<img class="brand-logo" src="${src}" alt="Ivansrun Africa" />`;
 }
 
@@ -148,7 +146,7 @@ function productVisual(label, imageName = "") {
   const shortLabel = escapeHtml(String(label || "IRUNSVAN").replace("IRUNSVAN ", "").replace(" Running Shoe", ""));
   return `
     <div class="product-visual" aria-label="${safeLabel} product image">
-      <img class="product-visual-logo" src="public/brand/Irunsvan_Red-removebg-preview.svg" alt="" aria-hidden="true" />
+      <img class="product-visual-logo" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="" aria-hidden="true" />
       <div class="shoe-shadow"></div>
       <div class="shoe-shape"><span>${shortLabel}</span></div>
       ${safeImageName ? `<em>${safeImageName}</em>` : ""}
@@ -201,7 +199,7 @@ function topNav() {
   const active = (routes) => (routes.includes(state.route) ? "active" : "");
   return `
     <header class="top-nav">
-      <button class="logo-link bare-button" data-route="store" aria-label="Ivansrun Africa home">${logo("red")}</button>
+      <button class="logo-link bare-button" data-route="store" aria-label="Ivansrun Africa home">${logo("blue")}</button>
       <nav class="main-nav" aria-label="Primary navigation">
         <button class="${active(["store", "product"])}" data-route="store">Catalog</button>
         <button class="${active(["apply"])}" data-route="apply">Become a Reseller</button>
@@ -228,11 +226,11 @@ function storefront() {
       <section class="reseller-strip">Ivansrun Africa reseller accounts can view live stock and submit order requests.</section>
       <section class="hero">
         <div class="hero-bg"></div>
-        <div class="hero-red-wash"></div>
-        <img class="hero-watermark" src="public/brand/Irunsvan_Red-removebg-preview.svg" alt="" aria-hidden="true" />
+        <div class="hero-blue-wash"></div>
+        <img class="hero-watermark" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="" aria-hidden="true" />
         <div class="hero-grid">
           <div class="hero-content">
-            <img class="hero-lockup" src="public/brand/Irunsvan_Red-removebg-preview.svg" alt="Ivansrun Africa" />
+            <img class="hero-lockup" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="Ivansrun Africa" />
             <span class="eyebrow">Ivansrun Africa</span>
             <h1>Performance footwear for Africa's reseller network.</h1>
             <p>Browse the public range, then unlock live wholesale inventory through an approved Ivansrun Africa reseller account.</p>
@@ -242,7 +240,7 @@ function storefront() {
             </div>
           </div>
           <aside class="hero-showcase" aria-label="Ivansrun Africa wholesale summary">
-            <img src="public/brand/Irunsvan_Red-removebg-preview.svg" alt="Ivansrun Africa" />
+            <img src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="Ivansrun Africa" />
             <div>
               <strong>Africa wholesale access</strong>
               <p>Approved buyers see live stock by SKU, colour, and size.</p>
@@ -342,7 +340,7 @@ function productDetail() {
         <div class="detail-copy">
           <span class="eyebrow dark">${escapeHtml(product.sku || "Ivansrun Africa")}</span>
           <h1>${escapeHtml(product.name || "IRUNSVAN Running Shoe")}</h1>
-          <img class="detail-brand-mark" src="public/brand/Irunsvan_Red-removebg-preview.svg" alt="Ivansrun Africa" />
+          <img class="detail-brand-mark" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="Ivansrun Africa" />
           <p class="detail-price">${money(product.base_price)}</p>
           <p class="section-note">Public buyers can browse product information and pricing. Exact stock is reserved for approved Ivansrun Africa reseller accounts.</p>
           ${selectorGroup("Colours", colours.length ? colours : ["Bright Orange", "Ocean Blue", "Elegant Black", "Cloud White"])}
@@ -658,7 +656,7 @@ function emailCenter() {
 function adminSidebar(activeRoute) {
   return `
     <aside class="admin-sidebar">
-      ${logo("red")}<span class="admin-chip">Africa Ops</span>
+      ${logo("blue")}<span class="admin-chip">Africa Ops</span>
       <nav>
         ${adminLink("Dashboard", "admin", activeRoute)}
         ${adminLink("Approvals", "approvals", activeRoute)}
@@ -768,7 +766,7 @@ function pager(label) {
 function footer(compact = false) {
   return `
     <footer class="${compact ? "footer compact" : "footer"}">
-      <div>${logo("red")}<p>High-performance athletic footwear for Africa's reseller-ready inventory workflows.</p></div>
+      <div>${logo("blue")}<p>High-performance athletic footwear for Africa's reseller-ready inventory workflows.</p></div>
       <div><strong>Resources</strong><button data-route="store">Catalog</button><button data-route="apply">Reseller Terms</button><button data-route="contact">Support</button></div>
       <div><strong>Operations</strong><button data-route="history">Order Requests</button><button data-route="imports">Inventory Imports</button><button data-route="privacy">Privacy Policy</button></div>
       <p class="copyright">Copyright 2026 Ivansrun Africa High-Performance Footwear.</p>

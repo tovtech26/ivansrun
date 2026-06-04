@@ -1,6 +1,6 @@
 :root {
-  --blue: #b4232a;
-  --blue-dark: #84191f;
+  --blue: #0070ea;
+  --blue-dark: #0059bb;
   --ink: #171717;
   --black: #0b0b0c;
   --paper: #f6f6f4;
@@ -9,9 +9,8 @@
   --muted: #68645d;
   --soft: #ece9e3;
   --soft-2: #ded9cf;
-  --red: #b4232a;
-  --red-hot: #df1d2b;
-  --deep-red: #5f1015;
+  --error: #ba1a1a;
+  --brand-deep: #001a41;
   --shadow: 0 2px 8px rgba(10, 10, 10, 0.08);
   --motion: cubic-bezier(0.32, 0.72, 0, 1);
   color: var(--black);
@@ -97,7 +96,7 @@ a {
 }
 
 .logo-link .brand-logo {
-  filter: drop-shadow(0 10px 20px rgba(180, 35, 42, 0.12));
+  filter: drop-shadow(0 10px 20px rgba(0, 112, 234, 0.14));
   width: clamp(154px, 15vw, 216px);
 }
 
@@ -153,7 +152,7 @@ a {
 
 .reseller-strip {
   align-items: center;
-  background: var(--deep-red);
+  background: var(--brand-deep);
   color: var(--white);
   display: flex;
   font-size: 13px;
@@ -175,7 +174,7 @@ a {
 
 .hero-bg {
   background:
-    linear-gradient(108deg, rgba(0, 0, 0, 0.9), rgba(55, 10, 14, 0.62), rgba(0, 0, 0, 0.18)),
+    linear-gradient(108deg, rgba(0, 0, 0, 0.9), rgba(0, 28, 70, 0.68), rgba(0, 0, 0, 0.18)),
     url("/Flyer Templates/Flyer Template.jpg") center / cover;
   inset: 0;
   position: absolute;
@@ -190,10 +189,10 @@ a {
   position: absolute;
 }
 
-.hero-red-wash {
+.hero-blue-wash {
   background:
-    radial-gradient(circle at 82% 18%, rgba(223, 29, 43, 0.42), transparent 28%),
-    radial-gradient(circle at 16% 72%, rgba(180, 35, 42, 0.22), transparent 30%);
+    radial-gradient(circle at 82% 18%, rgba(0, 112, 234, 0.42), transparent 28%),
+    radial-gradient(circle at 16% 72%, rgba(0, 89, 187, 0.24), transparent 30%);
   inset: 0;
   mix-blend-mode: screen;
   opacity: 0.85;
@@ -327,8 +326,8 @@ h4 {
 }
 
 .button.primary {
-  background: var(--red);
-  border-color: var(--red);
+  background: var(--blue);
+  border-color: var(--blue);
   color: var(--white);
 }
 
@@ -405,7 +404,7 @@ h4 {
 }
 
 .hero-region-card {
-  background: var(--red);
+  background: var(--blue);
   bottom: -42px;
   color: var(--white);
   max-width: 320px;
@@ -1295,7 +1294,7 @@ textarea {
 }
 
 .notice.error {
-  border-left-color: var(--red);
+  border-left-color: var(--error);
   margin-bottom: 18px;
 }
 
