@@ -226,7 +226,7 @@ function storefront() {
       <section class="hero">
         <div class="hero-bg"></div>
         <div class="hero-content">
-          <span class="eyebrow">IRUNSVAN Performance Footwear</span>
+          <span class="eyebrow">IRUNSVAN</span>
           <h1>Engineered for the run.</h1>
           <p>High-performance running shoes for public browsing and reseller ordering. Public visitors see the catalog and prices; approved resellers get exact SKU stock.</p>
           <div class="hero-actions">
@@ -253,7 +253,7 @@ function storefront() {
         <div class="catalog-content">
           <div class="section-header">
             <div>
-              <span class="eyebrow dark">Public Catalog</span>
+              <span class="eyebrow dark">Catalog</span>
               <h2>${state.loading ? "Loading products" : `${products.length} IRUNSVAN products`}</h2>
               <p class="section-note">Public view hides exact stock. Resellers see live quantities after approval.</p>
             </div>
@@ -269,9 +269,9 @@ function storefront() {
       <section class="lab-section">
         <div class="lab-panel"><span>75</span><p>Imported product lines</p></div>
         <div>
-          <span class="eyebrow dark">Operations Ready</span>
-          <h2>Catalog now backed by Supabase.</h2>
-          <p>The storefront reads public product and variation data from Supabase. Exact inventory stays private for approved resellers and admins.</p>
+          <span class="eyebrow dark">Wholesale workflow</span>
+          <h2>Browse publicly. Order through approval.</h2>
+          <p>Customers can inspect the product range without seeing warehouse quantities. Approved resellers get access to exact stock and order requests.</p>
         </div>
       </section>
       ${footer()}
@@ -431,7 +431,7 @@ function resellerPortal() {
     <main class="portal-page">
       <section class="portal-header">
         <div>
-          <span class="eyebrow dark">Portal / Dashboard</span>
+        <span class="eyebrow dark">Reseller portal</span>
           <h1>Reseller Dashboard</h1>
           <p>Browse exact variation stock and prepare order requests for admin review.</p>
         </div>
@@ -521,7 +521,7 @@ function requestHistory() {
     <main class="portal-page">
       <section class="portal-header">
         <div>
-          <span class="eyebrow dark">Reseller / Requests</span>
+          <span class="eyebrow dark">Reseller requests</span>
           <h1>Request History</h1>
           <p>Track order requests from draft through admin approval.</p>
         </div>
@@ -605,7 +605,7 @@ function adminImports() {
         <section class="timeline-panel">
           ${processStep("1", "Upload", "Admin selects CSV or XLSX file.")}
           ${processStep("2", "Validate", "System checks required columns, SKU matches, and skipped rows.")}
-          ${processStep("3", "Commit", "Validated rows update Supabase catalog and inventory tables.")}
+          ${processStep("3", "Commit", "Validated rows update catalog and inventory records.")}
         </section>
       </section>
     </main>

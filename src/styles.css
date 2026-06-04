@@ -1,16 +1,16 @@
 :root {
-  --blue: #0070ea;
-  --blue-dark: #0059bb;
-  --ink: #0d1c32;
-  --black: #050608;
-  --paper: #f7f9fb;
+  --blue: #b4232a;
+  --blue-dark: #84191f;
+  --ink: #171717;
+  --black: #0b0b0c;
+  --paper: #f6f6f4;
   --white: #ffffff;
-  --line: #c5c6cd;
-  --muted: #5b6270;
-  --soft: #eceef0;
-  --soft-2: #e0e3e5;
-  --red: #f1414d;
-  --shadow: 0 16px 45px rgba(13, 28, 50, 0.1);
+  --line: #d5d2ca;
+  --muted: #68645d;
+  --soft: #ece9e3;
+  --soft-2: #ded9cf;
+  --red: #b4232a;
+  --shadow: 0 2px 8px rgba(10, 10, 10, 0.08);
   color: var(--black);
   background: var(--paper);
   font-family: Inter, system-ui, sans-serif;
@@ -107,10 +107,8 @@ a {
   padding: 0 12px;
   width: auto;
   color: var(--ink);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .reseller-strip {
@@ -118,28 +116,26 @@ a {
   background: var(--ink);
   color: var(--white);
   display: flex;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
   gap: 8px;
   justify-content: center;
-  letter-spacing: 0.08em;
   padding: 10px 20px;
-  text-transform: uppercase;
 }
 
 .hero {
   align-items: center;
   color: var(--white);
   display: flex;
-  min-height: 580px;
+  min-height: 520px;
   overflow: hidden;
-  padding: 88px clamp(20px, 5vw, 64px);
+  padding: 72px clamp(20px, 5vw, 64px);
   position: relative;
 }
 
 .hero-bg {
   background:
-    linear-gradient(110deg, rgba(0, 0, 0, 0.78), rgba(0, 112, 234, 0.32), rgba(0, 0, 0, 0.2)),
+    linear-gradient(110deg, rgba(0, 0, 0, 0.76), rgba(20, 20, 20, 0.4), rgba(0, 0, 0, 0.18)),
     url("/Flyer Templates/Flyer Template.jpg") center / cover;
   inset: 0;
   position: absolute;
@@ -155,10 +151,8 @@ a {
   color: #d6e3ff;
   display: inline-block;
   font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.18em;
+  font-weight: 700;
   margin-bottom: 14px;
-  text-transform: uppercase;
 }
 
 .eyebrow.dark {
@@ -174,13 +168,12 @@ h4 {
 }
 
 .hero h1 {
-  font-size: clamp(46px, 7vw, 86px);
+  font-size: clamp(38px, 6vw, 68px);
   font-weight: 800;
   letter-spacing: 0;
-  line-height: 0.95;
+  line-height: 1.02;
   margin-bottom: 24px;
   max-width: 760px;
-  text-transform: uppercase;
 }
 
 .hero p {
@@ -202,13 +195,11 @@ h4 {
   border: 1px solid var(--black);
   display: inline-flex;
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   gap: 8px;
   justify-content: center;
-  letter-spacing: 0.05em;
   min-height: 42px;
   padding: 0 18px;
-  text-transform: uppercase;
 }
 
 .button.primary {
@@ -281,10 +272,8 @@ h4 {
 .search-field span,
 .compact-search span {
   color: var(--muted);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .search-field input,
@@ -298,11 +287,9 @@ h4 {
 
 .filter-title {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: 13px;
+  font-weight: 700;
   margin: 0 0 14px;
-  text-transform: uppercase;
 }
 
 .filter-options {
@@ -373,16 +360,13 @@ h4 {
 .product-card {
   background: var(--white);
   border: 1px solid var(--line);
-  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.02);
   overflow: hidden;
 }
 
 .product-visual {
   align-items: center;
   aspect-ratio: 4 / 3;
-  background:
-    linear-gradient(135deg, rgba(0, 112, 234, 0.1), rgba(13, 28, 50, 0.05)),
-    var(--soft);
+  background: var(--soft);
   display: flex;
   justify-content: center;
   overflow: hidden;
@@ -398,31 +382,28 @@ h4 {
 
 .shoe-shape {
   align-items: center;
-  background: linear-gradient(135deg, var(--white), #cfd8e6 45%, var(--blue));
-  border: 1px solid rgba(13, 28, 50, 0.18);
-  border-radius: 58% 42% 52% 48% / 45% 42% 58% 55%;
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 8px;
   box-shadow: var(--shadow);
   display: flex;
-  height: 34%;
+  height: 30%;
   justify-content: center;
-  transform: skewX(-16deg) rotate(-8deg);
-  width: 72%;
+  transform: rotate(-6deg);
+  width: 68%;
 }
 
 .shoe-shape span {
   color: var(--ink);
-  font-size: 11px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  transform: skewX(16deg);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .shoe-shadow {
-  background: rgba(13, 28, 50, 0.22);
+  background: rgba(10, 10, 10, 0.18);
   border-radius: 50%;
   bottom: 25%;
-  filter: blur(14px);
-  height: 18px;
+  height: 8px;
   position: absolute;
   width: 58%;
 }
@@ -454,7 +435,6 @@ h4 {
   font-size: 13px;
   font-weight: 700;
   margin: 6px 0 0;
-  text-transform: uppercase;
 }
 
 .price-stack {
@@ -507,10 +487,9 @@ h4 {
   background: var(--black);
   border: 0;
   color: var(--white);
-  font-weight: 800;
+  font-weight: 700;
   margin: 0 20px 20px;
   min-height: 42px;
-  text-transform: uppercase;
   width: calc(100% - 40px);
 }
 
@@ -518,7 +497,7 @@ h4 {
   background: transparent;
   border: 0;
   color: var(--blue-dark);
-  font-weight: 900;
+  font-weight: 700;
   padding: 0;
   text-align: left;
 }
@@ -553,10 +532,9 @@ h4 {
 .form-hero h1,
 .info-page h1 {
   color: var(--black);
-  font-size: clamp(38px, 5vw, 64px);
-  line-height: 1;
+  font-size: clamp(34px, 4vw, 54px);
+  line-height: 1.05;
   margin: 0 0 18px;
-  text-transform: uppercase;
 }
 
 .detail-price {
@@ -609,7 +587,7 @@ h4 {
   background: var(--soft);
   color: var(--muted);
   font-size: 13px;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.5;
   margin-top: 18px;
   padding: 14px;
@@ -659,10 +637,8 @@ h4 {
 
 .workflow-form label span {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .workflow-form input,
@@ -745,14 +721,14 @@ h4 {
 .lab-section {
   background: var(--soft);
   display: grid;
-  gap: 40px;
+  gap: 32px;
   grid-template-columns: 1fr 1fr;
-  padding: 80px clamp(20px, 5vw, 64px);
+  padding: 64px clamp(20px, 5vw, 64px);
 }
 
 .lab-panel {
   align-items: center;
-  background: var(--blue);
+  background: var(--ink);
   color: var(--white);
   display: flex;
   flex-direction: column;
@@ -800,11 +776,10 @@ h4 {
   background: var(--white);
   border: 1px solid var(--line);
   display: flex;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
   gap: 8px;
   padding: 10px 12px;
-  text-transform: uppercase;
 }
 
 .metric-grid {
@@ -824,10 +799,8 @@ h4 {
 
 .metric-card span {
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .metric-card strong {
@@ -874,10 +847,9 @@ table {
 th {
   background: var(--soft);
   color: var(--muted);
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 700;
   text-align: left;
-  text-transform: uppercase;
 }
 
 th,
@@ -915,10 +887,9 @@ td {
   background: var(--soft);
   border: 1px solid var(--line);
   display: inline-block;
-  font-size: 11px;
-  font-weight: 900;
+  font-size: 12px;
+  font-weight: 700;
   padding: 6px 8px;
-  text-transform: uppercase;
 }
 
 .stock-badge.low {
@@ -956,9 +927,7 @@ td {
 .sidebar-head p {
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 700;
 }
 
 .order-items {
@@ -1048,7 +1017,7 @@ textarea {
 
 .admin-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 260px 1fr;
   min-height: calc(100vh - 73px);
 }
 
@@ -1066,12 +1035,10 @@ textarea {
 .admin-chip {
   background: var(--blue);
   display: inline-block;
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.12em;
+  font-size: 12px;
+  font-weight: 700;
   margin-bottom: 30px;
   padding: 5px 8px;
-  text-transform: uppercase;
 }
 
 .admin-sidebar nav {
@@ -1145,16 +1112,15 @@ textarea {
 .status {
   background: var(--soft);
   border: 1px solid var(--line);
-  font-size: 11px;
-  font-weight: 900;
+  font-size: 12px;
+  font-weight: 700;
   padding: 5px 8px;
-  text-transform: uppercase;
 }
 
 .status.pending,
 .status.draft {
-  background: #d8e2ff;
-  color: #004493;
+  background: #f1ede5;
+  color: #5e4a2f;
 }
 
 .status.approved {
@@ -1230,9 +1196,7 @@ textarea {
 .email-card > span {
   color: var(--blue-dark);
   font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 700;
 }
 
 .email-card h2 {
@@ -1287,7 +1251,6 @@ textarea {
 .footer strong {
   display: block;
   margin-bottom: 12px;
-  text-transform: uppercase;
 }
 
 .footer a,
