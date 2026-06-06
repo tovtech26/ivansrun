@@ -5,10 +5,7 @@ const {
   buildProductInputFromEditor,
 } = require("../src/product-editor.js");
 
-assert.equal(suggestDisplayColour("珍珠白"), "Pearl White");
-assert.equal(suggestDisplayColour("亮桔色/海蓝"), "Bright Orange / Ocean Blue");
-assert.equal(suggestDisplayColour("黑蓝"), "Black / Blue");
-assert.equal(suggestDisplayColour("未知色"), "");
+assert.equal(suggestDisplayColour("Any source colour"), "");
 
 assert.deepEqual(buildImageOptions([{ name: "2503-1.jpg" }, { name: "2503-2.jpg" }, "manual.jpg"]), [
   { name: "2503-1.jpg", label: "2503-1.jpg" },
@@ -26,8 +23,8 @@ const productInput = buildProductInputFromEditor({
     product_type: "shoe",
   },
   colourRows: [
-    { original: "珍珠白", display: "", code: "002", image: "2503-2.jpg" },
-    { original: "黑蓝", display: "Night Blue / Black", code: "001", image: "2503-1.jpg" },
+    { original: "Source Colour", display: "", code: "002", image: "2503-2.jpg" },
+    { original: "Inventory Colour", display: "Display Colour", code: "001", image: "2503-1.jpg" },
     { original: "", display: "", code: "", image: "" },
   ],
   imageNames: ["2503-1.jpg", "2503-2.jpg"],
@@ -42,8 +39,8 @@ assert.deepEqual(productInput, {
   sizes: "38,39,40",
   images: "2503-1.jpg, 2503-2.jpg",
   colours: [
-    { name: "Pearl White", original: "珍珠白", code: "002", image: "2503-2.jpg" },
-    { name: "Night Blue / Black", original: "黑蓝", code: "001", image: "2503-1.jpg" },
+    { name: "Source Colour", original: "Source Colour", code: "002", image: "2503-2.jpg" },
+    { name: "Display Colour", original: "Inventory Colour", code: "001", image: "2503-1.jpg" },
   ],
 });
 

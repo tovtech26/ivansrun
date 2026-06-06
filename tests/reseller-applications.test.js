@@ -38,6 +38,39 @@ assert.throws(
   /authenticated account/i,
 );
 
+assert.throws(
+  () =>
+    buildApplicationPayload({
+      userId: "user-1",
+      email: "",
+      fullName: "Buyer Name",
+      companyName: "TOV Sports Distribution",
+    }),
+  /email/i,
+);
+
+assert.throws(
+  () =>
+    buildApplicationPayload({
+      userId: "user-1",
+      email: "buyer@example.com",
+      fullName: "",
+      companyName: "TOV Sports Distribution",
+    }),
+  /full name/i,
+);
+
+assert.throws(
+  () =>
+    buildApplicationPayload({
+      userId: "user-1",
+      email: "buyer@example.com",
+      fullName: "Buyer Name",
+      companyName: "",
+    }),
+  /company/i,
+);
+
 const applications = [
   {
     id: "app-1",
@@ -89,5 +122,6 @@ assert.deepEqual(buildApplicationApprovalUpdate({ status: "rejected", adminUserI
 });
 
 assert.throws(() => buildApplicationApprovalUpdate({ status: "pending", adminUserId: "admin-1" }), /invalid application status/i);
+assert.throws(() => buildApplicationApprovalUpdate({ status: "approved", adminUserId: "" }), /admin user/i);
 
 console.log("reseller-applications tests passed");

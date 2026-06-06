@@ -31,12 +31,17 @@ const ImportParser = window.IvansrunImportParser;
 const AdminImports = window.IvansrunAdminImports;
 const ProductEditor = window.IvansrunProductEditor;
 const ProductCatalogManager = window.IvansrunProductCatalogManager;
+const ProductPersistence = window.IvansrunProductPersistence;
 const ProductImages = window.IvansrunProductImages;
 const StorefrontCatalog = window.IvansrunStorefrontCatalog;
 const EmailNotifications = window.IvansrunEmailNotifications;
 const ProductDetailModel = window.IvansrunProductDetail;
+const MobileNavigation = window.IvansrunMobileNavigation;
+const InventoryWorkflow = window.IvansrunInventoryWorkflow;
+const CatalogData = window.IvansrunCatalogData;
 const SITE_CONTENT_STORAGE_KEY = "ivansrun_site_content";
-const LOGIN_BYPASS_ENABLED = true;
+const LOGIN_BYPASS_ENABLED =
+  typeof window !== "undefined" && ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
 
 function readStoredSiteContent() {
   try {
@@ -80,82 +85,29 @@ const state = {
   productFormOpen: false,
   productFormError: null,
   productFormSaved: false,
+  productFormWarning: null,
+  productFormSaveMessage: null,
   productImageDrafts: [],
+  emailTemplatePreview: null,
+  mobileNavOpen: false,
+  catalogFiltersOpen: false,
+  navigationDepth: 0,
   importError: null,
   importPreview: null,
   resellerSearch: "",
   resellerNotes: "",
   resellerDraft: {},
   catalogSearch: "",
-  catalogCategories: ["Running Shoes"],
+  catalogCategories: [],
   catalogSizes: [],
+  catalogPage: 1,
   catalogMaxPrice: 80,
   catalogSort: "sku",
   siteContent: SiteControls.sanitizeSiteContent(readStoredSiteContent()),
-  auth: Auth.buildDevAdminAuthState ? Auth.buildDevAdminAuthState() : Auth.normalizeAuthState({ role: "admin", user: { id: "local-admin", email: "admin@ivansrun.africa" } }),
+  auth: LOGIN_BYPASS_ENABLED ? buildLocalAdminAuthState() : Auth.normalizeAuthState(),
 };
 
-const fallbackProducts = [
-  {
-    id: "fallback-001",
-    sku: "IRUNSVAN-001",
-    name: "IRUNSVAN 001 Running Shoe",
-    category: "Running Shoes",
-    base_price: "30.00",
-    image_names: ["001-1.jpg"],
-  },
-  {
-    id: "fallback-005",
-    sku: "IRUNSVAN-005",
-    name: "IRUNSVAN 005 Running Shoe",
-    category: "Running Shoes",
-    base_price: "36.00",
-    image_names: ["005-1.jpg"],
-  },
-  {
-    id: "fallback-025",
-    sku: "IRUNSVAN-025",
-    name: "IRUNSVAN 025 Running Shoe",
-    category: "Running Shoes",
-    base_price: "38.00",
-    image_names: ["025-1.jpg"],
-  },
-  {
-    id: "fallback-026",
-    sku: "IRUNSVAN-026",
-    name: "IRUNSVAN 026 Running Shoe",
-    category: "Running Shoes",
-    base_price: "36.00",
-    image_names: ["026-1.jpg"],
-  },
-];
-
-const sampleStock = [
-  ["IRUNSVAN 001 Running Shoe", "202300100138", "Bright Orange / Ocean Blue", "38", 30, 117, 4],
-  ["IRUNSVAN 001 Running Shoe", "202300100139", "Bright Orange / Ocean Blue", "39", 30, 46, 0],
-  ["IRUNSVAN 001 Running Shoe", "202300100143", "Bright Orange / Ocean Blue", "43", 30, 96, 0],
-  ["IRUNSVAN 005 Running Shoe", "202300500642", "Elegant Black", "42", 36, 3, 2],
-  ["IRUNSVAN 025 Running Shoe", "202302502540", "Cloud White", "40", 38, 156, 10],
-];
-
-const historyRows = [
-  ["#RE-9821", "Draft", "2 SKUs", "14 units", "$492.00"],
-  ["#RE-9818", "Submitted", "5 SKUs", "30 units", "$1,080.00"],
-  ["#RE-9815", "Approved", "12 SKUs", "96 units", "$3,456.00"],
-  ["#RE-9809", "Rejected", "1 SKU", "5 units", "$180.00"],
-];
-
-const resellerApplications = [
-  ["China Sports Wholesale", "China", "Li Wei", "Pending"],
-  ["Botswana Runner Supply", "Botswana", "M. Dube", "Pending"],
-  ["South Africa Active Trade", "South Africa", "A. Naidoo", "Approved"],
-];
-
-const orderRequests = [
-  ["#RE-9821", "Botswana Runner Supply", "2 SKUs / 14 units", "Draft"],
-  ["#RE-9818", "China Sports Wholesale", "5 SKUs / 30 units", "Submitted"],
-  ["#RE-9815", "South Africa Active Trade", "12 SKUs / 96 units", "Approved"],
-];
+const CATALOG_PAGE_SIZE = 8;
 
 function money(value) {
   if (value === null || value === undefined || value === "") return "Price TBC";
@@ -178,11 +130,8 @@ function skuRank(sku = "") {
 }
 
 function catalogProducts() {
-  const products = state.products.length ? state.products : fallbackProducts;
-  return [...products].sort((a, b) => {
-    const pricedA = a.base_price === null || a.base_price === undefined || a.base_price === "" ? 1 : 0;
-    const pricedB = b.base_price === null || b.base_price === undefined || b.base_price === "" ? 1 : 0;
-    return pricedA - pricedB || skuRank(a.sku) - skuRank(b.sku) || String(a.name).localeCompare(String(b.name));
+  return [...state.products].sort((a, b) => {
+    return skuRank(a.sku) - skuRank(b.sku) || String(a.name).localeCompare(String(b.name));
   });
 }
 
@@ -203,13 +152,36 @@ function storefrontProducts() {
   });
 }
 
+function pagedStorefrontProducts() {
+  const products = storefrontProducts();
+  const totalPages = Math.max(1, Math.ceil(products.length / CATALOG_PAGE_SIZE));
+  const currentPage = Math.min(Math.max(1, state.catalogPage), totalPages);
+  const start = (currentPage - 1) * CATALOG_PAGE_SIZE;
+  return {
+    products: products.slice(start, start + CATALOG_PAGE_SIZE),
+    totalProducts: products.length,
+    currentPage,
+    totalPages,
+    startIndex: products.length ? start + 1 : 0,
+    endIndex: products.length ? Math.min(start + CATALOG_PAGE_SIZE, products.length) : 0,
+  };
+}
+
+function catalogCategoryOptions() {
+  return [...new Set(catalogProducts().map((product) => String(product.category || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function catalogSizeOptions() {
+  return [...new Set(state.variants.map((variant) => String(variant.size || "").trim()).filter(Boolean))].sort((a, b) => Number(a) - Number(b) || a.localeCompare(b));
+}
+
 function variantsFor(productId) {
   return state.variants.filter((variant) => variant.product_id === productId);
 }
 
 function selectedProduct() {
   const products = catalogProducts();
-  return products.find((product) => product.id === state.selectedProductId) || products[0] || fallbackProducts[0];
+  return products.find((product) => product.id === state.selectedProductId) || products[0] || null;
 }
 
 function cssUrl(value) {
@@ -242,13 +214,13 @@ function logo(tone = "dark") {
 }
 
 function productVisual(label, imageName = "") {
-  const safeLabel = escapeHtml(label || "IRUNSVAN Shoe");
+  const safeLabel = escapeHtml(label || "Product");
   const safeImageName = escapeHtml(imageName);
-  const shortLabel = escapeHtml(String(label || "IRUNSVAN").replace("IRUNSVAN ", "").replace(" Running Shoe", ""));
+  const shortLabel = escapeHtml(String(label || "Product").replace("IRUNSVAN ", ""));
   const imageUrl = ProductImages.resolveProductImageUrl(imageName, SUPABASE_URL);
   const visualBody = imageUrl
     ? `<img class="product-photo" src="${escapeHtml(imageUrl)}" alt="${safeLabel}" loading="lazy" />`
-    : `<img class="product-visual-logo" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="" aria-hidden="true" /><div class="shoe-shadow"></div><div class="shoe-shape"><span>${shortLabel}</span></div>`;
+    : `<div class="missing-product-image"><span>No image uploaded</span>${shortLabel ? `<small>${shortLabel}</small>` : ""}</div>`;
   return `
     <div class="product-visual" aria-label="${safeLabel} product image">
       ${visualBody}
@@ -311,6 +283,24 @@ async function upsertAuthedSupabase(table, payload, conflictColumn) {
     throw new Error(body?.message || body?.hint || `${table} upsert failed: ${response.status}`);
   }
   return response.json();
+}
+
+async function uploadProductImage(record) {
+  const session = SupabaseClient.readStoredSession();
+  const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${ProductPersistence.PRODUCT_IMAGE_BUCKET}/${record.storagePath}`, {
+    method: "POST",
+    headers: {
+      ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
+      "Content-Type": record.contentType,
+      "Cache-Control": "3600",
+    },
+    body: record.file,
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(body?.message || body?.error || `image upload failed: ${response.status}`);
+  }
+  return response.json().catch(() => ({ path: record.storagePath }));
 }
 
 async function invokeAuthedFunction(functionName, payload) {
@@ -403,6 +393,11 @@ async function buildImportPreviewFromFile(type, file) {
         variants: state.variants,
         inventory: state.inventory,
       });
+      const publishPlan = InventoryWorkflow.buildInventoryPublishPlan({
+        inventory: state.inventory,
+        stockMatches: stockReview.matches,
+        source: "master_inventory",
+      });
       return AdminImports.buildImportPreview({
         type,
         filename: file.name,
@@ -413,6 +408,7 @@ async function buildImportPreviewFromFile(type, file) {
         stockMatches: stockReview.matches,
         stockExceptions: stockReview.exceptions,
         stockSummary: ProductCatalogManager.buildStockReviewSummary(stockReview),
+        publishPlan,
       });
     }
 
@@ -516,7 +512,7 @@ function remoteSiteContent(heroRows, themeRows, contentRows) {
 
 function inventoryRows() {
   return Orders.buildInventoryRows({
-    products: state.products.length ? state.products : fallbackProducts,
+    products: state.products,
     variants: state.variants,
     inventory: state.inventory,
   });
@@ -561,15 +557,9 @@ function requestHistoryRecords() {
 
 async function loadCatalog() {
   try {
-    const [products, variants, heroRows, themeRows, contentRows] = await Promise.all([
-      fetchSupabase(
-        "products",
-        "select=id,sku,name,slug,category,base_price,base_currency,image_names&published=eq.true&order=sku.asc&limit=75",
-      ),
-      fetchSupabase(
-        "product_variants",
-        "select=id,product_id,sku,name,colour,size,base_price,image_name&published=eq.true&order=sku.asc&limit=500",
-      ),
+    const [productRows, variantRows, heroRows, themeRows, contentRows] = await Promise.all([
+      fetchOptionalSupabase("products", CatalogData.productSelectQuery()),
+      fetchOptionalSupabase("product_variants", CatalogData.variantSelectQuery()),
       fetchOptionalSupabase(
         "hero_sections",
         "select=eyebrow,title,copy,background_image,primary_cta,primary_route,secondary_cta,secondary_route,electricity&active=eq.true&order=updated_at.desc&limit=1",
@@ -580,8 +570,14 @@ async function loadCatalog() {
       ),
       fetchOptionalSupabase("site_content", "select=reseller_banner&active=eq.true&order=updated_at.desc&limit=1"),
     ]);
-    state.products = products;
-    state.variants = variants;
+    const fallback = CatalogData.fallbackCatalog();
+    const catalogRows =
+      productRows.length || variantRows.length
+        ? CatalogData.normalizeCatalogRows({ products: productRows, variants: variantRows })
+        : CatalogData.normalizeCatalogRows(fallback);
+    state.products = catalogRows.products;
+    state.variants = catalogRows.variants;
+    state.inventory = [];
     if (heroRows.length || themeRows.length || contentRows.length) {
       state.siteContent = remoteSiteContent(heroRows, themeRows, contentRows);
     }
@@ -610,6 +606,23 @@ async function loadProtectedData() {
     return;
   }
 
+  const hasStoredSession = Boolean(SupabaseClient.readStoredSession()?.access_token);
+  if (LOGIN_BYPASS_ENABLED && !hasStoredSession) {
+    state.inventory = [];
+    state.orderRequests = [];
+    state.orderRequestItems = [];
+    state.resellerApplicationsData = [];
+    state.importJobs = [];
+    state.inventoryError = null;
+    state.historyError = null;
+    state.applicationError = null;
+    state.inventoryLoading = false;
+    state.historyLoading = false;
+    state.applicationsLoading = false;
+    render();
+    return;
+  }
+
   state.inventoryLoading = state.auth.isReseller || state.auth.isAdmin;
   state.historyLoading = state.auth.isReseller || state.auth.isAdmin;
   state.applicationsLoading = true;
@@ -620,38 +633,59 @@ async function loadProtectedData() {
 
   try {
     const tasks = [
-      fetchAuthedSupabase(
+      [
+        "applications",
+        fetchAuthedSupabase(
         "reseller_applications",
         "select=id,user_id,email,full_name,company_name,phone,country,message,status,reviewed_by,reviewed_at,created_at&order=created_at.desc&limit=200",
-      ),
+        ),
+      ],
     ];
 
     if (state.auth.isReseller || state.auth.isAdmin) {
-      tasks.push(fetchAuthedSupabase("inventory", "select=id,variant_id,sku,stock_quantity,updated_at&order=sku.asc&limit=5000"));
-      tasks.push(fetchAuthedSupabase("order_requests", "select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100"));
       tasks.push(
-        fetchAuthedSupabase(
+        ["products", fetchAuthedSupabase(CatalogData.protectedProductSource(), CatalogData.protectedProductSelectQuery())],
+        ["variants", fetchAuthedSupabase(CatalogData.protectedVariantSource(), CatalogData.protectedVariantSelectQuery())],
+        ["inventory", fetchAuthedSupabase("inventory", "select=id,variant_id,sku,stock_quantity,updated_at&order=sku.asc&limit=5000")],
+        ["orderRequests", fetchAuthedSupabase("order_requests", "select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100")],
+        [
+          "orderRequestItems",
+          fetchAuthedSupabase(
           "order_request_items",
           "select=id,order_request_id,variant_id,sku,product_name,colour,size,quantity,base_price,base_currency,created_at&order=created_at.desc&limit=1000",
-        ),
+          ),
+        ],
       );
     }
 
     if (state.auth.isAdmin) {
       tasks.push(
-        fetchAuthedSupabase(
+        [
+          "importJobs",
+          fetchAuthedSupabase(
           "import_jobs",
           "select=id,import_type,filename,status,rows_total,rows_processed,error_message,created_at,completed_at&order=created_at.desc&limit=25",
-        ),
+          ),
+        ],
       );
     }
 
-    const [applications, inventory = [], orderRequests = [], orderRequestItems = [], importJobs = []] = await Promise.all(tasks);
-    state.resellerApplicationsData = applications;
-    state.inventory = inventory;
-    state.orderRequests = orderRequests;
-    state.orderRequestItems = orderRequestItems;
-    state.importJobs = importJobs;
+    const settled = await Promise.all(tasks.map(([, task]) => task));
+    const data = Object.fromEntries(tasks.map(([name], index) => [name, settled[index]]));
+    if (data.products || data.variants) {
+      const fallback = CatalogData.fallbackCatalog();
+      const catalogRows =
+        (data.products || []).length || (data.variants || []).length
+          ? CatalogData.normalizeCatalogRows({ products: data.products || state.products, variants: data.variants || state.variants })
+          : CatalogData.normalizeCatalogRows(fallback.products.length ? fallback : { products: state.products, variants: state.variants });
+      state.products = catalogRows.products;
+      state.variants = catalogRows.variants;
+    }
+    state.resellerApplicationsData = data.applications || [];
+    state.inventory = data.inventory || [];
+    state.orderRequests = data.orderRequests || [];
+    state.orderRequestItems = data.orderRequestItems || [];
+    state.importJobs = data.importJobs || [];
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load reseller data";
     state.inventoryError = message;
@@ -665,13 +699,25 @@ async function loadProtectedData() {
   }
 }
 
-function setRoute(route, params = {}) {
+function setRoute(route, params = {}, options = {}) {
   if (!ROUTES.includes(route)) return;
   const nextRoute = routeForAccess(route);
   state.route = nextRoute;
   if (params.productId) state.selectedProductId = params.productId;
+  state.mobileNavOpen = false;
+  state.catalogFiltersOpen = false;
+  if (options.writeHistory !== false) {
+    const historyState = { route: nextRoute, productId: state.selectedProductId || null };
+    const url = MobileNavigation.buildRouteUrl(nextRoute, historyState);
+    if (options.replaceHistory) {
+      window.history.replaceState(historyState, "", url);
+    } else {
+      window.history.pushState(historyState, "", url);
+      state.navigationDepth += 1;
+    }
+  }
   render();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  if (options.scroll !== false) window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function setRouteNotice(type, message) {
@@ -712,23 +758,117 @@ function buildLocalAdminAuthState() {
 
 function topNav() {
   const active = (routes) => (routes.includes(state.route) ? "active" : "");
+  const publicNavItems = [
+    ["Catalog", "store", ["store", "product"]],
+    ["Become a Reseller", "apply", ["apply"]],
+    ["Reseller Portal", "reseller", ["reseller", "history"]],
+    ["Admin", "admin", ["admin", "products", "site", "approvals", "imports", "email"]],
+  ];
+  const drawerItems = mobileDrawerItems();
+  const drawerLabel = mobileDrawerLabel();
+  const homeRoute = currentPortalHomeRoute();
+  const desktopItems = isAdminRoute() || isResellerRoute() ? drawerItems : publicNavItems;
   return `
-    <header class="top-nav">
-      <button class="logo-link bare-button" data-route="store" aria-label="Ivansrun Africa home">${logo("blue")}</button>
+    <header class="${isAdminRoute() || isResellerRoute() ? "top-nav portal-top-nav" : "top-nav"}">
+      <button class="logo-link bare-button" data-route="${homeRoute}" aria-label="${escapeHtml(mobileAreaLabel())} home">${logo("blue")}</button>
+      <span class="mobile-area-label">${escapeHtml(mobileAreaLabel())}</span>
       <nav class="main-nav" aria-label="Primary navigation">
-        <button class="${active(["store", "product"])}" data-route="store">Catalog</button>
-        <button class="${active(["apply"])}" data-route="apply">Become a Reseller</button>
-        <button class="${active(["reseller", "history"])}" data-route="reseller">Reseller Portal</button>
-        <button class="${active(["admin", "products", "site", "approvals", "imports", "email"])}" data-route="admin">Admin</button>
+        ${desktopItems.map(([label, route, routes]) => `<button class="${active(routes)}" data-route="${route}">${label}</button>`).join("")}
       </nav>
+      <button class="mobile-menu-button" data-action="toggle-mobile-nav" aria-label="${state.mobileNavOpen ? "Close menu" : `Open ${drawerLabel} menu`}" aria-expanded="${state.mobileNavOpen ? "true" : "false"}"><span class="menu-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
       <div class="nav-actions"></div>
     </header>
+    <div class="${state.mobileNavOpen ? "mobile-nav-backdrop open" : "mobile-nav-backdrop"}" data-action="close-mobile-nav"></div>
+    <aside class="${state.mobileNavOpen ? "mobile-nav-drawer open" : "mobile-nav-drawer"}" aria-label="${drawerLabel} navigation">
+      <div class="mobile-drawer-head"><strong>${escapeHtml(drawerLabel)}</strong><button class="bare-button" data-action="close-mobile-nav">Close</button></div>
+      <nav>
+        ${drawerItems.map(([label, route, routes]) => `<button class="${active(routes)}" data-route="${route}">${label}</button>`).join("")}
+      </nav>
+    </aside>
+    ${mobileContextBar()}
   `;
 }
 
+function currentPortalHomeRoute() {
+  if (isAdminRoute()) return "admin";
+  if (isResellerRoute()) return "reseller";
+  return "store";
+}
+
+function mobileAreaLabel() {
+  if (isAdminRoute()) return "Admin";
+  if (isResellerRoute()) return "Reseller";
+  return "Ivansrun Africa";
+}
+
+function isAdminRoute(route = state.route) {
+  return ["admin", "products", "site", "approvals", "imports", "email"].includes(route);
+}
+
+function isResellerRoute(route = state.route) {
+  return ["reseller", "history"].includes(route);
+}
+
+function mobileDrawerLabel() {
+  if (isAdminRoute()) return "Admin Menu";
+  if (isResellerRoute()) return "Reseller Menu";
+  return "Site Menu";
+}
+
+function mobileDrawerItems() {
+  if (isAdminRoute()) {
+    return [
+      ["Dashboard", "admin", ["admin"]],
+      ["Products", "products", ["products"]],
+      ["Inventory Uploads", "imports", ["imports"]],
+      ["Orders & Applications", "approvals", ["approvals"]],
+      ["Site Controls", "site", ["site"]],
+      ["View Public Site", "store", ["store", "product"]],
+    ];
+  }
+  if (isResellerRoute()) {
+    return [
+      ["Shop", "reseller", ["reseller"]],
+      ["Request History", "history", ["history"]],
+      ["Public Catalog", "store", ["store", "product"]],
+      ["Become a Reseller", "apply", ["apply"]],
+    ];
+  }
+  return [
+    ["Catalog", "store", ["store", "product"]],
+    ["Become a Reseller", "apply", ["apply"]],
+    ["Reseller Portal", "reseller", ["reseller", "history"]],
+    ["Admin", "admin", ["admin", "products", "site", "approvals", "imports", "email"]],
+  ];
+}
+
+function mobileContextBar() {
+  const target = MobileNavigation.backTargetForRoute(state.route);
+  if (!target) return "";
+  const labels = {
+    product: "Catalog",
+    history: "Inventory",
+    products: "Admin",
+    site: "Admin",
+    approvals: "Admin",
+    imports: "Admin",
+    email: "Admin",
+    admin: "Catalog",
+    reseller: "Catalog",
+    apply: "Catalog",
+    login: "Catalog",
+    about: "Catalog",
+    contact: "Catalog",
+    terms: "Catalog",
+    privacy: "Catalog",
+  };
+  return `<div class="mobile-context-bar"><button data-action="go-back">&larr; Back to ${escapeHtml(labels[state.route] || "previous")}</button></div>`;
+}
+
 function storefront() {
+  const pageData = pagedStorefrontProducts();
   const products = storefrontProducts();
-  const visibleProducts = products.slice(0, 8);
+  const visibleProducts = pageData.products;
   const site = state.siteContent;
   const hero = site.hero;
   const buttonCharge = hero.electricity ? " charge-button" : "";
@@ -753,7 +893,7 @@ function storefront() {
               ${ctaMarkup(hero.secondaryCta, hero.secondaryRoute, `button ghost${buttonCharge} subdued`)}
             </div>
             <div class="hero-meta" aria-label="Ivansrun Africa catalog summary">
-              <span>75 product lines</span>
+              <span>${products.length} product lines</span>
               <span>3,735 SKUs</span>
               <span>Wholesale access after approval</span>
             </div>
@@ -761,42 +901,48 @@ function storefront() {
         </div>
       </section>
       <section class="catalog-section" id="catalog">
-        <aside class="filters">
-          <h2>Filters</h2>
-          <label class="search-field"><span>Search</span><input name="catalog-search" value="${escapeHtml(state.catalogSearch)}" placeholder="Search models" /></label>
-          ${filterGroup("Category", ["Running Shoes", "Road Racing", "Trail Performance"], state.catalogCategories, "catalog-category")}
-          <div>
-            <p class="filter-title">Size</p>
-            <div class="size-grid">${["35", "36", "37", "38", "39", "40", "41", "42", "43", "44", "45"].map((size) => `<button class="${state.catalogSizes.includes(size) ? "selected" : ""}" data-action="catalog-size" data-size="${size}">${size}</button>`).join("")}</div>
-          </div>
-          <div>
-            <p class="filter-title">Price Range</p>
-            <input name="catalog-price" type="range" min="0" max="80" value="${state.catalogMaxPrice}" />
-            <div class="range-labels"><span>$0</span><span>$${state.catalogMaxPrice}</span></div>
-          </div>
-        </aside>
+        ${catalogFilters("desktop")}
         <div class="catalog-content">
           <div class="section-header">
             <div>
               <span class="eyebrow dark">Catalog</span>
               <h2>${state.loading ? "Loading products" : `${products.length} Ivansrun Africa products`}</h2>
-              <p class="section-note">Public browsing shows product information and pricing. Approved resellers see live warehouse quantities.</p>
+              <p class="section-note">Public browsing shows product information. Approved resellers see wholesale pricing, ordering, and live warehouse quantities.</p>
             </div>
             <select name="catalog-sort" aria-label="Sort catalog">
               <option value="sku" ${state.catalogSort === "sku" ? "selected" : ""}>SKU order</option>
-              <option value="price-low" ${state.catalogSort === "price-low" ? "selected" : ""}>Price: Low to High</option>
               <option value="name" ${state.catalogSort === "name" ? "selected" : ""}>Name</option>
             </select>
           </div>
+          <div class="mobile-catalog-toolbar">
+            <label class="compact-search"><span>Search</span><input name="catalog-search" value="${escapeHtml(state.catalogSearch)}" placeholder="Search models" /></label>
+            <button class="button secondary" data-action="open-catalog-filters">Filters${activeFilterCount() ? ` (${activeFilterCount()})` : ""}</button>
+          </div>
           ${state.error ? `<p class="notice error">Catalog data could not load: ${escapeHtml(state.error)}</p>` : ""}
           <div class="product-grid">
-            ${visibleProducts.map((product) => productCard(product, variantCounts.get(product.id))).join("")}
+            ${
+              visibleProducts.length
+                ? visibleProducts.map((product) => productCard(product, variantCounts.get(product.id))).join("")
+                : `<div class="empty-state catalog-empty"><h3>No products loaded yet</h3><p>Send the new model file and we will load the catalog from that source.</p></div>`
+            }
           </div>
-          ${pager(`Showing ${products.length ? `1-${Math.min(8, products.length)}` : "0"} of ${products.length} products`)}
+          ${catalogPager(pageData)}
         </div>
       </section>
+      <div class="${state.catalogFiltersOpen ? "filter-sheet-backdrop open" : "filter-sheet-backdrop"}" data-action="close-catalog-filters"></div>
+      <aside class="${state.catalogFiltersOpen ? "filter-sheet open" : "filter-sheet"}" aria-label="Catalog filters">
+        <div class="filter-sheet-head">
+          <strong>Filters</strong>
+          <button class="icon-button" data-action="close-catalog-filters">Close</button>
+        </div>
+        ${catalogFilters("mobile")}
+        <div class="filter-sheet-actions">
+          <button class="button secondary" data-action="clear-catalog-filters">Clear</button>
+          <button class="button primary" data-action="close-catalog-filters">Apply Filters</button>
+        </div>
+      </aside>
       <section class="lab-section">
-        <div class="lab-panel"><span>75</span><p>Imported product lines</p></div>
+        <div class="lab-panel"><span>${products.length}</span><p>Imported product lines</p></div>
         <div>
           <span class="eyebrow dark">Africa wholesale workflow</span>
           <h2>Browse publicly. Order through approval.</h2>
@@ -808,11 +954,36 @@ function storefront() {
   `;
 }
 
+function activeFilterCount() {
+  return state.catalogCategories.length + state.catalogSizes.length;
+}
+
+function catalogFilters(mode = "desktop") {
+  const categories = catalogCategoryOptions();
+  const sizes = catalogSizeOptions();
+  return `
+    <aside class="${mode === "mobile" ? "filters filter-sheet-body" : "filters"}">
+      ${mode === "desktop" ? "<h2>Filters</h2>" : ""}
+      <label class="search-field"><span>Search</span><input name="catalog-search" value="${escapeHtml(state.catalogSearch)}" placeholder="Search models" /></label>
+      ${categories.length ? filterGroup("Category", categories, state.catalogCategories, "catalog-category") : ""}
+      ${
+        sizes.length
+          ? `<div>
+              <p class="filter-title">Size</p>
+              <div class="size-grid">${sizes.map((size) => `<button class="${state.catalogSizes.includes(size) ? "selected" : ""}" data-action="catalog-size" data-size="${size}">${size}</button>`).join("")}</div>
+            </div>`
+          : ""
+      }
+    </aside>
+  `;
+}
+
 function productCard(product, variantCount) {
-  const productName = escapeHtml(product.name || "IRUNSVAN Running Shoe");
-  const category = escapeHtml(product.category || "Running Shoes");
+  const productName = escapeHtml(product.name || "Product");
+  const category = escapeHtml(product.category || "Uncategorized");
   const imageName = Array.isArray(product.image_names) ? product.image_names[0] : "";
   const variantLabel = variantCount ? `${variantCount} variants` : "Variants available";
+  const colours = [...new Set(variantsFor(product.id).map((variant) => String(variant.colour || "").trim()).filter(Boolean))].slice(0, 4);
   return `
     <article class="product-card">
       ${productVisual(product.name, imageName)}
@@ -820,10 +991,10 @@ function productCard(product, variantCount) {
         <div>
           <h3>${productName}</h3>
           <p>${category}</p>
-          <div class="swatches"><span class="swatch orange"></span><span class="swatch blue"></span><span class="swatch black"></span><span class="swatch white"></span></div>
+          ${colours.length ? `<div class="swatches">${colours.map((colour) => `<span class="swatch neutral" title="${escapeHtml(colour)}"></span>`).join("")}</div>` : ""}
         </div>
         <div class="price-stack">
-          <strong>${money(product.base_price)}</strong>
+          <strong>Reseller access</strong>
           <small>${variantLabel}</small>
         </div>
       </div>
@@ -834,6 +1005,18 @@ function productCard(product, variantCount) {
 
 function productDetail() {
   const product = selectedProduct();
+  if (!product) {
+    return `
+      <main class="detail-page">
+        <button class="text-link" data-route="store">Back to catalog</button>
+        <section class="empty-state">
+          <h1>No product selected</h1>
+          <p>Load the new model file first, then product details will appear here.</p>
+        </section>
+        ${footer(true)}
+      </main>
+    `;
+  }
   const variants = variantsFor(product.id);
   const detail = ProductDetailModel.buildProductDetailModel({
     product,
@@ -863,12 +1046,11 @@ function productDetail() {
         </div>
         <div class="detail-copy">
           <span class="eyebrow dark">${escapeHtml(product.sku || "Ivansrun Africa")}</span>
-          <h1>${escapeHtml(product.name || "IRUNSVAN Running Shoe")}</h1>
+          <h1>${escapeHtml(product.name || "Product")}</h1>
           <img class="detail-brand-mark" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="Ivansrun Africa" />
-          <p class="detail-price">${money(product.base_price)}</p>
-          <p class="section-note">Public buyers can browse product information and pricing. Exact stock is reserved for approved Ivansrun Africa reseller accounts.</p>
-          ${selectorGroup("Colours", detail.colours.length ? detail.colours : ["Bright Orange", "Ocean Blue", "Elegant Black", "Cloud White"])}
-          ${selectorGroup("Sizes", detail.sizes.length ? detail.sizes : ["38", "39", "40", "41", "42", "43"])}
+          <p class="section-note">Public buyers can browse product information. Pricing, exact stock, and ordering are reserved for approved Ivansrun Africa reseller accounts.</p>
+          ${detail.colours.length ? selectorGroup("Colours", detail.colours) : ""}
+          ${detail.sizes.length ? selectorGroup("Sizes", detail.sizes) : ""}
           <div class="detail-actions">
             <button class="button primary" data-route="apply">Apply for Reseller Access</button>
             <button class="button secondary" data-route="reseller">Reseller Portal</button>
@@ -944,12 +1126,12 @@ function resellerApplication() {
         <form class="workflow-form" data-form="application">
           ${statusNotice}
           ${state.applicationError ? `<p class="notice error">${escapeHtml(state.applicationError)}</p>` : ""}
-          ${inputField("Company Name", "company_name", existingApplication?.company_name || state.auth.profile?.company_name || "TOV Sports Distribution")}
-          ${inputField("Full Name", "full_name", existingApplication?.full_name || state.auth.profile?.full_name || "Your name")}
-          ${inputField("Email", "email", existingApplication?.email || state.auth.user?.email || "buyer@example.com", "email")}
+          ${inputField("Company Name", "company_name", existingApplication?.company_name || state.auth.profile?.company_name || "")}
+          ${inputField("Full Name", "full_name", existingApplication?.full_name || state.auth.profile?.full_name || "")}
+          ${inputField("Email", "email", existingApplication?.email || state.auth.user?.email || "", "email")}
           ${needsPassword ? inputField("Password", "password", "Create a password", "password") : ""}
-          ${inputField("Phone", "phone", existingApplication?.phone || "+26770000000")}
-          ${inputField("Country", "country", existingApplication?.country || "Botswana")}
+          ${inputField("Phone", "phone", existingApplication?.phone || "")}
+          ${inputField("Country", "country", existingApplication?.country || "")}
           <label><span>Notes</span><textarea name="message" placeholder="Tell us what you want to buy and where you resell.">${escapeHtml(existingApplication?.message || "")}</textarea></label>
           <button class="button primary full" ${state.applicationSubmitPending ? "disabled" : ""}>${state.applicationSubmitPending ? "Submitting..." : "Submit Application"}</button>
         </form>
@@ -1029,8 +1211,8 @@ function resellerPortal() {
       <section class="portal-header">
         <div>
           <span class="eyebrow dark">Ivansrun Africa reseller portal</span>
-          <h1>Reseller Dashboard</h1>
-          <p>Browse exact variation stock and prepare order requests for admin review.</p>
+          <h1>Wholesale Shop</h1>
+          <p>Choose products, select colour and size options, then submit an order request for admin review.</p>
         </div>
         <div class="portal-actions">
           <button class="button secondary" data-route="history">Request History</button>
@@ -1038,52 +1220,33 @@ function resellerPortal() {
         </div>
       </section>
       ${metricGrid([
-        ["Total Products", String(state.products.length || 75), "Active lines"],
-        ["Available SKUs", String(state.variants.length || rows.length), "Imported variants"],
-        ["Inventory Rows", String(state.inventory.length || rows.length), "Exact stock"],
+        ["Total Products", String(state.products.length), "Active lines"],
+        ["Available Options", String(state.variants.length || rows.length), "Colours and sizes"],
+        ["Order Mode", "Request", "Approval based"],
         ["Current Request", money(summary.subtotal), "USD"],
       ])}
+      ${portalQuickNav(summary)}
       <section class="reseller-grid">
-        <div class="inventory-panel">
+        <div class="inventory-panel reseller-shop-panel" id="portal-shop">
           <div class="panel-toolbar">
-            <h2>Live Inventory</h2>
+            <h2>Shop Products</h2>
             <div class="toolbar-actions">
-              <label class="compact-search"><span>Search</span><input name="reseller-search" value="${escapeHtml(state.resellerSearch)}" placeholder="Search SKU or product" /></label>
+              <label class="compact-search"><span>Search</span><input name="reseller-search" value="${escapeHtml(state.resellerSearch)}" placeholder="Search products, colours, sizes" /></label>
             </div>
           </div>
           ${state.inventoryError ? `<p class="notice error">${escapeHtml(state.inventoryError)}</p>` : ""}
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Product</th><th>SKU</th><th>Colour</th><th>Size</th><th>Price</th><th>Exact Stock</th><th>Request Qty</th><th>Add</th></tr></thead>
-              <tbody>
-                ${
-                  state.inventoryLoading
-                    ? `<tr><td colspan="8">Loading inventory...</td></tr>`
-                    : rows.length
-                      ? rows
-                          .map(
-                            (row) => `
-                    <tr>
-                      <td><div class="table-product">${productVisual(row.productName, row.imageName)}<strong>${escapeHtml(row.productName)}</strong></div></td>
-                      <td class="mono">${escapeHtml(row.sku)}</td>
-                      <td>${escapeHtml(row.colour)}</td>
-                      <td>${escapeHtml(row.size)}</td>
-                      <td class="price">${money(row.price)}</td>
-                      <td><span class="${row.stockQuantity <= 5 ? "stock-badge low" : "stock-badge"}">${row.stockQuantity} units</span></td>
-                      <td><input class="qty-input" type="number" min="0" max="${row.stockQuantity}" value="${state.resellerDraft[row.variantId] || ""}" data-qty-input="${escapeHtml(row.variantId)}" /></td>
-                      <td><button class="button mini" data-action="add-order-item" data-variant-id="${escapeHtml(row.variantId)}">Add</button></td>
-                    </tr>
-                  `,
-                          )
-                          .join("")
-                      : `<tr><td colspan="8">No inventory lines match this search.</td></tr>`
-                }
-              </tbody>
-            </table>
+          <div class="reseller-product-grid">
+            ${
+              state.inventoryLoading
+                ? `<p class="notice">Loading products...</p>`
+                : rows.length
+                  ? resellerProductCards(rows)
+                  : `<p class="notice">No products match this search.</p>`
+            }
           </div>
-          ${pager(`Showing ${rows.length ? `1-${rows.length}` : "0"} of ${rows.length} SKUs`)}
+          ${pager(`Showing ${rows.length ? `1-${rows.length}` : "0"} of ${rows.length} options`)}
         </div>
-        <aside class="order-sidebar">
+        <aside class="order-sidebar" id="portal-order">
           <div class="sidebar-head"><h2>Order Request</h2><p>${state.orderSubmitted ? "Submitted" : "Draft request"}</p></div>
           <div class="order-items">
             ${
@@ -1103,7 +1266,7 @@ function resellerPortal() {
               `,
                     )
                     .join("")
-                : `<p class="notice">Add live inventory lines to build this order request.</p>`
+                : `<p class="notice">Add products to build this order request.</p>`
             }
           </div>
           <form class="order-summary" data-form="order">
@@ -1127,6 +1290,82 @@ function resellerPortal() {
   `;
 }
 
+function portalQuickNav(summary) {
+  return `
+    <nav class="portal-quick-nav" aria-label="Reseller portal shortcuts">
+      <a href="#portal-shop">Shop</a>
+      <a href="#portal-order">Draft <span>${escapeHtml(String(summary.itemCount))}</span></a>
+      <button data-route="history">History</button>
+    </nav>
+  `;
+}
+
+function resellerProductCards(rows) {
+  const groups = rows.reduce((map, row) => {
+    const key = row.productId || row.productSku || row.productName;
+    const group = map.get(key) || {
+      productName: row.productName,
+      category: row.category,
+      imageName: row.imageName,
+      price: row.price,
+      rows: [],
+    };
+    group.rows.push(row);
+    group.price = Math.min(Number(group.price || row.price || 0), Number(row.price || group.price || 0));
+    if (!group.imageName && row.imageName) group.imageName = row.imageName;
+    map.set(key, group);
+    return map;
+  }, new Map());
+
+  return [...groups.values()].map(resellerProductCard).join("");
+}
+
+function availabilityLabel(stockQuantity) {
+  const quantity = Number(stockQuantity || 0);
+  if (quantity <= 0) return { label: "Sold out", className: "sold-out" };
+  if (quantity <= 5) return { label: "Low availability", className: "low" };
+  return { label: "Available", className: "" };
+}
+
+function resellerProductCard(group) {
+  const optionCount = group.rows.length;
+  return `
+    <article class="reseller-product-card">
+      ${productVisual(group.productName, group.imageName)}
+      <div class="reseller-product-copy">
+        <div class="reseller-product-head">
+          <div>
+            <p>${escapeHtml(group.category || "Wholesale product")}</p>
+            <h3>${escapeHtml(group.productName)}</h3>
+          </div>
+          <strong>${money(group.price)}</strong>
+        </div>
+        <div class="variant-picker" aria-label="${escapeHtml(group.productName)} options">
+          ${group.rows.map(resellerVariantOption).join("")}
+        </div>
+        <p class="reseller-product-note">${optionCount} ${optionCount === 1 ? "option" : "options"} available for order request.</p>
+      </div>
+    </article>
+  `;
+}
+
+function resellerVariantOption(row) {
+  const availability = availabilityLabel(row.stockQuantity);
+  const disabled = row.stockQuantity <= 0;
+  return `
+    <div class="variant-option" data-inventory-line>
+      <div>
+        <strong>${escapeHtml([row.colour, row.size ? `Size ${row.size}` : ""].filter(Boolean).join(" / ") || row.productName)}</strong>
+        <span class="availability ${availability.className}">${availability.label}</span>
+      </div>
+      <div class="variant-option-actions">
+        <input class="qty-input" aria-label="Quantity for ${escapeHtml(row.colour)} size ${escapeHtml(row.size)}" type="number" min="0" max="${row.stockQuantity}" value="${state.resellerDraft[row.variantId] || ""}" data-qty-input="${escapeHtml(row.variantId)}" ${disabled ? "disabled" : ""} />
+        <button class="button mini" data-action="add-order-item" data-variant-id="${escapeHtml(row.variantId)}" ${disabled ? "disabled" : ""}>Add</button>
+      </div>
+    </div>
+  `;
+}
+
 function requestHistory() {
   const records = requestHistoryRecords();
   return `
@@ -1137,7 +1376,7 @@ function requestHistory() {
           <h1>Request History</h1>
           <p>Track order requests from draft through admin approval.</p>
         </div>
-        <button class="button secondary" data-route="reseller">Back to Inventory</button>
+        <button class="button secondary" data-route="reseller">Back to Shop</button>
       </section>
       <section class="inventory-panel">
         ${state.historyError ? `<p class="notice error">${escapeHtml(state.historyError)}</p>` : ""}
@@ -1188,7 +1427,7 @@ function adminDashboard() {
         ${metricGrid([
           ["Pending Apps", String(applicationCounts.pending), "Awaiting review"],
           ["Submitted Requests", String(AdminOrders.countRequestsByStatus(orderRecords, ["submitted"])), "Order pipeline"],
-          ["Total Products", String(products.length || 75), "Imported catalog"],
+          ["Total Products", String(products.length), "Imported catalog"],
           ["Inventory Rows", String(state.inventory.length || 0), "Imported stock"],
         ])}
         <section class="admin-panels">
@@ -1209,7 +1448,7 @@ function adminDashboard() {
           )}
         </section>
         <section class="product-overview">
-          <div class="panel-toolbar"><h2>Product / Inventory Overview</h2><span>${state.variants.length || 3735} SKUs</span></div>
+          <div class="panel-toolbar"><h2>Product / Inventory Overview</h2><span>${state.variants.length} SKUs</span></div>
           <div class="overview-list">
             ${products
               .slice(0, 6)
@@ -1306,7 +1545,8 @@ function adminProducts() {
           <div><h1>Products</h1><p>Add products, check models, and confirm colors, sizes, images, and prices before stock uploads.</p></div>
           <button class="icon-button" data-action="toggle-product-form">${state.productFormOpen ? "Close" : "Add Product"}</button>
         </header>
-        ${state.productFormSaved ? `<p class="notice success">Product added locally with generated color and size variants.</p>` : ""}
+        ${state.productFormSaved ? `<p class="notice success">${escapeHtml(state.productFormSaveMessage || "Product saved with generated color and size variants.")}</p>` : ""}
+        ${state.productFormWarning ? `<p class="notice warning">${escapeHtml(state.productFormWarning)}</p>` : ""}
         ${state.productFormError ? `<p class="notice error">${escapeHtml(state.productFormError)}</p>` : ""}
         ${state.productFormOpen ? productForm() : ""}
         <section class="product-overview">
@@ -1338,12 +1578,13 @@ function productForm() {
   return `
     <form class="workflow-form product-form" data-form="product">
       <div class="two-fields">
-        ${inputField("Model Code", "model_code", "2503")}
-        ${inputField("Product Name", "name", "IRUNSVAN 2503 Shadow Wing PRO+")}
+        ${inputField("Model Code", "model_code", "")}
+        ${inputField("Product Name", "name", "")}
       </div>
       <div class="two-fields">
-        ${inputField("Category", "category", "Running Shoes")}
-        ${inputField("Price USD", "price", "38", "number")}
+        ${inputField("Product Type", "product_type", "shoe")}
+        ${inputField("Category", "category", "")}
+        ${inputField("Price USD", "price", "", "number")}
       </div>
       <label><span>Product Images</span><input name="image_files" type="file" accept="image/*" multiple /></label>
       ${
@@ -1362,8 +1603,8 @@ function productForm() {
         </div>
         ${colorRows.join("")}
       </div>
-      ${controlTextarea("Sizes", "sizes", "38, 39, 40, 41, 42, 43, 44, 45")}
-      <button class="button primary full" type="submit">Create Product Draft</button>
+      ${controlTextarea("Sizes", "sizes", "")}
+      <button class="button primary full" type="submit">Save Product</button>
     </form>
   `;
 }
@@ -1371,9 +1612,9 @@ function productForm() {
 function productColorRow(index, imageOptions) {
   return `
     <div class="color-editor-row" data-product-colour-row>
-      <input name="colour_original_${index}" placeholder="珍珠白" />
-      <input name="colour_display_${index}" placeholder="Pearl White" />
-      <input name="colour_code_${index}" placeholder="002" />
+      <input name="colour_original_${index}" placeholder="" />
+      <input name="colour_display_${index}" placeholder="" />
+      <input name="colour_code_${index}" placeholder="" />
       <select name="colour_image_${index}">
         <option value="">No image</option>
         ${imageOptions.map((image) => `<option value="${escapeHtml(image.name)}">${escapeHtml(image.label)}</option>`).join("")}
@@ -1576,6 +1817,8 @@ function stockReviewDetails(preview) {
       <div><strong>${summary.zeroStock || 0}</strong><span>Zero stock</span></div>
       <div><strong>${summary.exceptionRows || 0}</strong><span>Needs review</span></div>
       <div><strong>${summary.totalNextStock || 0}</strong><span>Total units</span></div>
+      <div><strong>${preview.publishPlan?.summary?.trackedRowsReset || 0}</strong><span>Reset first</span></div>
+      <div><strong>${preview.publishPlan?.summary?.absentRowsZeroed || 0}</strong><span>Absent to zero</span></div>
     </div>
     <div class="media-product-list">
       ${matches
@@ -1617,22 +1860,42 @@ function stockReviewDetails(preview) {
           `,
         )
         .join("")}
+      ${(preview.publishPlan?.absentRows || [])
+        .slice(0, 8)
+        .map(
+          (row) => `
+            <article class="media-product-row">
+              <div>
+                <strong>${escapeHtml(row.sku)}</strong>
+                <span>Missing from latest file</span>
+              </div>
+              <div class="media-product-counts">
+                <span>${escapeHtml(`${row.previousStock} -> 0 units`)}</span>
+              </div>
+              <p>Will reset to zero when published.</p>
+              <em>absent</em>
+            </article>
+          `,
+        )
+        .join("")}
     </div>
   `;
 }
 
 function emailCenter() {
+  const preview = emailTemplatePreview();
   return `
     <main class="admin-layout">
       ${adminSidebar("email")}
       <section class="admin-main">
         <header class="admin-topbar"><div><h1>Email Center</h1><p>Manage operational emails for applications, order requests, approvals, and imports.</p></div></header>
         <section class="email-grid">
-          ${emailCard("New order request", "Admin receives order summary, reseller details, item count, and total.")}
-          ${emailCard("Application submitted", "Admin receives company, contact, country, and business notes.")}
-          ${emailCard("Approval notice", "Reseller receives account approval and login instructions.")}
-          ${emailCard("Import warning", "Admin receives skipped SKU report after a catalog or stock import.")}
+          ${emailCard("order", "New order request", "Admin receives order summary, reseller details, item count, and total.")}
+          ${emailCard("application", "Application submitted", "Admin receives company, contact, country, and business notes.")}
+          ${emailCard("approval", "Approval notice", "Reseller receives account approval and login instructions.")}
+          ${emailCard("import", "Import warning", "Admin receives skipped SKU report after a catalog or stock import.")}
         </section>
+        ${preview}
       </section>
     </main>
   `;
@@ -1655,22 +1918,6 @@ function adminSidebar(activeRoute) {
 
 function adminLink(label, route, activeRoute) {
   return `<button class="${route === activeRoute ? "active" : ""}" data-route="${route}">${escapeHtml(label)}</button>`;
-}
-
-function approvalCard(title, headers, rows) {
-  return `
-    <div class="admin-card">
-      <div class="admin-card-head"><h2>${escapeHtml(title)}</h2><button>View all</button></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}<th>Action</th></tr></thead>
-          <tbody>${rows
-            .map((row) => `<tr>${row.map((cell, index) => `<td>${index === row.length - 1 ? statusPill(cell) : escapeHtml(cell)}</td>`).join("")}<td><div class="row-actions"><button class="button mini">Approve</button><button class="button mini secondary">Reject</button></div></td></tr>`)
-            .join("")}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
 }
 
 function adminTable(title, headers, rows) {
@@ -1697,8 +1944,45 @@ function uploadBox(title, copy, importType, accept) {
   return `<label class="upload-box"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(copy)}</span><input type="file" data-import-type="${escapeHtml(importType)}" accept="${escapeHtml(accept || "")}" /></label>`;
 }
 
-function emailCard(title, copy) {
-  return `<article class="email-card"><span>Email</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(copy)}</p><button class="button secondary">View Template</button></article>`;
+function emailTemplatePreview() {
+  if (!state.emailTemplatePreview) return "";
+  const templates = {
+    order: {
+      title: "New order request",
+      subject: "New order request #RE-64AC70BB from Reseller Company",
+      lines: ["Order code", "Reseller company and email", "SKU count and total units", "Estimated subtotal", "Reseller notes"],
+    },
+    application: {
+      title: "Application submitted",
+      subject: "New reseller application from Company Name",
+      lines: ["Company name", "Contact name and email", "Country and phone", "Business notes"],
+    },
+    approval: {
+      title: "Approval notice",
+      subject: "Your Ivansrun Africa reseller account was approved",
+      lines: ["Approval status", "Login instructions", "Portal link", "Next steps for order requests"],
+    },
+    import: {
+      title: "Import warning",
+      subject: "Ivansrun Africa import completed with warnings",
+      lines: ["Import filename", "Processed rows", "Skipped rows", "Rows needing review"],
+    },
+  };
+  const template = templates[state.emailTemplatePreview] || templates.order;
+  return `
+    <section class="admin-card email-template-preview">
+      <div class="admin-card-head">
+        <h2>${escapeHtml(template.title)} Template</h2>
+        <button data-action="close-email-template">Close</button>
+      </div>
+      <p><strong>Subject:</strong> ${escapeHtml(template.subject)}</p>
+      <ul>${template.lines.map((line) => `<li>${escapeHtml(line)}</li>`).join("")}</ul>
+    </section>
+  `;
+}
+
+function emailCard(template, title, copy) {
+  return `<article class="email-card"><span>Email</span><h2>${escapeHtml(title)}</h2><p>${escapeHtml(copy)}</p><button class="button secondary" data-action="preview-email-template" data-template="${escapeHtml(template)}">View Template</button></article>`;
 }
 
 function infoPage(route) {
@@ -1742,7 +2026,25 @@ function pager(label) {
   return `
     <div class="pager">
       <span>${escapeHtml(label)}</span>
-      <div><button disabled>Prev</button><button class="active">1</button><button>2</button><button>3</button><button>Next</button></div>
+      <div><button disabled>Prev</button><button class="active">1</button></div>
+    </div>
+  `;
+}
+
+function catalogPager({ startIndex, endIndex, totalProducts, currentPage, totalPages }) {
+  const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
+  return `
+    <div class="pager">
+      <span>${escapeHtml(`Showing ${startIndex ? `${startIndex}-${endIndex}` : "0"} of ${totalProducts} products`)}</span>
+      <div>
+        <button data-action="catalog-page" data-page="${currentPage - 1}" ${currentPage <= 1 ? "disabled" : ""}>Prev</button>
+        ${pages
+          .map(
+            (page) => `<button data-action="catalog-page" data-page="${page}" class="${page === currentPage ? "active" : ""}">${page}</button>`,
+          )
+          .join("")}
+        <button data-action="catalog-page" data-page="${currentPage + 1}" ${currentPage >= totalPages ? "disabled" : ""}>Next</button>
+      </div>
     </div>
   `;
 }
@@ -1801,6 +2103,65 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='toggle-mobile-nav']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.mobileNavOpen = !state.mobileNavOpen;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='close-mobile-nav']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.mobileNavOpen = false;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='go-back']").forEach((button) => {
+    button.addEventListener("click", () => {
+      goBack();
+    });
+  });
+
+  document.querySelectorAll("[data-action='open-catalog-filters']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.catalogFiltersOpen = true;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='close-catalog-filters']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.catalogFiltersOpen = false;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='clear-catalog-filters']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.catalogSearch = "";
+      state.catalogCategories = [];
+      state.catalogSizes = [];
+      state.catalogPage = 1;
+      state.catalogMaxPrice = 80;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='preview-email-template']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.emailTemplatePreview = button.getAttribute("data-template") || "order";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='close-email-template']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.emailTemplatePreview = null;
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-form]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -1809,7 +2170,7 @@ function bindEvents() {
       if (formName === "order") await handleOrderSubmit(form);
       if (formName === "login") await handleLogin(form);
       if (formName === "site-controls") await saveSiteControls(form);
-      if (formName === "product") handleProductSubmit(form);
+      if (formName === "product") await handleProductSubmit(form);
       render();
     });
   });
@@ -1818,14 +2179,16 @@ function bindEvents() {
     button.addEventListener("click", () => {
       state.productFormOpen = !state.productFormOpen;
       state.productFormError = null;
+      state.productFormWarning = null;
       state.productFormSaved = false;
+      state.productFormSaveMessage = null;
       render();
     });
   });
 
   document.querySelectorAll("[name='image_files']").forEach((input) => {
     input.addEventListener("change", () => {
-      state.productImageDrafts = [...(input.files || [])].map((file) => ({ name: file.name }));
+      state.productImageDrafts = [...(input.files || [])].map((file) => ({ name: file.name, file }));
       render();
     });
   });
@@ -1853,7 +2216,7 @@ function bindEvents() {
   document.querySelectorAll("[data-action='add-order-item']").forEach((button) => {
     button.addEventListener("click", () => {
       const variantId = button.getAttribute("data-variant-id");
-      const input = document.querySelector(`[data-qty-input="${variantId}"]`);
+      const input = button.closest("[data-inventory-line]")?.querySelector(`[data-qty-input="${variantId}"]`) || document.querySelector(`[data-qty-input="${variantId}"]`);
       syncDraftQuantity(variantId, input?.value);
     });
   });
@@ -1901,6 +2264,7 @@ function bindEvents() {
   document.querySelectorAll("[name='catalog-search']").forEach((input) => {
     input.addEventListener("input", () => {
       state.catalogSearch = input.value;
+      state.catalogPage = 1;
       render();
     });
   });
@@ -1908,6 +2272,7 @@ function bindEvents() {
   document.querySelectorAll("[name='catalog-sort']").forEach((select) => {
     select.addEventListener("change", () => {
       state.catalogSort = select.value;
+      state.catalogPage = 1;
       render();
     });
   });
@@ -1926,6 +2291,7 @@ function bindEvents() {
       if (input.checked) next.add(value);
       else next.delete(value);
       state.catalogCategories = [...next];
+      state.catalogPage = 1;
       render();
     });
   });
@@ -1937,9 +2303,42 @@ function bindEvents() {
       if (next.has(size)) next.delete(size);
       else next.add(size);
       state.catalogSizes = [...next];
+      state.catalogPage = 1;
       render();
     });
   });
+
+  document.querySelectorAll("[data-action='catalog-page']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextPage = Number(button.getAttribute("data-page"));
+      if (!Number.isFinite(nextPage) || button.disabled) return;
+      state.catalogPage = nextPage;
+      render();
+    });
+  });
+}
+
+function goBack() {
+  const target = MobileNavigation.backTargetForRoute(state.route);
+  if (!target) return;
+  if (state.navigationDepth > 0) {
+    window.history.back();
+    return;
+  }
+  setRoute(target.route, target, { writeHistory: false });
+}
+
+function syncRouteFromLocation(options = {}) {
+  const parsed = MobileNavigation.parseRouteUrl(window.location.hash);
+  if (!parsed) return;
+  const nextRoute = routeForAccess(parsed.route);
+  state.route = nextRoute;
+  if (parsed.productId) state.selectedProductId = parsed.productId;
+  state.mobileNavOpen = false;
+  state.catalogFiltersOpen = false;
+  if (options.replaceHistory !== false) {
+    window.history.replaceState({ route: nextRoute, productId: state.selectedProductId || null }, "", MobileNavigation.buildRouteUrl(nextRoute, { productId: state.selectedProductId }));
+  }
 }
 
 function syncDraftQuantity(variantId, quantity) {
@@ -2103,9 +2502,22 @@ async function handleApplicationSubmit(form) {
 
 async function handleOrderStatusUpdate(orderId, status) {
   try {
+    const orderRequest = state.orderRequests.find((request) => request.id === orderId);
+    if (status === "approved" && orderRequest?.status !== "approved") {
+      const adjustments = AdminOrders.buildApprovalInventoryAdjustments({
+        orderId,
+        items: state.orderRequestItems,
+        inventory: state.inventory,
+      });
+      for (const adjustment of adjustments) {
+        await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
+          stock_quantity: adjustment.nextStock,
+          source: "order_approval",
+        });
+      }
+    }
     const patch = AdminOrders.buildOrderStatusPatch(status, `Updated from admin dashboard on ${new Date().toLocaleString()}`);
     await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, patch);
-    const orderRequest = state.orderRequests.find((request) => request.id === orderId);
     if (orderRequest?.reseller_id) {
       const [profile] = await fetchAuthedSupabase(
         "profiles",
@@ -2201,46 +2613,108 @@ async function saveSiteControls(form) {
   }
 }
 
-function handleProductSubmit(form) {
+function collectProductColourRows(data) {
+  return Array.from({ length: 6 }, (_, index) => ({
+    original: data.get(`colour_original_${index}`),
+    display: data.get(`colour_display_${index}`),
+    code: data.get(`colour_code_${index}`),
+    image: data.get(`colour_image_${index}`),
+  }));
+}
+
+function applySavedProductToState(product, variants) {
+  const variantSkus = new Set(variants.map((variant) => variant.sku));
+  state.products = [...state.products.filter((item) => item.sku !== product.sku), product];
+  state.variants = [
+    ...state.variants.filter((item) => item.product_id !== product.id && !variantSkus.has(item.sku)),
+    ...variants,
+  ];
+}
+
+function productInputFromFormData(data, colourRows, imageNames) {
+  return ProductEditor.buildProductInputFromEditor({
+    fields: {
+      model_code: data.get("model_code"),
+      name: data.get("name"),
+      category: data.get("category"),
+      price: data.get("price"),
+      sizes: data.get("sizes"),
+      product_type: data.get("product_type"),
+    },
+    colourRows,
+    imageNames,
+  });
+}
+
+async function handleProductSubmit(form) {
   state.productFormError = null;
+  state.productFormWarning = null;
   state.productFormSaved = false;
+  state.productFormSaveMessage = null;
 
   try {
     const data = new FormData(form);
-    const colourRows = Array.from({ length: 6 }, (_, index) => ({
-      original: data.get(`colour_original_${index}`),
-      display: data.get(`colour_display_${index}`),
-      code: data.get(`colour_code_${index}`),
-      image: data.get(`colour_image_${index}`),
-    }));
+    const colourRows = collectProductColourRows(data);
     const imageNames = ProductEditor.buildImageOptions(state.productImageDrafts).map((image) => image.name);
-    const editorInput = ProductEditor.buildProductInputFromEditor({
-      fields: {
-        model_code: data.get("model_code"),
-        name: data.get("name"),
-        category: data.get("category"),
-        price: data.get("price"),
-        sizes: data.get("sizes"),
-        product_type: "shoe",
-      },
-      colourRows,
-      imageNames,
+    const initialProduct = ProductCatalogManager.buildProductDraft(productInputFromFormData(data, colourRows, imageNames));
+    const imageFiles = state.productImageDrafts.map((item) => item.file).filter(Boolean);
+    const imageRecords = ProductPersistence.buildStoredImageRecords({
+      productSku: initialProduct.sku,
+      files: imageFiles,
+      uniquePrefix: new Date().toISOString().replace(/\D/g, ""),
     });
-    const product = ProductCatalogManager.buildProductDraft(editorInput);
-    const productId = `local-${product.sku.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-    const productRow = {
-      ...product,
-      id: productId,
+    const storagePathByName = new Map(imageRecords.map((record) => [record.originalName, record.storagePath]));
+    const storedImageNames = imageNames.map((name) => storagePathByName.get(name) || name);
+    const storedColourRows = colourRows.map((row) => ({
+      ...row,
+      image: storagePathByName.get(String(row.image || "")) || row.image,
+    }));
+    const product = {
+      ...ProductCatalogManager.buildProductDraft(productInputFromFormData(data, storedColourRows, storedImageNames)),
       published: true,
     };
-    const variantRows = ProductCatalogManager.generateProductVariants(productRow).map((variant, index) => ({
-      ...variant,
-      id: `${productId}-variant-${index + 1}`,
+    for (const record of imageRecords) {
+      await uploadProductImage(record);
+    }
+    const [savedProductRow] = await upsertAuthedSupabase("products", ProductPersistence.buildProductUpsertPayload(product), "sku");
+    if (!savedProductRow?.id) throw new Error("Supabase saved the product but did not return its id.");
+    const savedProduct = {
+      ...product,
+      ...savedProductRow,
+      colours: product.colours,
+      sizes: product.sizes,
       published: true,
-    }));
+    };
+    const variantDrafts = ProductCatalogManager.generateProductVariants(savedProduct).map((variant) => ({ ...variant, published: true }));
+    const savedVariantRows = await upsertAuthedSupabase(
+      "product_variants",
+      ProductPersistence.buildVariantUpsertPayloads(variantDrafts, savedProduct.id),
+      "sku",
+    );
+    if (!savedVariantRows.length || savedVariantRows.some((variant) => !variant.id)) {
+      throw new Error("Supabase saved the product but did not return generated variant ids.");
+    }
+    await upsertAuthedSupabase(
+      "inventory",
+      ProductPersistence.buildZeroInventoryPayloads(savedVariantRows.map((variant) => ({ ...variant, product_sku: savedProduct.sku }))),
+      "sku",
+    );
+    applySavedProductToState(savedProduct, savedVariantRows);
+    state.inventory = InventoryWorkflow.applyInventoryPublishPlan(
+      state.inventory,
+      InventoryWorkflow.buildInventoryPublishPlan({
+        inventory: state.inventory,
+        stockMatches: savedVariantRows.map((variant) => ({
+          variantId: variant.id,
+          variantSku: variant.sku,
+          modelCode: savedProduct.model_code,
+          nextStock: 0,
+        })),
+        source: "manual_product_setup",
+      }),
+    );
+    state.productFormSaveMessage = "Product saved with images, colors, sizes, generated variants, and zero starting stock.";
 
-    state.products = [...state.products.filter((item) => item.sku !== productRow.sku), productRow];
-    state.variants = [...state.variants.filter((item) => item.product_id !== productId), ...variantRows];
     state.productFormOpen = false;
     state.productFormSaved = true;
     state.productImageDrafts = [];
@@ -2302,13 +2776,14 @@ async function handleImportCommit() {
     }
 
     if (state.importPreview.type === "inventory_xlsx") {
-      if (state.importPreview.stockMatches?.length) {
-        const inventoryPayload = state.importPreview.stockMatches.map((match) => ({
-          variant_id: match.variantId,
-          sku: match.variantSku,
-          style_code: match.modelCode,
-          stock_quantity: match.nextStock,
-          source: match.sourceSku ? `master_inventory:${match.sourceSku}` : "master_inventory",
+      if (state.importPreview.publishPlan?.rows?.length) {
+        const inventoryPayload = state.importPreview.publishPlan.rows.map((row) => ({
+          id: row.id,
+          variant_id: row.variant_id,
+          sku: row.sku,
+          style_code: row.style_code,
+          stock_quantity: row.stock_quantity,
+          source: row.source,
         }));
         await upsertAuthedSupabase("inventory", inventoryPayload, "sku");
       } else {
@@ -2399,6 +2874,18 @@ function render() {
   applyRevealMotion();
 }
 
+window.addEventListener("popstate", (event) => {
+  const routeState = event.state || MobileNavigation.parseRouteUrl(window.location.hash);
+  if (!routeState?.route || !ROUTES.includes(routeState.route)) return;
+  state.navigationDepth = Math.max(0, state.navigationDepth - 1);
+  state.route = routeForAccess(routeState.route);
+  if (routeState.productId) state.selectedProductId = routeState.productId;
+  state.mobileNavOpen = false;
+  state.catalogFiltersOpen = false;
+  render();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
 async function initAuth() {
   if (LOGIN_BYPASS_ENABLED) {
     state.auth = buildLocalAdminAuthState();
@@ -2423,6 +2910,11 @@ async function initAuth() {
   }
 }
 
-render();
-loadCatalog();
-initAuth();
+async function initializeApp() {
+  syncRouteFromLocation();
+  render();
+  await loadCatalog();
+  await initAuth();
+}
+
+initializeApp();

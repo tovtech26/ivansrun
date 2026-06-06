@@ -81,13 +81,28 @@
       throw new Error("At least one inventory line is required to submit an order.");
     }
 
+    const normalizedItems = items.map((item) => {
+      const quantity = Math.trunc(safeNumber(item.requestedQuantity, 0));
+      if (quantity <= 0) {
+        throw new Error("Each order line requires a positive quantity.");
+      }
+      const available = safeNumber(item.stockQuantity, Number.POSITIVE_INFINITY);
+      if (Number.isFinite(available) && quantity > available) {
+        throw new Error("Requested quantity cannot exceed available stock.");
+      }
+      if (!String(item.variantId || "").trim()) {
+        throw new Error("Each order line requires a product variant.");
+      }
+      return { ...item, requestedQuantity: quantity };
+    });
+
     return {
       orderRequest: {
         reseller_id: auth.user.id,
         status: "submitted",
         notes: String(notes || "").trim() || null,
       },
-      orderItems: items.map((item) => ({
+      orderItems: normalizedItems.map((item) => ({
         variant_id: item.variantId,
         sku: item.sku,
         product_name: item.productName,

@@ -4,7 +4,11 @@
     if (!value) return "";
     if (/^https?:\/\//i.test(value)) return value;
     if (value.startsWith("/")) return value;
-    return `${String(supabaseUrl || "").replace(/\/$/, "")}/storage/v1/object/public/product-images/${encodeURIComponent(value)}`;
+    const encodedPath = value
+      .split("/")
+      .map((part) => encodeURIComponent(part))
+      .join("/");
+    return `${String(supabaseUrl || "").replace(/\/$/, "")}/storage/v1/object/public/product-images/${encodedPath}`;
   }
 
   function productImageSource(product, variant, supabaseUrl) {

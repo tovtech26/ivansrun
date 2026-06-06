@@ -14,6 +14,7 @@
     stockMatches = [],
     stockExceptions = [],
     stockSummary = null,
+    publishPlan = null,
   } = {}) {
     return {
       type,
@@ -31,6 +32,7 @@
       stockMatches,
       stockExceptions,
       stockSummary,
+      publishPlan,
     };
   }
 

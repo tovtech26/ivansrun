@@ -1,24 +1,11 @@
 (function attachProductEditor(root) {
-  const COLOUR_SUGGESTIONS = new Map([
-    ["\u73cd\u73e0\u767d", "Pearl White"],
-    ["\u4eae\u6854\u8272/\u6d77\u84dd", "Bright Orange / Ocean Blue"],
-    ["\u9ed1\u84dd", "Black / Blue"],
-    ["\u7eAF\u9ED1", "Pure Black"],
-    ["\u9ed1\u8272", "Black"],
-    ["\u767d\u8272", "White"],
-    ["\u6d77\u84dd", "Ocean Blue"],
-    ["\u5929\u84dd", "Sky Blue"],
-    ["\u6a59\u8272", "Orange"],
-    ["\u7c89\u8272", "Pink"],
-    ["\u7070\u8272", "Grey"],
-  ]);
-
   function safeText(value) {
     return String(value || "").trim();
   }
 
   function suggestDisplayColour(originalColour) {
-    return COLOUR_SUGGESTIONS.get(safeText(originalColour)) || "";
+    safeText(originalColour);
+    return "";
   }
 
   function buildImageOptions(images = []) {

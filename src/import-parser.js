@@ -1,6 +1,15 @@
 (function attachImportParser(root) {
+  const HEADER_ALIASES = new Map([
+    ["款式编码", "style_code"],
+    ["商品编码", "sku"],
+    ["颜色及规格", "colour_size"],
+    ["库存", "stock"],
+  ]);
+
   function normalizeHeader(header) {
-    return String(header || "")
+    const text = String(header || "").trim();
+    if (HEADER_ALIASES.has(text)) return HEADER_ALIASES.get(text);
+    return text
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "_")
@@ -188,6 +197,12 @@
 
   function parseStyleCode(value) {
     const digits = String(value || "").replace(/\D/g, "");
+    if (digits.length <= 4) {
+      return {
+        model_code: digits,
+        color_code: "",
+      };
+    }
     const body = digits.length >= 5 ? digits.slice(2) : digits;
     return {
       model_code: body.slice(0, 3),

@@ -124,6 +124,24 @@ assert.throws(
   /authenticated reseller/i,
 );
 
+assert.throws(
+  () =>
+    buildOrderPayload({
+      auth: { user: { id: "user-1" }, isReseller: true, isAdmin: false },
+      items: [{ ...items[0], requestedQuantity: 0 }],
+    }),
+  /positive quantity/i,
+);
+
+assert.throws(
+  () =>
+    buildOrderPayload({
+      auth: { user: { id: "user-1" }, isReseller: true, isAdmin: false },
+      items: [{ ...items[0], requestedQuantity: 4, stockQuantity: 3 }],
+    }),
+  /available stock/i,
+);
+
 assert.deepEqual(
   buildOrderPayload({
     auth: { user: { id: "user-1" }, isReseller: true, isAdmin: false },

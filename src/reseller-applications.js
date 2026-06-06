@@ -1,15 +1,30 @@
 (function attachResellerApplications(root) {
   const REVIEWABLE_STATUSES = new Set(["approved", "rejected"]);
 
+  function requireText(value, label) {
+    const text = String(value || "").trim();
+    if (!text) throw new Error(`${label} is required.`);
+    return text;
+  }
+
+  function requireEmail(value) {
+    const email = requireText(value, "Email");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error("A valid email is required.");
+    }
+    return email;
+  }
+
   function buildApplicationPayload({ userId, email, fullName, companyName, phone = "", country = "", message = "" } = {}) {
-    if (!String(userId || "").trim()) {
+    const safeUserId = String(userId || "").trim();
+    if (!safeUserId) {
       throw new Error("An authenticated account is required before submitting an application.");
     }
     return {
-      user_id: String(userId).trim(),
-      email: String(email || "").trim(),
-      full_name: String(fullName || "").trim(),
-      company_name: String(companyName || "").trim(),
+      user_id: safeUserId,
+      email: requireEmail(email),
+      full_name: requireText(fullName, "Full name"),
+      company_name: requireText(companyName, "Company name"),
       phone: String(phone || "").trim() || null,
       country: String(country || "").trim() || null,
       message: String(message || "").trim() || null,
@@ -35,11 +50,14 @@
     if (!REVIEWABLE_STATUSES.has(status)) {
       throw new Error("Invalid application status");
     }
+    if (!String(adminUserId || "").trim()) {
+      throw new Error("An admin user is required to review applications.");
+    }
 
     return {
       applicationPatch: {
         status,
-        reviewed_by: adminUserId,
+        reviewed_by: String(adminUserId).trim(),
         reviewed_at: "NOW",
       },
       profilePatch: {

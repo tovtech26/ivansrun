@@ -93,4 +93,23 @@ assert.equal(parsedMaster.errors[1].code, "missing_sku");
 assert.equal(parsedMaster.errors[2].code, "missing_size");
 assert.equal(parsedMaster.errors[3].code, "invalid_stock_quantity");
 
+const realChineseMasterCsv = [
+  "款式编码,商品编码,颜色及规格,库存",
+  "2503,202425030137,绿野仙踪/青橙;37,25",
+].join("\n");
+const parsedChineseCsvMaster = parseMasterInventoryRows(parseCsvText(realChineseMasterCsv));
+assert.deepEqual(parsedChineseCsvMaster.rows, [
+  {
+    source_style_code: "2503",
+    source_sku: "202425030137",
+    model_code: "2503",
+    color_code: "",
+    original_colour: "绿野仙踪/青橙",
+    size: "37",
+    stock_quantity: 25,
+    source: "master_inventory",
+  },
+]);
+assert.equal(parsedChineseCsvMaster.errors.length, 0);
+
 console.log("import-parser tests passed");

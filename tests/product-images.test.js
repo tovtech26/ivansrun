@@ -6,6 +6,11 @@ assert.equal(
   "https://llicocwonbokahpbireg.supabase.co/storage/v1/object/public/product-images/001-1.jpg",
 );
 
+assert.equal(
+  resolveProductImageUrl("products/irunsvan-2503/20260605-front.jpg", "https://llicocwonbokahpbireg.supabase.co"),
+  "https://llicocwonbokahpbireg.supabase.co/storage/v1/object/public/product-images/products/irunsvan-2503/20260605-front.jpg",
+);
+
 assert.equal(resolveProductImageUrl("/products/001-1.jpg", "https://example.com"), "/products/001-1.jpg");
 assert.equal(resolveProductImageUrl("https://cdn.example.com/001-1.jpg", "https://example.com"), "https://cdn.example.com/001-1.jpg");
 assert.equal(resolveProductImageUrl("", "https://example.com"), "");
