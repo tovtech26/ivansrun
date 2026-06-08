@@ -32,6 +32,20 @@ supabase/sql/008_product_catalog_workflow.sql
 supabase/sql/009_reseller_price_privacy_and_grants.sql
 ```
 
+If your Supabase project already exists and the app is showing errors like:
+
+- `404` on `hero_sections`, `site_themes`, or `site_content`
+- `400` on `products` or `product_variants` when selecting `model_code`, `product_type`, `original_colour`, or `color_code`
+- missing `reseller_products` or `reseller_product_variants`
+
+run this catch-up repair file once:
+
+```text
+supabase/sql/010_schema_catchup_repair.sql
+```
+
+This repair file is idempotent. It creates the missing site-control tables, adds the later catalog columns, recreates the reseller pricing views, restores public-safe grants, and ensures the product image bucket policy exists.
+
 Then confirm the REST API can see:
 
 ```text
