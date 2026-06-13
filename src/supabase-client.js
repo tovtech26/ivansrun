@@ -9,6 +9,19 @@
     };
   }
 
+  function authErrorMessage(body, fallback) {
+    const message = String(body?.msg || body?.error_description || body?.error || body?.message || fallback || "Authentication failed").trim();
+    if (/invalid login credentials/i.test(message)) return "Invalid email or password.";
+    if (/email not confirmed/i.test(message)) return "Confirm your email address before signing in.";
+    if (/provider is not enabled|unsupported provider|oauth provider.*disabled/i.test(message)) {
+      return "Google login is not configured in Supabase yet.";
+    }
+    if (/client id/i.test(message) && /google|provider|oauth/i.test(message)) {
+      return "Google login is not configured in Supabase yet.";
+    }
+    return message || fallback || "Authentication failed";
+  }
+
   function readStoredSession() {
     try {
       return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || "null");
@@ -37,12 +50,26 @@
     root.location.assign(authUrl);
   }
 
+  function oauthResultFromSearch(search = "") {
+    const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+    const error = params.get("error_description") || params.get("error");
+    const code = params.get("code");
+    if (error) return { handled: true, error: authErrorMessage({ error_description: error }, "OAuth sign-in failed") };
+    if (code) {
+      return {
+        handled: true,
+        error: "OAuth callback returned an authorization code that this client cannot exchange automatically.",
+      };
+    }
+    return { handled: false };
+  }
+
   function oauthSessionFromHash(hash = "") {
     const params = new URLSearchParams(String(hash || "").replace(/^#/, ""));
     const accessToken = params.get("access_token");
     if (!accessToken) {
       const error = params.get("error_description") || params.get("error");
-      return { handled: Boolean(error), error };
+      return { handled: Boolean(error), error: error ? authErrorMessage({ error_description: error }, "OAuth sign-in failed") : null };
     }
     return {
       handled: true,
@@ -59,6 +86,18 @@
   }
 
   function consumeOAuthSessionFromUrl() {
+    const searchResult = oauthResultFromSearch(root.location?.search || "");
+    if (searchResult.handled) {
+      if (searchResult.error) localStorage.setItem(OAUTH_ERROR_STORAGE_KEY, searchResult.error);
+      const cleanSearchUrl = new URL(root.location.href);
+      cleanSearchUrl.hash = "";
+      cleanSearchUrl.searchParams.delete("oauth");
+      cleanSearchUrl.searchParams.delete("code");
+      cleanSearchUrl.searchParams.delete("error");
+      cleanSearchUrl.searchParams.delete("error_description");
+      root.history?.replaceState?.({}, "", `${cleanSearchUrl.pathname}${cleanSearchUrl.search}`);
+      return searchResult;
+    }
     if (!root.location?.hash) return { handled: false };
     const result = oauthSessionFromHash(root.location.hash);
     if (!result.handled) return result;
@@ -89,7 +128,7 @@
     });
     const body = await response.json();
     if (!response.ok) {
-      throw new Error(body?.msg || body?.error_description || "Login failed");
+      throw new Error(authErrorMessage(body, "Login failed"));
     }
     writeStoredSession(body);
     return body;
@@ -110,7 +149,7 @@
     });
     const body = await response.json();
     if (!response.ok) {
-      throw new Error(body?.msg || body?.error_description || "Account creation failed");
+      throw new Error(authErrorMessage(body, "Account creation failed"));
     }
     if (body?.access_token) {
       writeStoredSession(body);
@@ -128,12 +167,43 @@
   }
 
   async function fetchProfile({ url, key, accessToken, userId }) {
-    const response = await fetch(`${url}/rest/v1/profiles?select=id,email,full_name,company_name,role&id=eq.${encodeURIComponent(userId)}&limit=1`, {
+    const response = await fetch(`${url}/rest/v1/profiles?select=id,email,full_name,company_name,phone,role&id=eq.${encodeURIComponent(userId)}&limit=1`, {
       headers: headers(key, accessToken),
     });
     if (!response.ok) throw new Error("Unable to load profile");
     const rows = await response.json();
     return rows[0] || null;
+  }
+
+  async function requestPasswordReset({ url, key, email, redirectTo }) {
+    const response = await fetch(`${url}/auth/v1/recover`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        redirect_to: redirectTo,
+      }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(authErrorMessage(body, "Password reset failed"));
+    return body;
+  }
+
+  async function updatePassword({ url, key, accessToken, password }) {
+    const response = await fetch(`${url}/auth/v1/user`, {
+      method: "PUT",
+      headers: {
+        ...headers(key, accessToken),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ password }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(authErrorMessage(body, "Password update failed"));
+    return body;
   }
 
   async function restoreAuthState({ url, key }) {
@@ -166,7 +236,9 @@
     writeStoredSession,
     clearStoredSession,
     buildOAuthUrl,
+    authErrorMessage,
     signInWithOAuth,
+    oauthResultFromSearch,
     oauthSessionFromHash,
     consumeOAuthSessionFromUrl,
     consumeOAuthError,
@@ -174,6 +246,8 @@
     signUpWithPassword,
     fetchCurrentUser,
     fetchProfile,
+    requestPasswordReset,
+    updatePassword,
     restoreAuthState,
     signOut,
   };

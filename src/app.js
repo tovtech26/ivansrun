@@ -4,12 +4,16 @@ const SUPABASE_KEY = "sb_publishable_6V8LkQ_EwGCeYqtdqxcpqg_RcaqSINj";
 const ROUTES = [
   "store",
   "product",
+  "find-reseller",
   "apply",
   "login",
+  "admin-login",
+  "account",
   "reseller",
   "reseller-product",
   "history",
   "admin",
+  "team",
   "products",
   "site",
   "approvals",
@@ -56,19 +60,45 @@ function readStoredSiteContent() {
   }
 }
 
+function readInitialRouteState() {
+  return MobileNavigation.parseRouteUrl(window.location.hash) || { route: "store", productId: null };
+}
+
+function hasPendingOAuthCallback() {
+  const search = new URLSearchParams(window.location.search);
+  const hash = String(window.location.hash || "");
+  return (
+    search.has("oauth") ||
+    search.has("code") ||
+    search.has("error") ||
+    search.has("error_description") ||
+    hash.includes("access_token=") ||
+    hash.includes("error=")
+  );
+}
+
+function hasStoredAuthSession() {
+  return Boolean(SupabaseClient.readStoredSession()?.access_token);
+}
+
+const initialRouteState = readInitialRouteState();
+
 const state = {
-  route: "store",
-  selectedProductId: null,
+  route: initialRouteState.route,
+  selectedProductId: initialRouteState.productId,
   products: [],
   variants: [],
+  resellerDirectory: [],
   colourMappings: [],
   inventory: [],
   orderRequests: [],
   orderRequestItems: [],
   resellerApplicationsData: [],
   importJobs: [],
+  staffProfiles: [],
   loading: true,
   authLoading: true,
+  authBootstrapPending: hasPendingOAuthCallback() || hasStoredAuthSession(),
   inventoryLoading: false,
   historyLoading: false,
   applicationsLoading: false,
@@ -82,11 +112,25 @@ const state = {
   orderSubmitted: false,
   loginSubmitted: false,
   loginPending: false,
+  passwordRecoveryOpen: false,
+  passwordRecoveryPending: false,
+  passwordRecoverySent: false,
+  passwordRecoveryError: null,
+  passwordResetMode: false,
   orderSubmitPending: false,
   applicationSubmitPending: false,
   siteSavePending: false,
   importPending: false,
   stockResetPending: false,
+  accountProfileSavePending: false,
+  accountProfileSaved: false,
+  accountProfileError: null,
+  accountPasswordSavePending: false,
+  accountPasswordSaved: false,
+  accountPasswordError: null,
+  teamSavePending: false,
+  teamSaved: false,
+  teamError: null,
   siteSaved: false,
   siteSaveError: null,
   colourReviewPending: false,
@@ -390,6 +434,20 @@ async function invokeAuthedFunction(functionName, payload) {
   });
   if (!response.ok) throw await buildResponseError(`${functionName} invoke failed`, response);
   return response.json().catch(() => ({}));
+}
+
+async function invokeAuthedRpc(functionName, payload) {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(`rpc:${functionName}`, `${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+    method: "POST",
+    headers: {
+      ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await buildResponseError(`${functionName} invoke failed`, response);
+  return response.json();
 }
 
 function htmlFromIncludes(title, values) {
@@ -716,6 +774,29 @@ function applicationSummary() {
   return Applications.summarizeApplications(state.resellerApplicationsData);
 }
 
+function roleLabel(role = state.auth.role) {
+  switch (role) {
+    case "admin":
+      return "Admin";
+    case "reseller":
+      return "Approved Reseller";
+    case "pending_reseller":
+      return "Pending Reseller";
+    default:
+      return "Guest";
+  }
+}
+
+function currentUserCountry() {
+  return latestOwnApplication()?.country || "Not set";
+}
+
+function currentPortalMode() {
+  if (isAdminRoute() || (state.route === "account" && state.auth.isAdmin)) return "admin";
+  if (isResellerRoute() || (state.route === "account" && state.auth.isAuthenticated)) return "reseller";
+  return "public";
+}
+
 function requestHistoryRecords() {
   return AdminOrders.buildAdminOrderRecords(state.orderRequests, state.orderRequestItems).map((record) => ({
     ...record,
@@ -725,7 +806,7 @@ function requestHistoryRecords() {
 
 async function loadCatalog() {
   try {
-    const [productRows, variantRows, heroRows, themeRows, contentRows] = await Promise.all([
+    const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows] = await Promise.all([
       fetchOptionalSupabase("products", CatalogData.productSelectQuery()),
       fetchOptionalSupabase("product_variants", CatalogData.variantSelectQuery()),
       fetchOptionalSupabase(
@@ -737,6 +818,7 @@ async function loadCatalog() {
         "select=name,primary_color,primary_dark_color,background_color,surface_color,accent_color,text_color,deep_color&active=eq.true&order=updated_at.desc&limit=1",
       ),
       fetchOptionalSupabase("site_content", "select=reseller_banner&active=eq.true&order=updated_at.desc&limit=1"),
+      fetchOptionalSupabase("reseller_directory", "select=id,company_name,country,phone,email,full_name&order=country.asc,company_name.asc&limit=200"),
     ]);
     const fallback = CatalogData.fallbackCatalog();
     const catalogRows =
@@ -746,6 +828,7 @@ async function loadCatalog() {
     state.products = catalogRows.products;
     state.variants = catalogRows.variants;
     state.inventory = [];
+    state.resellerDirectory = Array.isArray(directoryRows) ? directoryRows : [];
     if (heroRows.length || themeRows.length || contentRows.length) {
       state.siteContent = remoteSiteContent(heroRows, themeRows, contentRows);
     }
@@ -764,6 +847,7 @@ async function loadProtectedData() {
     state.orderRequestItems = [];
     state.resellerApplicationsData = [];
     state.colourMappings = [];
+    state.staffProfiles = [];
     state.resellerDraft = {};
     state.inventoryError = null;
     state.historyError = null;
@@ -815,6 +899,7 @@ async function loadProtectedData() {
 
     if (state.auth.isAdmin) {
       tasks.push(
+        ["profiles", fetchAuthedSupabase("profiles", "select=id,email,full_name,company_name,phone,role&order=role.asc,email.asc&limit=200")],
         [
           "importJobs",
           fetchAuthedSupabase(
@@ -853,6 +938,7 @@ async function loadProtectedData() {
     state.orderRequests = data.orderRequests || [];
     state.orderRequestItems = data.orderRequestItems || [];
     state.importJobs = data.importJobs || [];
+    state.staffProfiles = data.profiles || [];
     if (failures.length) {
       const message = `Some protected data could not load: ${failures.join("; ")}`;
       state.inventoryError = message;
@@ -914,27 +1000,71 @@ function authDisplayName() {
   return state.auth.profile?.company_name || state.auth.profile?.full_name || state.auth.user?.email || "Account";
 }
 
+function authProfileError(authState) {
+  if (!authState?.isAuthenticated) return null;
+  if (!authState.profile) {
+    return "Your account signed in, but the Irunsvan profile record is missing. Contact admin support to finish account setup.";
+  }
+  return null;
+}
+
+function isAdminLoginRoute(route = state.route) {
+  return route === "admin-login";
+}
+
+function loginPageContent(route = state.route) {
+  if (isAdminLoginRoute(route)) {
+    return {
+      eyebrow: "Admin Login",
+      title: "Sign in to operations.",
+      copy: "Only approved admin accounts can open product controls, inventory uploads, and reseller approvals.",
+      submitLabel: "Continue to Admin",
+      linkOne: ["Back to reseller login", "login"],
+      linkTwo: ["Apply as a Reseller", "apply"],
+    };
+  }
+  return {
+    eyebrow: "Account Login",
+    title: "Sign in to continue.",
+    copy: "Approved resellers use this entry for stock and order requests. Admin users can use the same account system.",
+    submitLabel: "Continue",
+    linkOne: ["Need reseller access?", "apply"],
+    linkTwo: ["Admin Login", "admin-login"],
+  };
+}
+
 function topNav() {
   const active = (routes) => (routes.includes(state.route) ? "active" : "");
   const publicNavItems = [
-    ["Catalog", "store", ["store", "product"]],
-    ["Become a Reseller", "apply", ["apply"]],
-    ["Reseller Portal", "reseller", ["reseller", "history"]],
-    ["Admin", "admin", ["admin", "products", "site", "approvals", "imports", "email"]],
+    ["Products", "store", ["store", "product"]],
+    ["Find a Reseller", "find-reseller", ["find-reseller"]],
+    ["Apply as a Reseller", "apply", ["apply"]],
+    ["Login", "login", ["login", "admin-login"]],
   ];
   const drawerItems = mobileDrawerItems();
   const drawerLabel = mobileDrawerLabel();
   const homeRoute = currentPortalHomeRoute();
-  const desktopItems = isAdminRoute() || isResellerRoute() ? drawerItems : publicNavItems;
+  const portalMode = currentPortalMode();
+  const desktopItems = portalMode === "public" ? publicNavItems : drawerItems;
+  const navActions = state.auth.isAuthenticated
+    ? `
+      <div class="account-chip">
+        <span>${escapeHtml(authDisplayName())}</span>
+        <small>${escapeHtml(roleLabel())}</small>
+      </div>
+      <button data-route="account">Account</button>
+      <button data-action="logout">Logout</button>
+    `
+    : `<button data-route="login">Login</button>`;
   return `
-    <header class="${isAdminRoute() || isResellerRoute() ? "top-nav portal-top-nav" : "top-nav"}">
+    <header class="${portalMode !== "public" ? "top-nav portal-top-nav" : "top-nav"}">
       <button class="logo-link bare-button" data-route="${homeRoute}" aria-label="${escapeHtml(mobileAreaLabel())} home">${logo("blue")}</button>
       <span class="mobile-area-label">${escapeHtml(mobileAreaLabel())}</span>
       <nav class="main-nav" aria-label="Primary navigation">
         ${desktopItems.map(([label, route, routes]) => `<button class="${active(routes)}" data-route="${route}">${label}</button>`).join("")}
       </nav>
       <button class="mobile-menu-button" data-action="toggle-mobile-nav" aria-label="${state.mobileNavOpen ? "Close menu" : `Open ${drawerLabel} menu`}" aria-expanded="${state.mobileNavOpen ? "true" : "false"}"><span class="menu-dots" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
-      <div class="nav-actions"></div>
+      <div class="nav-actions">${navActions}</div>
     </header>
     <div class="${state.mobileNavOpen ? "mobile-nav-backdrop open" : "mobile-nav-backdrop"}" data-action="close-mobile-nav"></div>
     <aside class="${state.mobileNavOpen ? "mobile-nav-drawer open" : "mobile-nav-drawer"}" aria-label="${drawerLabel} navigation">
@@ -948,19 +1078,20 @@ function topNav() {
 }
 
 function currentPortalHomeRoute() {
-  if (isAdminRoute()) return "admin";
+  if (isAdminRoute() || (state.route === "account" && state.auth.isAdmin)) return "admin";
   if (isResellerRoute()) return "reseller";
+  if (state.route === "account") return Auth.fallbackRouteForRole(state.auth.role);
   return "store";
 }
 
 function mobileAreaLabel() {
-  if (isAdminRoute()) return "Admin";
-  if (isResellerRoute()) return "Reseller";
+  if (isAdminRoute() || (state.route === "account" && state.auth.isAdmin)) return "Admin";
+  if (isResellerRoute() || (state.route === "account" && state.auth.isAuthenticated)) return "Reseller";
   return "Irunsvan Africa";
 }
 
 function isAdminRoute(route = state.route) {
-  return ["admin", "products", "site", "approvals", "imports", "email"].includes(route);
+  return ["admin", "team", "products", "site", "approvals", "imports", "email"].includes(route);
 }
 
 function isResellerRoute(route = state.route) {
@@ -974,30 +1105,40 @@ function mobileDrawerLabel() {
 }
 
 function mobileDrawerItems() {
-  if (isAdminRoute()) {
+  if (currentPortalMode() === "admin") {
     return [
       ["Dashboard", "admin", ["admin"]],
+      ["Team", "team", ["team"]],
       ["Products", "products", ["products"]],
       ["Inventory Uploads", "imports", ["imports"]],
       ["Orders & Applications", "approvals", ["approvals"]],
       ["Site Controls", "site", ["site"]],
+      ["Account", "account", ["account"]],
       ["View Public Site", "store", ["store", "product"]],
     ];
   }
-  if (isResellerRoute()) {
+  if (currentPortalMode() === "reseller") {
+    if (state.auth.isPending) {
+      return [
+        ["Application", "apply", ["apply"]],
+        ["Account", "account", ["account"]],
+        ["Public Catalog", "store", ["store", "product"]],
+      ];
+    }
     return [
       ["Shop", "reseller", ["reseller"]],
       ["Product", "reseller-product", ["reseller-product"]],
       ["Request History", "history", ["history"]],
+      ["Account", "account", ["account"]],
       ["Public Catalog", "store", ["store", "product"]],
       ["Become a Reseller", "apply", ["apply"]],
     ];
   }
   return [
-    ["Catalog", "store", ["store", "product"]],
-    ["Become a Reseller", "apply", ["apply"]],
-    ["Reseller Portal", "reseller", ["reseller", "history"]],
-    ["Admin", "admin", ["admin", "products", "site", "approvals", "imports", "email"]],
+    ["Products", "store", ["store", "product"]],
+    ["Find a Reseller", "find-reseller", ["find-reseller"]],
+    ["Apply as a Reseller", "apply", ["apply"]],
+    ["Login", "login", ["login", "admin-login"]],
   ];
 }
 
@@ -1015,8 +1156,10 @@ function mobileContextBar() {
     email: "Admin",
     admin: "Catalog",
     reseller: "Catalog",
+    "find-reseller": "Catalog",
     apply: "Catalog",
     login: "Catalog",
+    "admin-login": "Catalog",
     about: "Catalog",
     contact: "Catalog",
     terms: "Catalog",
@@ -1212,8 +1355,8 @@ function productDetail() {
           ${detail.colours.length ? selectorGroup("Colours", detail.colours) : ""}
           ${detail.sizes.length ? selectorGroup("Sizes", detail.sizes) : ""}
           <div class="detail-actions">
-            <button class="button primary" data-route="apply">Apply for Reseller Access</button>
-            <button class="button secondary" data-route="reseller">Reseller Portal</button>
+            <button class="button primary" data-route="apply">Apply as a Reseller</button>
+            <button class="button secondary" data-route="find-reseller">Find a Reseller</button>
           </div>
           <div class="detail-note">Exact availability and order requests unlock after admin approval.</div>
         </div>
@@ -1309,10 +1452,12 @@ function resellerApplication() {
 }
 
 function loginPage() {
+  const content = loginPageContent();
   const notice = state.routeNotice
     ? `<p class="notice ${escapeHtml(state.routeNotice.type)}">${escapeHtml(state.routeNotice.message)}</p>`
     : "";
   const authError = state.authError ? `<p class="notice error">${escapeHtml(state.authError)}</p>` : "";
+  const recoveryError = state.passwordRecoveryError ? `<p class="notice error">${escapeHtml(state.passwordRecoveryError)}</p>` : "";
   const helper =
     state.auth.isPending && state.auth.isAuthenticated
       ? `<p class="notice">Your reseller application is still pending approval. You can update your application details below.</p>`
@@ -1320,9 +1465,9 @@ function loginPage() {
   return `
     <main class="form-page narrow">
       <section class="form-hero">
-        <span class="eyebrow dark">Account Login</span>
-        <h1>Sign in to continue.</h1>
-        <p>Approved resellers use this entry for stock and order requests. Admin users continue to operations tools.</p>
+        <span class="eyebrow dark">${escapeHtml(content.eyebrow)}</span>
+        <h1>${escapeHtml(content.title)}</h1>
+        <p>${escapeHtml(content.copy)}</p>
       </section>
       <form class="workflow-form" data-form="login">
         ${notice}
@@ -1330,14 +1475,169 @@ function loginPage() {
         ${authError}
         ${inputField("Email", "email", "name@example.com", "email")}
         ${inputField("Password", "password", "Password", "password")}
-        <button class="button primary full" ${state.loginPending ? "disabled" : ""}>${state.loginPending ? "Signing In..." : "Continue"}</button>
+        <button class="button primary full" ${state.loginPending ? "disabled" : ""}>${state.loginPending ? "Signing In..." : escapeHtml(content.submitLabel)}</button>
         <button type="button" class="button secondary full" data-action="google-login">Continue with Google</button>
+        <button type="button" class="text-link" data-action="toggle-password-recovery">${state.passwordRecoveryOpen ? "Hide password help" : "Forgot password?"}</button>
         <div class="split-actions">
-          <button type="button" class="text-link" data-route="apply">Need reseller access?</button>
-          <button type="button" class="text-link" data-route="admin">Admin area</button>
+          <button type="button" class="text-link" data-route="${escapeHtml(content.linkOne[1])}">${escapeHtml(content.linkOne[0])}</button>
+          <button type="button" class="text-link" data-route="${escapeHtml(content.linkTwo[1])}">${escapeHtml(content.linkTwo[0])}</button>
         </div>
         ${state.loginSubmitted && state.auth.isAuthenticated ? `<p class="notice success">Signed in as ${escapeHtml(authDisplayName())}.</p>` : ""}
       </form>
+      ${
+        state.passwordRecoveryOpen
+          ? `
+            <form class="workflow-form password-help-card" data-form="password-recovery">
+              <strong>Password reset</strong>
+              <p>Enter your account email and we will send a secure reset link.</p>
+              ${recoveryError}
+              ${state.passwordRecoverySent ? `<p class="notice success">Reset instructions sent. Open the email and follow the secure link back to this site.</p>` : ""}
+              ${inputField("Account Email", "email", "name@example.com", "email")}
+              <button class="button secondary full" ${state.passwordRecoveryPending ? "disabled" : ""}>${state.passwordRecoveryPending ? "Sending..." : "Send Reset Link"}</button>
+            </form>
+          `
+          : ""
+      }
+    </main>
+  `;
+}
+
+function resellerDirectoryByCountry() {
+  return state.resellerDirectory.reduce((map, row) => {
+    const country = String(row.country || "Region not published").trim() || "Region not published";
+    const list = map.get(country) || [];
+    list.push(row);
+    map.set(country, list);
+    return map;
+  }, new Map());
+}
+
+function findResellerPage() {
+  const grouped = [...resellerDirectoryByCountry().entries()].sort((left, right) => left[0].localeCompare(right[0]));
+  const totalPartners = state.resellerDirectory.length;
+  return `
+    <main class="info-page">
+      <section>
+        <span class="eyebrow dark">Find a Reseller</span>
+        <h1>Buy through an approved Irunsvan partner in your region.</h1>
+        <p class="lead-copy">The public catalog shows the range. Orders are handled by approved resellers who can see live stock and submit wholesale requests.</p>
+        <p>If your region is not covered yet, apply as a reseller and the operations team can review your business account.</p>
+      </section>
+      ${metricGrid([
+        ["Buying Route", "Approved reseller", "Public shoppers do not place direct orders here"],
+        ["Regional Coverage", totalPartners ? `${grouped.length} countries` : "Expanding", "New reseller partners are added by country"],
+        ["Business Access", "Application required", "Wholesale stock is reserved for approved accounts"],
+      ])}
+      <section class="form-grid">
+        <aside class="process-panel">
+          <h2>Approved reseller directory</h2>
+          ${
+            grouped.length
+              ? `<div class="directory-list">
+                  ${grouped
+                    .map(
+                      ([country, partners]) => `
+                        <article class="directory-country">
+                          <strong>${escapeHtml(country)}</strong>
+                          <div class="directory-cards">
+                            ${partners
+                              .map(
+                                (partner) => `
+                                  <div class="directory-card">
+                                    <h3>${escapeHtml(partner.company_name || "Approved reseller")}</h3>
+                                    <p>${escapeHtml(partner.full_name || "Sales contact")}</p>
+                                    <p>${partner.phone ? escapeHtml(partner.phone) : "Phone available on request"}</p>
+                                    <p>${escapeHtml(partner.email || "Contact available on request")}</p>
+                                  </div>
+                                `,
+                              )
+                              .join("")}
+                          </div>
+                        </article>
+                      `,
+                    )
+                    .join("")}
+                </div>`
+              : `<p>No public reseller listings have been published yet. Use the reseller application if your region still needs a local partner.</p>`
+          }
+        </aside>
+        <aside class="process-panel">
+          <h2>How buying works</h2>
+          ${processStep("1", "Browse products", "Use the public catalog to review styles, colours, and sizes.")}
+          ${processStep("2", "Find your region", "Contact the approved reseller serving your country or area.")}
+          ${processStep("3", "Need coverage?", "Apply as a reseller if your region still needs a local partner.")}
+        </aside>
+        <aside class="process-panel">
+          <h2>Regional rollout</h2>
+          <p>Directory listings are generated from approved reseller accounts. Admin can expand coverage country by country as the network grows.</p>
+          <div class="split-actions">
+            <button type="button" class="button primary" data-route="apply">Apply as a Reseller</button>
+            <button type="button" class="button secondary" data-route="login">Login</button>
+          </div>
+        </aside>
+      </section>
+      ${footer(true)}
+    </main>
+  `;
+}
+
+function accountPage() {
+  const application = latestOwnApplication();
+  return `
+    <main class="portal-page">
+      <section class="portal-header">
+        <div>
+          <span class="eyebrow dark">Account & Settings</span>
+          <h1>${escapeHtml(authDisplayName())}</h1>
+          <p>Manage business details, security, and account access from one place.</p>
+        </div>
+        <div class="portal-actions">
+          <div class="protected-pill">${escapeHtml(roleLabel())}</div>
+          <button class="button secondary" data-action="logout">Logout</button>
+        </div>
+      </section>
+      ${metricGrid([
+        ["Account Role", roleLabel(), "Access level"],
+        ["Email", state.auth.user?.email || "Not available", "Sign-in identity"],
+        ["Country", currentUserCountry(), "Reseller coverage"],
+        ["Application", application?.status || "No application", "Current review state"],
+      ])}
+      <section class="form-grid">
+        <form class="workflow-form" data-form="account-profile">
+          <h2>Business profile</h2>
+          ${state.accountProfileError ? `<p class="notice error">${escapeHtml(state.accountProfileError)}</p>` : ""}
+          ${state.accountProfileSaved ? `<p class="notice success">Account profile updated.</p>` : ""}
+          ${controlInput("Full Name", "full_name", state.auth.profile?.full_name || "")}
+          ${controlInput("Company Name", "company_name", state.auth.profile?.company_name || "")}
+          ${controlInput("Phone", "phone", state.auth.profile?.phone || "")}
+          <button class="button primary full" ${state.accountProfileSavePending ? "disabled" : ""}>${state.accountProfileSavePending ? "Saving..." : "Save Account Details"}</button>
+        </form>
+        <form class="workflow-form" data-form="account-password">
+          <h2>Security</h2>
+          ${state.passwordResetMode ? `<p class="notice success">Set a new password for this account now.</p>` : ""}
+          ${state.accountPasswordError ? `<p class="notice error">${escapeHtml(state.accountPasswordError)}</p>` : ""}
+          ${state.accountPasswordSaved ? `<p class="notice success">Password updated successfully.</p>` : ""}
+          ${inputField("New Password", "password", "Minimum 8 characters", "password")}
+          ${inputField("Confirm Password", "password_confirm", "Repeat your new password", "password")}
+          <button class="button primary full" ${state.accountPasswordSavePending ? "disabled" : ""}>${state.accountPasswordSavePending ? "Updating..." : "Update Password"}</button>
+        </form>
+      </section>
+      ${
+        application
+          ? `
+            <section class="inventory-panel">
+              <div class="panel-toolbar"><h2>Application snapshot</h2><span>${escapeHtml(application.status)}</span></div>
+              <div class="overview-list">
+                <div class="overview-row"><strong>Company</strong><span>${escapeHtml(application.company_name)}</span></div>
+                <div class="overview-row"><strong>Country</strong><span>${escapeHtml(application.country || "Not provided")}</span></div>
+                <div class="overview-row"><strong>Phone</strong><span>${escapeHtml(application.phone || "Not provided")}</span></div>
+                <div class="overview-row"><strong>Notes</strong><span>${escapeHtml(application.message || "No notes supplied")}</span></div>
+              </div>
+            </section>
+          `
+          : ""
+      }
+      ${footer(true)}
     </main>
   `;
 }
@@ -1729,6 +2029,7 @@ function requestHistory() {
 
 function adminDashboard() {
   const products = catalogProducts();
+  const activeProducts = products.filter((product) => product.published);
   const orderRecords = requestHistoryRecords();
   const applicationCounts = applicationSummary();
   return `
@@ -1742,7 +2043,7 @@ function adminDashboard() {
         ${metricGrid([
           ["Pending Apps", String(applicationCounts.pending), "Awaiting review"],
           ["Submitted Requests", String(AdminOrders.countRequestsByStatus(orderRecords, ["submitted"])), "Order pipeline"],
-          ["Total Products", String(products.length), "Imported catalog"],
+          ["Active Products", String(activeProducts.length), "Current source truth"],
           ["Inventory Rows", String(state.inventory.length || 0), "Imported stock"],
         ])}
         <section class="admin-panels">
@@ -1765,11 +2066,76 @@ function adminDashboard() {
         <section class="product-overview">
           <div class="panel-toolbar"><h2>Product / Inventory Overview</h2><span>${state.variants.length} SKUs</span></div>
           <div class="overview-list">
-            ${products
+            ${activeProducts
               .slice(0, 6)
               .map((product) => `<div class="overview-row"><strong>${escapeHtml(product.sku)}</strong><span>${escapeHtml(product.name)}</span><span>${money(product.base_price)}</span></div>`)
               .join("")}
           </div>
+        </section>
+      </section>
+    </main>
+  `;
+}
+
+function adminTeam() {
+  const admins = state.staffProfiles.filter((profile) => profile.role === "admin");
+  const resellers = state.staffProfiles.filter((profile) => profile.role === "reseller");
+  const pending = state.staffProfiles.filter((profile) => profile.role === "pending_reseller");
+  return `
+    <main class="admin-layout">
+      ${adminSidebar("team")}
+      <section class="admin-main">
+        <header class="admin-topbar">
+          <div><h1>Team & Access</h1><p>Manage internal admins and review which reseller accounts already exist in the system.</p></div>
+        </header>
+        ${metricGrid([
+          ["Admins", String(admins.length), "Operations accounts"],
+          ["Approved Resellers", String(resellers.length), "Can place wholesale requests"],
+          ["Pending Accounts", String(pending.length), "Need review or promotion"],
+          ["Total Profiles", String(state.staffProfiles.length), "Stored user records"],
+        ])}
+        <section class="form-grid">
+          <form class="workflow-form" data-form="team-role">
+            <h2>Assign access</h2>
+            ${state.teamError ? `<p class="notice error">${escapeHtml(state.teamError)}</p>` : ""}
+            ${state.teamSaved ? `<p class="notice success">Account access updated.</p>` : ""}
+            ${inputField("Existing Account Email", "email", "name@example.com", "email")}
+            <label><span>Role</span>
+              <select name="role">
+                <option value="admin">Admin</option>
+                <option value="reseller">Reseller</option>
+                <option value="pending_reseller">Pending Reseller</option>
+              </select>
+            </label>
+            <button class="button primary full" ${state.teamSavePending ? "disabled" : ""}>${state.teamSavePending ? "Saving..." : "Update Access"}</button>
+          </form>
+          <section class="inventory-panel">
+            <div class="panel-toolbar"><h2>Current team</h2><span>${admins.length} admin accounts</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Phone</th><th>Role</th></tr></thead>
+                <tbody>
+                  ${
+                    state.staffProfiles.length
+                      ? state.staffProfiles
+                          .map(
+                            (profile) => `
+                              <tr>
+                                <td>${escapeHtml(profile.full_name || "No name")}</td>
+                                <td>${escapeHtml(profile.email || "No email")}</td>
+                                <td>${escapeHtml(profile.company_name || "—")}</td>
+                                <td>${escapeHtml(profile.phone || "—")}</td>
+                                <td>${statusPill(profile.role)}</td>
+                              </tr>
+                            `,
+                          )
+                          .join("")
+                      : `<tr><td colspan="5">No staff or reseller profiles loaded yet.</td></tr>`
+                  }
+                </tbody>
+              </table>
+            </div>
+          </section>
         </section>
       </section>
     </main>
@@ -1844,8 +2210,9 @@ function adminSiteControls() {
 function adminProducts() {
   const colourRows = colourReviewRows();
   const productModels = adminProductModels();
-  const summary = OperationsProducts.summarizeAdminProducts(productModels);
-  const attentionCount = summary.missingPrice + summary.missingImage + summary.outOfStock;
+  const activeProductModels = productModels.filter((model) => model.published);
+  const archivedProductModels = productModels.filter((model) => !model.published);
+  const summary = OperationsProducts.summarizeAdminProducts(activeProductModels);
   return `
     <main class="admin-layout">
       ${adminSidebar("products")}
@@ -1862,30 +2229,30 @@ function adminProducts() {
         ${state.productPriceError ? `<p class="notice error">${escapeHtml(state.productPriceError)}</p>` : ""}
         ${state.colourReviewError ? `<p class="notice error">${escapeHtml(state.colourReviewError)}</p>` : ""}
         ${metricGrid([
-          ["Products", String(summary.total), "Loaded catalog"],
+          ["Products", String(summary.total), "Current source truth"],
           ["Total Stock", String(summary.totalUnits), "Units available"],
           ["Missing Price", String(summary.missingPrice), "Needs admin"],
-          ["Needs Attention", String(attentionCount), "Price, image, or stock"],
+          ["Archived", String(archivedProductModels.length), "Hidden from reseller view"],
         ])}
         <section class="admin-product-command">
           <div>
-            <span class="eyebrow dark">Product management</span>
             <h2>Existing Products</h2>
-            <p>Start here first. Add products only when a model is missing from this list.</p>
+            <p>Only current published products are shown here. Archived models stay out of the daily workflow.</p>
           </div>
           <button class="button secondary" data-action="toggle-product-form">${state.productFormOpen ? "Hide Add Product" : "Add New Product"}</button>
         </section>
         ${state.productFormOpen ? productForm() : ""}
         <section class="admin-product-board">
-          <div class="panel-toolbar"><h2>Product Control Center</h2><span>${productModels.length} products</span></div>
+          <div class="panel-toolbar"><h2>Product Control Center</h2><span>${activeProductModels.length} products</span></div>
           ${state.inventoryError ? `<p class="notice error">${escapeHtml(state.inventoryError)}</p>` : ""}
           ${
             state.inventoryLoading
               ? `<p class="notice">Loading product stock and pricing...</p>`
-              : productModels.length
-                ? `<div class="admin-product-list">${productModels.map(adminProductCard).join("")}</div>`
+              : activeProductModels.length
+                ? `<div class="admin-product-list">${activeProductModels.map(adminProductCard).join("")}</div>`
                 : `<p class="notice">No products are loaded yet. Upload a master inventory file or add the first product.</p>`
           }
+          ${archivedProductModels.length ? `<p class="import-note">${escapeHtml(`${archivedProductModels.length} archived products are hidden from this view to keep the active catalog clean.`)}</p>` : ""}
           <p class="import-note">Products define what exists. Inventory uploads update stock against variants; prices and images are managed here.</p>
         </section>
         <section class="product-overview">
@@ -1972,27 +2339,31 @@ function adminProductCard(model) {
 function stockMatrixPreview(matrix) {
   if (!matrix.rows.length) return `<p class="import-note">No stock rows are linked to this product yet.</p>`;
   const sizes = matrix.sizes.slice(0, 6);
+  const totalStock = matrix.rows.reduce((total, row) => total + row.totalStock, 0);
   return `
-    <div class="stock-matrix-preview">
-      <div class="stock-matrix-head">
-        <span>Color / Size</span>
-        ${sizes.map((size) => `<span>${escapeHtml(size)}</span>`).join("")}
-        <span>Total</span>
+    <details class="admin-stock-details">
+      <summary><span>Sizes and stock</span><strong>${escapeHtml(String(totalStock))} units</strong></summary>
+      <div class="stock-matrix-preview">
+        <div class="stock-matrix-head">
+          <span>Color / Size</span>
+          ${sizes.map((size) => `<span>${escapeHtml(size)}</span>`).join("")}
+          <span>Total</span>
+        </div>
+        ${matrix.rows
+          .slice(0, 4)
+          .map(
+            (row) => `
+              <div class="stock-matrix-row">
+                <strong>${escapeHtml(row.colour)}</strong>
+                ${sizes.map((size) => `<span>${escapeHtml(String(row.sizes.find((cell) => cell.size === size)?.stockQuantity || 0))}</span>`).join("")}
+                <span>${escapeHtml(String(row.totalStock))}</span>
+              </div>
+            `,
+          )
+          .join("")}
+        ${matrix.rows.length > 4 || matrix.sizes.length > 6 ? `<p class="import-note">Showing top stock rows. Use inventory upload history for full SKU-level updates.</p>` : ""}
       </div>
-      ${matrix.rows
-        .slice(0, 4)
-        .map(
-          (row) => `
-            <div class="stock-matrix-row">
-              <strong>${escapeHtml(row.colour)}</strong>
-              ${sizes.map((size) => `<span>${escapeHtml(String(row.sizes.find((cell) => cell.size === size)?.stockQuantity || 0))}</span>`).join("")}
-              <span>${escapeHtml(String(row.totalStock))}</span>
-            </div>
-          `,
-        )
-        .join("")}
-      ${matrix.rows.length > 4 || matrix.sizes.length > 6 ? `<p class="import-note">Showing top stock rows. Use inventory upload history for full SKU-level updates.</p>` : ""}
-    </div>
+    </details>
   `;
 }
 
@@ -2373,6 +2744,7 @@ function adminSidebar(activeRoute) {
       ${logo("blue")}<span class="admin-chip">Africa Ops</span>
       <nav>
         ${adminLink("Dashboard", "admin", activeRoute)}
+        ${adminLink("Team", "team", activeRoute)}
         ${adminLink("Products", "products", activeRoute)}
         ${adminLink("Inventory", "imports", activeRoute)}
         ${adminLink("Orders", "approvals", activeRoute)}
@@ -2519,8 +2891,8 @@ function footer(compact = false) {
   return `
     <footer class="${compact ? "footer compact" : "footer"}">
       <div>${logo("blue")}<p>High-performance athletic footwear for Africa's reseller-ready inventory workflows.</p></div>
-      <div><strong>Resources</strong><button data-route="store">Catalog</button><button data-route="apply">Reseller Terms</button><button data-route="contact">Support</button></div>
-      <div><strong>Operations</strong><button data-route="history">Order Requests</button><button data-route="imports">Inventory Imports</button><button data-route="privacy">Privacy Policy</button></div>
+      <div><strong>Resources</strong><button data-route="store">Products</button><button data-route="find-reseller">Find a Reseller</button><button data-route="contact">Support</button></div>
+      <div><strong>Operations</strong><button data-route="apply">Apply as a Reseller</button><button data-route="login">Login</button><button data-route="admin-login">Admin Login</button><button data-route="privacy">Privacy Policy</button></div>
       <p class="copyright">Copyright 2026 Irunsvan Africa High-Performance Footwear.</p>
     </footer>
   `;
@@ -2534,12 +2906,16 @@ function routeView() {
   const views = {
     store: storefront,
     product: productDetail,
+    "find-reseller": findResellerPage,
     apply: resellerApplication,
     login: loginPage,
+    "admin-login": loginPage,
+    account: accountPage,
     reseller: resellerPortal,
     "reseller-product": resellerProductOrderPage,
     history: requestHistory,
     admin: adminDashboard,
+    team: adminTeam,
     products: adminProducts,
     site: adminSiteControls,
     approvals: adminApprovals,
@@ -2567,6 +2943,15 @@ function bindEvents() {
   document.querySelectorAll("[data-action='google-login']").forEach((button) => {
     button.addEventListener("click", () => {
       handleGoogleLogin();
+    });
+  });
+
+  document.querySelectorAll("[data-action='toggle-password-recovery']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.passwordRecoveryOpen = !state.passwordRecoveryOpen;
+      state.passwordRecoveryError = null;
+      state.passwordRecoverySent = false;
+      render();
     });
   });
 
@@ -2636,6 +3021,10 @@ function bindEvents() {
       if (formName === "application") await handleApplicationSubmit(form);
       if (formName === "order") await handleOrderSubmit(form);
       if (formName === "login") await handleLogin(form);
+      if (formName === "password-recovery") await handlePasswordRecovery(form);
+      if (formName === "account-profile") await handleAccountProfileSave(form);
+      if (formName === "account-password") await handleAccountPasswordSave(form);
+      if (formName === "team-role") await handleTeamRoleSave(form);
       if (formName === "site-controls") await saveSiteControls(form);
       if (formName === "product") await handleProductSubmit(form);
       if (formName === "colour-review") await saveColourReview(form);
@@ -2896,24 +3285,43 @@ function clearBulkOrderQuantities(container) {
 
 async function handleLogin(form) {
   const data = new FormData(form);
+  const email = String(data.get("email") || "").trim();
+  const password = String(data.get("password") || "");
+  const adminOnly = isAdminLoginRoute();
   state.loginPending = true;
   state.loginSubmitted = false;
   state.authError = null;
   render();
 
   try {
+    if (!email || !password) {
+      throw new Error("Enter both your email and password.");
+    }
     await SupabaseClient.signInWithPassword({
       url: SUPABASE_URL,
       key: SUPABASE_KEY,
-      email: String(data.get("email") || "").trim(),
-      password: String(data.get("password") || ""),
+      email,
+      password,
     });
     const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });
     state.auth = Auth.normalizeAuthState(restored);
+    const profileError = authProfileError(state.auth);
+    if (profileError) {
+      state.authError = profileError;
+      setRoute(adminOnly ? "admin-login" : "login", {}, { replaceHistory: true, scroll: false });
+      return;
+    }
+    if (adminOnly && !state.auth.isAdmin) {
+      await SupabaseClient.signOut();
+      state.auth = Auth.normalizeAuthState();
+      state.authError = "This account does not have admin access.";
+      setRoute("admin-login", {}, { replaceHistory: true, scroll: false });
+      return;
+    }
     state.loginSubmitted = true;
     state.routeNotice = null;
     await loadProtectedData();
-    setRoute(Auth.fallbackRouteForRole(state.auth.role));
+    setRoute(Auth.fallbackRouteForRole(state.auth.role), {}, { replaceHistory: true, scroll: false });
   } catch (error) {
     state.auth = Auth.normalizeAuthState();
     state.authError = error instanceof Error ? error.message : "Unable to sign in";
@@ -2922,16 +3330,158 @@ async function handleLogin(form) {
   }
 }
 
+function passwordRecoveryRedirectTo() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("reset", "password");
+  url.hash = "";
+  return url.toString();
+}
+
 function oauthRedirectTo() {
   const url = new URL(window.location.href);
   url.searchParams.set("oauth", "google");
+  if (isAdminLoginRoute()) url.searchParams.set("login", "admin");
+  else url.searchParams.delete("login");
   url.hash = "";
   return url.toString();
+}
+
+async function handlePasswordRecovery(form) {
+  const data = new FormData(form);
+  const email = String(data.get("email") || "").trim();
+  state.passwordRecoveryPending = true;
+  state.passwordRecoveryError = null;
+  state.passwordRecoverySent = false;
+  render();
+
+  try {
+    if (!email) throw new Error("Enter the email address for this account.");
+    await SupabaseClient.requestPasswordReset({
+      url: SUPABASE_URL,
+      key: SUPABASE_KEY,
+      email,
+      redirectTo: passwordRecoveryRedirectTo(),
+    });
+    state.passwordRecoverySent = true;
+  } catch (error) {
+    state.passwordRecoveryError = error instanceof Error ? error.message : "Unable to send reset link";
+  } finally {
+    state.passwordRecoveryPending = false;
+    render();
+  }
+}
+
+async function handleAccountProfileSave(form) {
+  const data = new FormData(form);
+  state.accountProfileSavePending = true;
+  state.accountProfileSaved = false;
+  state.accountProfileError = null;
+  render();
+
+  try {
+    const updatedProfile = await invokeAuthedRpc("update_own_profile", {
+      p_full_name: String(data.get("full_name") || "").trim(),
+      p_company_name: String(data.get("company_name") || "").trim(),
+      p_phone: String(data.get("phone") || "").trim(),
+    });
+    state.auth = Auth.normalizeAuthState({
+      ...state.auth,
+      profile: updatedProfile,
+      role: updatedProfile.role || state.auth.role,
+    });
+    if (state.auth.user?.id && state.staffProfiles.length) {
+      state.staffProfiles = state.staffProfiles.map((profile) => (profile.id === state.auth.user.id ? { ...profile, ...updatedProfile } : profile));
+    }
+    state.accountProfileSaved = true;
+  } catch (error) {
+    state.accountProfileError = error instanceof Error ? error.message : "Unable to save account profile";
+  } finally {
+    state.accountProfileSavePending = false;
+    render();
+  }
+}
+
+async function handleAccountPasswordSave(form) {
+  const data = new FormData(form);
+  const password = String(data.get("password") || "");
+  const passwordConfirm = String(data.get("password_confirm") || "");
+  const session = requireAuthedSession();
+  state.accountPasswordSavePending = true;
+  state.accountPasswordSaved = false;
+  state.accountPasswordError = null;
+  render();
+
+  try {
+    if (password.length < 8) throw new Error("Use at least 8 characters for the new password.");
+    if (password !== passwordConfirm) throw new Error("The password confirmation does not match.");
+    await SupabaseClient.updatePassword({
+      url: SUPABASE_URL,
+      key: SUPABASE_KEY,
+      accessToken: session.access_token,
+      password,
+    });
+    state.accountPasswordSaved = true;
+    state.passwordResetMode = false;
+    form.reset();
+  } catch (error) {
+    state.accountPasswordError = error instanceof Error ? error.message : "Unable to update password";
+  } finally {
+    state.accountPasswordSavePending = false;
+    render();
+  }
+}
+
+async function handleTeamRoleSave(form) {
+  const data = new FormData(form);
+  const email = String(data.get("email") || "").trim().toLowerCase();
+  const role = String(data.get("role") || "").trim();
+  state.teamSavePending = true;
+  state.teamSaved = false;
+  state.teamError = null;
+  render();
+
+  try {
+    if (!email) throw new Error("Enter the existing account email.");
+    if (!["admin", "reseller", "pending_reseller"].includes(role)) throw new Error("Choose a valid role.");
+    const profile = state.staffProfiles.find((entry) => String(entry.email || "").trim().toLowerCase() === email);
+    if (!profile?.id) throw new Error("That email does not belong to an existing account yet.");
+    if (profile.id === state.auth.user?.id && role !== "admin") {
+      throw new Error("Use a different admin account before removing your own admin access.");
+    }
+    const [updatedProfile] = await updateAuthedSupabase("profiles", profile.id, { role });
+    state.staffProfiles = state.staffProfiles.map((entry) => (entry.id === updatedProfile.id ? { ...entry, ...updatedProfile } : entry));
+    state.teamSaved = true;
+    form.reset();
+  } catch (error) {
+    state.teamError = error instanceof Error ? error.message : "Unable to update account access";
+  } finally {
+    state.teamSavePending = false;
+    render();
+  }
+}
+
+function consumeLoginRouteHint() {
+  const url = new URL(window.location.href);
+  const loginHint = url.searchParams.get("login");
+  if (!loginHint) return null;
+  url.searchParams.delete("login");
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  return loginHint === "admin" ? "admin-login" : "login";
+}
+
+function consumePasswordResetHint() {
+  const url = new URL(window.location.href);
+  const resetHint = url.searchParams.get("reset");
+  if (!resetHint) return false;
+  url.searchParams.delete("reset");
+  window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  return resetHint === "password";
 }
 
 function handleGoogleLogin() {
   state.authError = null;
   state.loginPending = true;
+  state.routeNotice = null;
   render();
   SupabaseClient.signInWithOAuth({
     url: SUPABASE_URL,
@@ -2945,6 +3495,15 @@ async function handleLogout() {
   state.auth = Auth.normalizeAuthState();
   state.authError = null;
   state.loginSubmitted = false;
+  state.passwordRecoveryOpen = false;
+  state.passwordRecoveryPending = false;
+  state.passwordRecoverySent = false;
+  state.passwordRecoveryError = null;
+  state.passwordResetMode = false;
+  state.accountProfileSaved = false;
+  state.accountProfileError = null;
+  state.accountPasswordSaved = false;
+  state.accountPasswordError = null;
   state.resellerDraft = {};
   state.resellerNotes = "";
   state.orderSubmitted = false;
@@ -3686,9 +4245,21 @@ function applyRevealMotion() {
 
 function render() {
   SiteControls.applySiteTheme(state.siteContent.theme, document.documentElement);
-  document.getElementById("app").innerHTML = topNav() + routeView();
+  document.getElementById("app").innerHTML = state.authBootstrapPending ? authBootstrapView() : topNav() + routeView();
   bindEvents();
   applyRevealMotion();
+}
+
+function authBootstrapView() {
+  return `
+    <main class="form-page narrow">
+      <section class="form-hero">
+        <span class="eyebrow dark">Loading Account</span>
+        <h1>Finishing sign-in.</h1>
+        <p>We are restoring your Irunsvan account access and routing you to the correct workspace.</p>
+      </section>
+    </main>
+  `;
 }
 
 window.addEventListener("popstate", (event) => {
@@ -3707,32 +4278,50 @@ async function initAuth() {
   try {
     const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });
     state.auth = Auth.normalizeAuthState(restored);
-    state.authError = null;
+    state.authError = authProfileError(state.auth);
     await loadProtectedData();
   } catch (error) {
     state.auth = Auth.normalizeAuthState();
     state.authError = error instanceof Error ? error.message : "Unable to restore account session";
   } finally {
     state.authLoading = false;
+    state.authBootstrapPending = false;
     render();
   }
 }
 
 async function initializeApp() {
   const oauthResult = SupabaseClient.consumeOAuthSessionFromUrl();
+  const loginRouteHint = consumeLoginRouteHint();
+  const passwordResetHint = consumePasswordResetHint();
   const oauthError = SupabaseClient.consumeOAuthError();
   if (oauthResult.error || oauthError) {
-    state.route = "login";
+    state.route = loginRouteHint || "login";
     state.authError = oauthResult.error || oauthError;
   }
   render();
   await loadCatalog();
   await initAuth();
   if (oauthResult.error || oauthError) state.authError = oauthResult.error || oauthError;
-  if (oauthResult.session?.access_token && state.auth.isAuthenticated) {
+  if ((oauthResult.session?.access_token && state.auth.isAuthenticated) || (passwordResetHint && state.auth.isAuthenticated)) {
+    if (passwordResetHint) {
+      state.passwordResetMode = true;
+      setRoute("account", {}, { replaceHistory: true, scroll: false });
+      return;
+    }
+    if (loginRouteHint === "admin-login" && !state.auth.isAdmin) {
+      await SupabaseClient.signOut();
+      state.auth = Auth.normalizeAuthState();
+      state.authError = "This account does not have admin access.";
+      setRoute("admin-login", {}, { replaceHistory: true, scroll: false });
+      return;
+    }
     setRoute(Auth.fallbackRouteForRole(state.auth.role), {}, { replaceHistory: true, scroll: false });
   } else {
     syncRouteFromLocation();
+    if (loginRouteHint && !window.location.hash) {
+      state.route = loginRouteHint;
+    }
     render();
   }
 }

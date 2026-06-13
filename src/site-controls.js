@@ -7,7 +7,7 @@
       backgroundImage: "/Flyer Templates/Flyer Template.jpg",
       primaryCta: "View Catalog",
       primaryRoute: "catalog",
-      secondaryCta: "Reseller Access",
+      secondaryCta: "Apply as a Reseller",
       secondaryRoute: "apply",
       electricity: true,
     },
@@ -21,7 +21,7 @@
       text: "#171717",
       deep: "#001a41",
     },
-    banner: "Irunsvan Africa reseller accounts can view live stock and submit order requests.",
+    banner: "Approved Irunsvan Africa resellers can view live stock and submit order requests.",
   };
 
   const HEX_COLOR = /^#[0-9a-f]{6}$/i;

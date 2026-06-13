@@ -1,6 +1,6 @@
 create table if not exists public.hero_sections (
   id uuid primary key default gen_random_uuid(),
-  eyebrow text not null default 'Ivansrun Africa',
+  eyebrow text not null default 'Irunsvan Africa',
   title text not null,
   copy text not null,
   background_image text not null default '/Flyer Templates/Flyer Template.jpg',
@@ -42,7 +42,7 @@ create table if not exists public.site_themes (
 
 create table if not exists public.site_content (
   id uuid primary key default gen_random_uuid(),
-  reseller_banner text not null default 'Ivansrun Africa reseller accounts can view live stock and submit order requests.',
+  reseller_banner text not null default 'Irunsvan Africa reseller accounts can view live stock and submit order requests.',
   active boolean not null default true,
   created_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -149,9 +149,9 @@ insert into public.hero_sections (
   active
 )
 select
-  'Ivansrun Africa',
+  'Irunsvan Africa',
   'Performance footwear for Africa.',
-  'Browse the public range, then unlock live wholesale inventory through an approved Ivansrun Africa reseller account.',
+  'Browse the public range, then unlock live wholesale inventory through an approved Irunsvan Africa reseller account.',
   '/Flyer Templates/Flyer Template.jpg',
   'View Catalog',
   'catalog',
@@ -185,5 +185,5 @@ select
 where not exists (select 1 from public.site_themes);
 
 insert into public.site_content (reseller_banner, active)
-select 'Ivansrun Africa reseller accounts can view live stock and submit order requests.', true
+select 'Irunsvan Africa reseller accounts can view live stock and submit order requests.', true
 where not exists (select 1 from public.site_content);

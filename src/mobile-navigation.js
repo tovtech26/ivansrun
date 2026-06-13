@@ -2,12 +2,16 @@
   const ROUTES = new Set([
     "store",
     "product",
+    "find-reseller",
     "apply",
     "login",
+    "admin-login",
+    "account",
     "reseller",
     "reseller-product",
     "history",
     "admin",
+    "team",
     "products",
     "site",
     "approvals",
@@ -19,8 +23,8 @@
     "privacy",
   ]);
 
-  const ADMIN_CHILDREN = new Set(["products", "site", "approvals", "imports", "email"]);
-  const INFO_ROUTES = new Set(["apply", "login", "about", "contact", "terms", "privacy"]);
+  const ADMIN_CHILDREN = new Set(["team", "products", "site", "approvals", "imports", "email"]);
+  const INFO_ROUTES = new Set(["find-reseller", "apply", "login", "admin-login", "account", "about", "contact", "terms", "privacy"]);
 
   function backTargetForRoute(route) {
     if (route === "store") return null;

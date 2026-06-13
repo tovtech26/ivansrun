@@ -7,6 +7,8 @@ const catchupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "010_sc
 const skuFirstSql = readFileSync(join(__dirname, "..", "supabase", "sql", "011_sku_first_catalog_import.sql"), "utf8");
 const authorizedPriceSql = readFileSync(join(__dirname, "..", "supabase", "sql", "012_authorized_price_feeds.sql"), "utf8");
 const skuSourceTruthSql = readFileSync(join(__dirname, "..", "supabase", "sql", "013_sku_zip_source_truth_images.sql"), "utf8");
+const brandCleanupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "014_irunsvan_brand_text_cleanup.sql"), "utf8");
+const accountDirectorySql = readFileSync(join(__dirname, "..", "supabase", "sql", "015_account_and_directory.sql"), "utf8");
 
 assert.match(pricePrivacySql, /create or replace view public\.reseller_products\s+with \(security_invoker = true\)/i);
 assert.match(pricePrivacySql, /create or replace view public\.reseller_product_variants\s+with \(security_invoker = true\)/i);
@@ -59,5 +61,19 @@ assert.match(skuSourceTruthSql, /published = si\.model_code is not null/i);
 assert.match(skuSourceTruthSql, /\/public\/product-images\/SKUs\/087\/1\.jpg/i);
 assert.match(skuSourceTruthSql, /\/public\/product-images\/SKUs\/128\/01\.jpg/i);
 assert.match(skuSourceTruthSql, /public\.product_variants[\s\S]*published = vm\.model_code in/i);
+
+assert.equal(/Ivansrun Africa/.test(catchupSql), false, "Catch-up schema must seed Irunsvan branding.");
+assert.match(brandCleanupSql, /update public\.products[\s\S]*description = replace\(description, 'Ivansrun Africa', 'Irunsvan Africa'\)/i);
+assert.match(brandCleanupSql, /update public\.hero_sections[\s\S]*copy = replace\(copy, 'Ivansrun Africa', 'Irunsvan Africa'\)/i);
+assert.match(brandCleanupSql, /update public\.site_content[\s\S]*reseller_banner = replace\(reseller_banner, 'Ivansrun Africa', 'Irunsvan Africa'\)/i);
+assert.equal(/reseller_company/.test(brandCleanupSql), false, "Brand cleanup must not reference non-schema order request columns.");
+
+assert.match(accountDirectorySql, /create or replace function public\.update_own_profile/i);
+assert.match(accountDirectorySql, /where id = \(select auth\.uid\(\)\)/i);
+assert.match(accountDirectorySql, /grant execute on function public\.update_own_profile\(text, text, text\) to authenticated/i);
+assert.match(accountDirectorySql, /create or replace view public\.reseller_directory/i);
+assert.match(accountDirectorySql, /applications\.status = 'approved'::public\.application_status/i);
+assert.match(accountDirectorySql, /profiles\.role = 'reseller'::public\.user_role/i);
+assert.match(accountDirectorySql, /grant select on public\.reseller_directory to anon, authenticated/i);
 
 console.log("supabase-sql tests passed");

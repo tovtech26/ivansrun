@@ -34,6 +34,8 @@ assert.equal(appSource.includes("function handleGoogleLogin()"), true, "Google O
 assert.equal(appSource.includes("SupabaseClient.signInWithOAuth({"), true, "Google login must use Supabase OAuth instead of bypass logic.");
 assert.equal(appSource.includes("SupabaseClient.consumeOAuthSessionFromUrl()"), true, "Startup must consume Supabase OAuth callback sessions.");
 assert.equal(supabaseClientSource.includes("function buildOAuthUrl("), true, "Supabase client must build provider OAuth authorize URLs.");
+assert.equal(supabaseClientSource.includes("function authErrorMessage("), true, "Supabase client must normalize auth provider and credential errors.");
+assert.equal(supabaseClientSource.includes("function oauthResultFromSearch("), true, "Supabase client must inspect OAuth callback query parameters.");
 assert.equal(supabaseClientSource.includes("function oauthSessionFromHash("), true, "Supabase client must parse OAuth callback hash sessions.");
 assert.equal(authSource.includes("buildDevAdminAuthState"), false, "Auth module must not export fake dev admin state.");
 assert.equal(appSource.includes("loadCatalog();\ninitAuth();"), false, "Startup must not race public catalog loading against protected auth loading.");
@@ -71,8 +73,10 @@ assert.equal(appSource.includes("Available Options"), false, "Reseller metrics m
 assert.equal(appSource.includes(".inventory-panel, .order-sidebar"), false, "Functional reseller panels must not be hidden behind reveal observer opacity.");
 assert.equal(appSource.includes('class="product-overview"'), true, "Admin products page must still render product overview sections.");
 assert.equal(/function applyRevealMotion\(\)[\s\S]*document\.querySelectorAll\([\s\S]*\.product-overview/.test(appSource), false, "Admin product panels must not be hidden behind reveal observer opacity.");
-assert.equal(appSource.includes("Product Control Center"), true, "Admin products page must lead with an existing product management area.");
+assert.equal(appSource.includes("const activeProductModels = productModels.filter((model) => model.published);"), true, "Admin products page must default to the published source-truth product set.");
+assert.equal(appSource.includes("archived products are hidden from this view"), true, "Admin products page must explain that archived products are intentionally hidden.");
 assert.equal(appSource.includes("data-action=\"save-product-price\""), true, "Admin products page must let admins save prices on existing products.");
+assert.equal(appSource.includes('class="admin-stock-details"'), true, "Admin product size and stock details must be collapsible.");
 assert.equal(appSource.includes("async function updateAuthedSupabase("), true, "Admin price edits must use authenticated Supabase updates.");
 assert.equal(appSource.includes("async function handleProductPriceUpdate("), true, "Admin price edits must have a dedicated handler.");
 assert.equal(appSource.includes("Reset All Stock"), true, "Admin inventory page must expose a clear stock reset control.");
@@ -91,7 +95,8 @@ assert.equal(appSource.includes("Colour Review"), true, "Admin products page mus
 assert.equal(appSource.includes("product_colour_mappings"), true, "Colour Review must save against product_colour_mappings.");
 assert.equal(appSource.includes("original_colour"), true, "Colour Review wiring must preserve original_colour keys.");
 assert.equal(indexSource.includes('rel="icon"'), true, "Document head must declare a favicon to avoid localhost favicon 404s.");
-assert.equal(indexSource.includes("irunsvan-brand-v1"), true, "Index must bump static asset cache keys after Irunsvan brand correction.");
+assert.equal(indexSource.includes("irunsvan-admin-images-v2"), true, "Index must bump static asset cache keys after the image containment pass.");
+assert.equal(appSource.includes("object-fit: contain"), false, "Image sizing changes must live in CSS, not inline styles.");
 assert.equal(indexSource.includes("ivansrun-google-auth-v1"), false, "Index must not keep the stale Google OAuth cache key after Irunsvan brand correction.");
 assert.equal(indexSource.includes("Ivansrun Africa"), false, "Visible document metadata must use Irunsvan Africa branding.");
 assert.equal(appSource.includes("Ivansrun Africa"), false, "Frontend copy must use Irunsvan Africa branding.");
