@@ -7,10 +7,12 @@
     errors,
     products = [],
     variants = [],
+    colourMappings = [],
     inventoryRows = [],
     mediaProducts = [],
     mediaSummary = null,
     unassignedMedia = [],
+    seedSummary = null,
     stockMatches = [],
     stockExceptions = [],
     stockSummary = null,
@@ -25,10 +27,12 @@
       errors: errors || [],
       products,
       variants,
+      colourMappings,
       inventoryRows,
       mediaProducts,
       mediaSummary,
       unassignedMedia,
+      seedSummary,
       stockMatches,
       stockExceptions,
       stockSummary,
@@ -48,9 +52,10 @@
   }
 
   function buildImportJobFinish({ processedRows, errorMessage }) {
+    const processed = Math.max(0, Number(processedRows) || 0);
     return {
-      status: errorMessage ? "failed" : "completed",
-      rows_processed: processedRows,
+      status: errorMessage && processed <= 0 ? "failed" : "completed",
+      rows_processed: processed,
       error_message: errorMessage || null,
       completed_at: new Date().toISOString(),
     };

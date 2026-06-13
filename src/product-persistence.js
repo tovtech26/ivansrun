@@ -67,6 +67,18 @@
     }));
   }
 
+  function buildColourMappingUpsertPayloads(mappings = [], productId) {
+    return mappings.map((mapping) => ({
+      product_id: safeText(mapping.product_id || productId),
+      model_code: safeText(mapping.model_code),
+      original_colour: nullableText(mapping.original_colour),
+      colour: nullableText(mapping.colour),
+      color_code: nullableText(mapping.color_code),
+      image_name: nullableText(mapping.image_name),
+      published: Boolean(mapping.published),
+    }));
+  }
+
   function buildZeroInventoryPayloads(variants = [], source = "manual_product_setup") {
     return variants
       .map((variant) => ({
@@ -101,6 +113,7 @@
     PRODUCT_IMAGE_BUCKET,
     buildProductUpsertPayload,
     buildVariantUpsertPayloads,
+    buildColourMappingUpsertPayloads,
     buildZeroInventoryPayloads,
     buildStoragePath,
     buildStoredImageRecords,

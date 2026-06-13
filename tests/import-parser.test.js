@@ -112,4 +112,53 @@ assert.deepEqual(parsedChineseCsvMaster.rows, [
 ]);
 assert.equal(parsedChineseCsvMaster.errors.length, 0);
 
+const actualChineseMasterRows = [
+  { 款式编码: "2503", 商品编码: "202425030137", 颜色及规格: "绿野仙踪/青橙;37", 库存: "25" },
+  { 款式编码: "23028", 商品编码: "202302800138", 颜色及规格: "亮桔色/海蓝;38", 库存: "117" },
+  { 款式编码: "23001002", 商品编码: "2023001002138", 颜色及规格: "珍珠白;38", 库存: "40" },
+];
+
+const parsedActualChineseMaster = parseMasterInventoryRows(actualChineseMasterRows);
+assert.deepEqual(
+  parsedActualChineseMaster.rows.map((row) => ({
+    source_style_code: row.source_style_code,
+    source_sku: row.source_sku,
+    model_code: row.model_code,
+    color_code: row.color_code,
+    original_colour: row.original_colour,
+    size: row.size,
+    stock_quantity: row.stock_quantity,
+  })),
+  [
+    {
+      source_style_code: "2503",
+      source_sku: "202425030137",
+      model_code: "2503",
+      color_code: "",
+      original_colour: "绿野仙踪/青橙",
+      size: "37",
+      stock_quantity: 25,
+    },
+    {
+      source_style_code: "23028",
+      source_sku: "202302800138",
+      model_code: "028",
+      color_code: "",
+      original_colour: "亮桔色/海蓝",
+      size: "38",
+      stock_quantity: 117,
+    },
+    {
+      source_style_code: "23001002",
+      source_sku: "2023001002138",
+      model_code: "001",
+      color_code: "002",
+      original_colour: "珍珠白",
+      size: "38",
+      stock_quantity: 40,
+    },
+  ]
+);
+assert.equal(parsedActualChineseMaster.errors.length, 0);
+
 console.log("import-parser tests passed");

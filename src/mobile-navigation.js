@@ -5,6 +5,7 @@
     "apply",
     "login",
     "reseller",
+    "reseller-product",
     "history",
     "admin",
     "products",
@@ -24,6 +25,7 @@
   function backTargetForRoute(route) {
     if (route === "store") return null;
     if (route === "product") return { route: "store" };
+    if (route === "reseller-product") return { route: "reseller" };
     if (route === "history") return { route: "reseller" };
     if (ADMIN_CHILDREN.has(route)) return { route: "admin" };
     if (route === "admin" || route === "reseller" || INFO_ROUTES.has(route)) return { route: "store" };
@@ -33,7 +35,7 @@
   function buildRouteUrl(route, params = {}) {
     const safeRoute = ROUTES.has(route) ? route : "store";
     const productId = String(params.productId || "").trim();
-    if (safeRoute === "product" && productId) return `#/${safeRoute}/${encodeURIComponent(productId)}`;
+    if ((safeRoute === "product" || safeRoute === "reseller-product") && productId) return `#/${safeRoute}/${encodeURIComponent(productId)}`;
     return `#/${safeRoute}`;
   }
 
@@ -43,7 +45,7 @@
     if (!ROUTES.has(route)) return null;
     return {
       route,
-      productId: route === "product" && parts[1] ? decodeURIComponent(parts[1]) : null,
+      productId: (route === "product" || route === "reseller-product") && parts[1] ? decodeURIComponent(parts[1]) : null,
     };
   }
 

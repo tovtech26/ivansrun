@@ -3,7 +3,6 @@ const {
   normalizeAuthState,
   canAccessRoute,
   fallbackRouteForRole,
-  buildDevAdminAuthState,
 } = require("../src/auth.js");
 
 assert.deepEqual(normalizeAuthState({ user: null, profile: null }), {
@@ -47,27 +46,5 @@ assert.equal(fallbackRouteForRole("public"), "login");
 assert.equal(fallbackRouteForRole("pending_reseller"), "apply");
 assert.equal(fallbackRouteForRole("reseller"), "reseller");
 assert.equal(fallbackRouteForRole("admin"), "admin");
-
-assert.deepEqual(buildDevAdminAuthState(), {
-  user: { id: "local-admin", email: "admin@ivansrun.africa" },
-  profile: {
-    id: "local-admin",
-    email: "admin@ivansrun.africa",
-    full_name: "Local Admin",
-    company_name: "Ivansrun Africa",
-    role: "admin",
-    approved: true,
-  },
-  role: "admin",
-  isAdmin: true,
-  isReseller: false,
-  isPending: false,
-  isAuthenticated: true,
-});
-const devAdmin = buildDevAdminAuthState();
-assert.equal(canAccessRoute("admin", devAdmin), true);
-assert.equal(canAccessRoute("imports", devAdmin), true);
-assert.equal(canAccessRoute("reseller", devAdmin), true);
-assert.equal(devAdmin.isAuthenticated, true);
 
 console.log("auth-state tests passed");

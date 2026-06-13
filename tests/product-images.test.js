@@ -2,8 +2,13 @@ const assert = require("node:assert/strict");
 const { resolveProductImageUrl, productImageSource } = require("../src/product-images.js");
 
 assert.equal(
+  resolveProductImageUrl("028-1.jpg", "https://llicocwonbokahpbireg.supabase.co"),
+  "/public/product-images/SKUs/028/028-1.jpg",
+);
+
+assert.equal(
   resolveProductImageUrl("001-1.jpg", "https://llicocwonbokahpbireg.supabase.co"),
-  "https://llicocwonbokahpbireg.supabase.co/storage/v1/object/public/product-images/001-1.jpg",
+  "",
 );
 
 assert.equal(
@@ -18,14 +23,14 @@ assert.equal(resolveProductImageUrl("", "https://example.com"), "");
 assert.deepEqual(
   productImageSource(
     {
-      image_names: ["001-1.jpg"],
+      image_names: ["028-1.jpg"],
     },
-    { image_name: "001-variant.jpg" },
+    { image_name: "028-2.jpg" },
     "https://llicocwonbokahpbireg.supabase.co",
   ),
   {
-    imageName: "001-variant.jpg",
-    imageUrl: "https://llicocwonbokahpbireg.supabase.co/storage/v1/object/public/product-images/001-variant.jpg",
+    imageName: "028-2.jpg",
+    imageUrl: "/public/product-images/SKUs/028/028-2.jpg",
     hasRealImage: true,
   },
 );

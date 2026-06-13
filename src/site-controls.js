@@ -1,9 +1,9 @@
 (function attachSiteControls(root) {
   const DEFAULT_SITE_CONTENT = {
     hero: {
-      eyebrow: "Ivansrun Africa",
+      eyebrow: "Irunsvan Africa",
       title: "Performance footwear for Africa.",
-      copy: "Browse the public range, then unlock live wholesale inventory through an approved Ivansrun Africa reseller account.",
+      copy: "Browse the public range, then unlock live wholesale inventory through an approved Irunsvan Africa reseller account.",
       backgroundImage: "/Flyer Templates/Flyer Template.jpg",
       primaryCta: "View Catalog",
       primaryRoute: "catalog",
@@ -21,7 +21,7 @@
       text: "#171717",
       deep: "#001a41",
     },
-    banner: "Ivansrun Africa reseller accounts can view live stock and submit order requests.",
+    banner: "Irunsvan Africa reseller accounts can view live stock and submit order requests.",
   };
 
   const HEX_COLOR = /^#[0-9a-f]{6}$/i;

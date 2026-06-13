@@ -80,8 +80,10 @@ assert.deepEqual(review.matches[0], {
   previousStock: 10,
   nextStock: 40,
   changed: true,
+  matchType: "model_colour_size",
+  warnings: ["sku_mismatch"],
 });
-assert.deepEqual(review.exceptions.map((exception) => exception.code), ["missing_colour", "missing_product"]);
+assert.deepEqual(review.exceptions.map((exception) => exception.code), ["missing_variant_sku", "missing_product"]);
 assert.deepEqual(buildStockReviewSummary(review), {
   matchedRows: 1,
   exceptionRows: 2,
@@ -89,6 +91,36 @@ assert.deepEqual(buildStockReviewSummary(review), {
   zeroStock: 0,
   totalNextStock: 40,
 });
+
+const skuFirstReview = matchInventoryToVariants({
+  inventoryRows: [
+    {
+      source_sku: "202425030137",
+      model_code: "2503",
+      original_colour: "绿野仙踪/青橙",
+      size: "37",
+      stock_quantity: 25,
+    },
+  ],
+  products: [{ id: "product-2503", sku: "IRUNSVAN-2503", model_code: "2503", name: "IRUNSVAN 2503 Running Shoe" }],
+  variants: [
+    {
+      id: "variant-2503-37",
+      product_id: "product-2503",
+      sku: "202425030137",
+      colour: "Green / Orange",
+      original_colour: "Different old text",
+      size: "37",
+    },
+  ],
+  inventory: [{ variant_id: "variant-2503-37", sku: "202425030137", stock_quantity: 0 }],
+});
+
+assert.equal(skuFirstReview.matches.length, 1);
+assert.equal(skuFirstReview.matches[0].variantSku, "202425030137");
+assert.equal(skuFirstReview.matches[0].nextStock, 25);
+assert.equal(skuFirstReview.matches[0].matchType, "sku");
+assert.deepEqual(skuFirstReview.matches[0].warnings, []);
 
 const formDraft = buildProductDraftFromForm({
   model_code: "2503",

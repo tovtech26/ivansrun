@@ -7,6 +7,7 @@ const ROUTES = [
   "apply",
   "login",
   "reseller",
+  "reseller-product",
   "history",
   "admin",
   "products",
@@ -32,6 +33,7 @@ const AdminImports = window.IvansrunAdminImports;
 const ProductEditor = window.IvansrunProductEditor;
 const ProductCatalogManager = window.IvansrunProductCatalogManager;
 const ProductPersistence = window.IvansrunProductPersistence;
+const CatalogSeedBuilder = window.IvansrunCatalogSeedBuilder;
 const ProductImages = window.IvansrunProductImages;
 const StorefrontCatalog = window.IvansrunStorefrontCatalog;
 const EmailNotifications = window.IvansrunEmailNotifications;
@@ -39,9 +41,12 @@ const ProductDetailModel = window.IvansrunProductDetail;
 const MobileNavigation = window.IvansrunMobileNavigation;
 const InventoryWorkflow = window.IvansrunInventoryWorkflow;
 const CatalogData = window.IvansrunCatalogData;
+const OperationsProducts = window.IvansrunOperationsProducts;
 const SITE_CONTENT_STORAGE_KEY = "ivansrun_site_content";
-const LOGIN_BYPASS_ENABLED =
-  typeof window !== "undefined" && ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+const SERVER_MONITOR_ENABLED =
+  typeof window !== "undefined" &&
+  (["localhost", "127.0.0.1", ""].includes(window.location.hostname) ||
+    new URLSearchParams(window.location.search).get("monitor") === "servers");
 
 function readStoredSiteContent() {
   try {
@@ -56,6 +61,7 @@ const state = {
   selectedProductId: null,
   products: [],
   variants: [],
+  colourMappings: [],
   inventory: [],
   orderRequests: [],
   orderRequestItems: [],
@@ -80,23 +86,33 @@ const state = {
   applicationSubmitPending: false,
   siteSavePending: false,
   importPending: false,
+  stockResetPending: false,
   siteSaved: false,
   siteSaveError: null,
+  colourReviewPending: false,
+  colourReviewSaved: false,
+  colourReviewError: null,
   productFormOpen: false,
   productFormError: null,
   productFormSaved: false,
   productFormWarning: null,
   productFormSaveMessage: null,
+  productPriceSaved: false,
+  productPriceError: null,
   productImageDrafts: [],
   emailTemplatePreview: null,
   mobileNavOpen: false,
   catalogFiltersOpen: false,
   navigationDepth: 0,
   importError: null,
+  stockResetError: null,
+  stockResetSaved: false,
   importPreview: null,
   resellerSearch: "",
   resellerNotes: "",
   resellerDraft: {},
+  resellerQuickOrderProductId: null,
+  resellerColourSelection: {},
   catalogSearch: "",
   catalogCategories: [],
   catalogSizes: [],
@@ -104,7 +120,7 @@ const state = {
   catalogMaxPrice: 80,
   catalogSort: "sku",
   siteContent: SiteControls.sanitizeSiteContent(readStoredSiteContent()),
-  auth: LOGIN_BYPASS_ENABLED ? buildLocalAdminAuthState() : Auth.normalizeAuthState(),
+  auth: Auth.normalizeAuthState(),
 };
 
 const CATALOG_PAGE_SIZE = 8;
@@ -112,7 +128,14 @@ const CATALOG_PAGE_SIZE = 8;
 function money(value) {
   if (value === null || value === undefined || value === "") return "Price TBC";
   const amount = Number(value);
-  return Number.isFinite(amount) ? `$${amount.toFixed(2)}` : "Price TBC";
+  return Number.isFinite(amount) && amount > 0 ? `$${amount.toFixed(2)}` : "Price TBC";
+}
+
+function priceBadge(price) {
+  const value = price && typeof price === "object" && "priced" in price ? price.amount : price;
+  const currency = price && typeof price === "object" ? price.currency : "USD";
+  const state = OperationsProducts.priceState(value, currency);
+  return `<span class="status-badge ${state.tone === "danger" ? "danger" : "good"}">${escapeHtml(state.label)}</span>`;
 }
 
 function escapeHtml(value) {
@@ -132,6 +155,19 @@ function skuRank(sku = "") {
 function catalogProducts() {
   return [...state.products].sort((a, b) => {
     return skuRank(a.sku) - skuRank(b.sku) || String(a.name).localeCompare(String(b.name));
+  });
+}
+
+function mergeAuthorizedPrices(rows = [], priceRows = []) {
+  const pricesById = new Map((priceRows || []).map((row) => [row.id, row]));
+  return rows.map((row) => {
+    const price = pricesById.get(row.id);
+    if (!price) return row;
+    return {
+      ...row,
+      base_price: price.base_price,
+      base_currency: price.base_currency || row.base_currency || "USD",
+    };
   });
 }
 
@@ -210,7 +246,7 @@ function logo(tone = "dark") {
       : tone === "blue"
         ? "public/brand/Irunsvan_Blue-removebg-preview.svg"
         : "public/brand/Irunsvan_Blue-removebg-preview.svg";
-  return `<img class="brand-logo" src="${src}" alt="Ivansrun Africa" />`;
+  return `<img class="brand-logo" src="${src}" alt="Irunsvan Africa" />`;
 }
 
 function productVisual(label, imageName = "") {
@@ -229,29 +265,59 @@ function productVisual(label, imageName = "") {
   `;
 }
 
+const SUPABASE_REST_PAGE_SIZE = 1000;
+
+function pagedSupabaseQuery(query, limit, offset) {
+  const params = new URLSearchParams(query);
+  params.set("limit", String(limit));
+  if (offset > 0) params.set("offset", String(offset));
+  else params.delete("offset");
+  return params.toString();
+}
+
+async function fetchSupabaseRows(label, table, query, headers) {
+  const params = new URLSearchParams(query);
+  const requestedLimit = Number(params.get("limit") || SUPABASE_REST_PAGE_SIZE);
+  const totalLimit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : SUPABASE_REST_PAGE_SIZE;
+  const pageSize = Math.min(totalLimit, SUPABASE_REST_PAGE_SIZE);
+  const rows = [];
+
+  while (rows.length < totalLimit) {
+    const pageQuery = pagedSupabaseQuery(query, Math.min(pageSize, totalLimit - rows.length), rows.length);
+    const response = await monitoredFetch(`${label}:${table}`, `${SUPABASE_URL}/rest/v1/${table}?${pageQuery}`, { headers });
+    if (!response.ok) throw await buildResponseError(`${table} fetch failed`, response);
+    const pageRows = await response.json();
+    if (!Array.isArray(pageRows)) return pageRows;
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) break;
+  }
+
+  return rows;
+}
+
 async function fetchSupabase(table, query) {
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-    headers: {
-      apikey: SUPABASE_KEY,
-      Authorization: `Bearer ${SUPABASE_KEY}`,
-    },
+  return fetchSupabaseRows("public", table, query, {
+    apikey: SUPABASE_KEY,
+    Authorization: `Bearer ${SUPABASE_KEY}`,
   });
-  if (!response.ok) throw new Error(`${table} fetch failed: ${response.status}`);
-  return response.json();
 }
 
 async function fetchAuthedSupabase(table, query) {
   const session = SupabaseClient.readStoredSession();
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-    headers: SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
-  });
-  if (!response.ok) throw new Error(`${table} fetch failed: ${response.status}`);
-  return response.json();
+  return fetchSupabaseRows("authed", table, query, SupabaseClient.headers(SUPABASE_KEY, session?.access_token));
+}
+
+function requireAuthedSession() {
+  const session = SupabaseClient.readStoredSession();
+  if (!session?.access_token) {
+    throw new Error("Sign in with a real Supabase account to use admin or reseller actions.");
+  }
+  return session;
 }
 
 async function insertAuthedSupabase(table, payload) {
-  const session = SupabaseClient.readStoredSession();
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(`insert:${table}`, `${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
     headers: {
       ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
@@ -260,16 +326,13 @@ async function insertAuthedSupabase(table, payload) {
     },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.message || body?.hint || `${table} insert failed: ${response.status}`);
-  }
+  if (!response.ok) throw await buildResponseError(`${table} insert failed`, response);
   return response.json();
 }
 
 async function upsertAuthedSupabase(table, payload, conflictColumn) {
-  const session = SupabaseClient.readStoredSession();
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflictColumn)}`, {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(`upsert:${table}`, `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflictColumn)}`, {
     method: "POST",
     headers: {
       ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
@@ -278,16 +341,31 @@ async function upsertAuthedSupabase(table, payload, conflictColumn) {
     },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.message || body?.hint || `${table} upsert failed: ${response.status}`);
-  }
+  if (!response.ok) throw await buildResponseError(`${table} upsert failed`, response);
+  return response.json();
+}
+
+async function updateAuthedSupabase(table, id, payload) {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(`update:${table}`, `${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: {
+      ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await buildResponseError(`${table} update failed`, response);
   return response.json();
 }
 
 async function uploadProductImage(record) {
-  const session = SupabaseClient.readStoredSession();
-  const response = await fetch(`${SUPABASE_URL}/storage/v1/object/${ProductPersistence.PRODUCT_IMAGE_BUCKET}/${record.storagePath}`, {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(
+    `storage:${ProductPersistence.PRODUCT_IMAGE_BUCKET}`,
+    `${SUPABASE_URL}/storage/v1/object/${ProductPersistence.PRODUCT_IMAGE_BUCKET}/${record.storagePath}`,
+    {
     method: "POST",
     headers: {
       ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
@@ -296,16 +374,13 @@ async function uploadProductImage(record) {
     },
     body: record.file,
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.message || body?.error || `image upload failed: ${response.status}`);
-  }
+  if (!response.ok) throw await buildResponseError("image upload failed", response);
   return response.json().catch(() => ({ path: record.storagePath }));
 }
 
 async function invokeAuthedFunction(functionName, payload) {
-  const session = SupabaseClient.readStoredSession();
-  const response = await fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(`function:${functionName}`, `${SUPABASE_URL}/functions/v1/${functionName}`, {
     method: "POST",
     headers: {
       ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
@@ -313,10 +388,7 @@ async function invokeAuthedFunction(functionName, payload) {
     },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(body || `${functionName} invoke failed: ${response.status}`);
-  }
+  if (!response.ok) throw await buildResponseError(`${functionName} invoke failed`, response);
   return response.json().catch(() => ({}));
 }
 
@@ -330,8 +402,8 @@ function htmlFromIncludes(title, values) {
 }
 
 async function patchAuthedSupabase(table, filters, payload) {
-  const session = SupabaseClient.readStoredSession();
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${filters}`, {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(`patch:${table}`, `${SUPABASE_URL}/rest/v1/${table}?${filters}`, {
     method: "PATCH",
     headers: {
       ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
@@ -340,11 +412,72 @@ async function patchAuthedSupabase(table, filters, payload) {
     },
     body: JSON.stringify(payload),
   });
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.message || body?.hint || `${table} update failed: ${response.status}`);
-  }
+  if (!response.ok) throw await buildResponseError(`${table} update failed`, response);
   return response.json();
+}
+
+async function patchAuthedSupabaseMinimal(table, filters, payload) {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(`patch:${table}`, `${SUPABASE_URL}/rest/v1/${table}?${filters}`, {
+    method: "PATCH",
+    headers: {
+      ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
+      "Content-Type": "application/json",
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await buildResponseError(`${table} update failed`, response);
+  return true;
+}
+
+async function responseBodySnippet(response) {
+  const body = await response.clone().text().catch(() => "");
+  return String(body || "").replace(/\s+/g, " ").trim().slice(0, 400);
+}
+
+async function buildResponseError(prefix, response) {
+  const snippet = await responseBodySnippet(response);
+  return new Error(snippet ? `${prefix}: ${response.status} ${snippet}` : `${prefix}: ${response.status}`);
+}
+
+async function monitoredFetch(label, url, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  const startedAt = Date.now();
+  if (SERVER_MONITOR_ENABLED) {
+    console.info("[server-monitor]", "request", { label, method, url });
+  }
+
+  try {
+    const response = await fetch(url, options);
+    if (SERVER_MONITOR_ENABLED) {
+      const durationMs = Date.now() - startedAt;
+      console.info("[server-monitor]", "response", { label, method, url, status: response.status, durationMs });
+      if (!response.ok) {
+        const body = await response.clone().text().catch(() => "");
+        console.info("[server-monitor]", "failure", {
+          label,
+          method,
+          url,
+          status: response.status,
+          body: String(body || "").slice(0, 400),
+        });
+      }
+    }
+    return response;
+  } catch (error) {
+    if (SERVER_MONITOR_ENABLED) {
+      const durationMs = Date.now() - startedAt;
+      console.info("[server-monitor]", "network-error", {
+        label,
+        method,
+        url,
+        durationMs,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+    throw error;
+  }
 }
 
 async function publishActiveSiteContent(siteContent) {
@@ -387,6 +520,34 @@ async function buildImportPreviewFromFile(type, file) {
     }
     const parsedMaster = ImportParser.parseMasterInventoryRows(rows);
     if (parsedMaster.rows.length) {
+      if (!state.variants.length) {
+        const seed = CatalogSeedBuilder.buildCatalogSeed({
+          inventoryRows: parsedMaster.rows,
+          selectedModelCodes: state.products.map((product) => product.model_code),
+          selectedProducts: state.products,
+          imageLibrary: selectedProductImageLibrary(),
+        });
+        return AdminImports.buildImportPreview({
+          type: "catalog_seed_inventory",
+          filename: file.name,
+          rowsTotal: rows.length,
+          processedRows: seed.variants.length,
+          errors: [
+            ...parsedMaster.errors,
+            ...seed.warnings.map((warning) => ({
+              row: warning.model_code,
+              code: warning.code,
+              sku: warning.original_colour,
+            })),
+          ],
+          products: seed.products,
+          variants: seed.variants,
+          colourMappings: seed.colourMappings,
+          inventoryRows: seed.inventorySeedRows,
+          seedSummary: seed.summary,
+        });
+      }
+
       const stockReview = ProductCatalogManager.matchInventoryToVariants({
         inventoryRows: parsedMaster.rows,
         products: state.products,
@@ -520,11 +681,18 @@ function inventoryRows() {
 
 function filteredInventoryRows() {
   const search = String(state.resellerSearch || "").trim().toLowerCase();
-  const rows = inventoryRows();
+  const rows = Orders.availableInventoryRows(inventoryRows());
   if (!search) return rows;
   return rows.filter((row) =>
     [row.productName, row.productSku, row.sku, row.colour, row.size].some((value) => String(value || "").toLowerCase().includes(search)),
   );
+}
+
+function adminProductModels() {
+  return OperationsProducts.buildAdminProductModels({
+    products: catalogProducts(),
+    inventoryRows: inventoryRows(),
+  });
 }
 
 function currentDraftItems() {
@@ -595,24 +763,8 @@ async function loadProtectedData() {
     state.orderRequests = [];
     state.orderRequestItems = [];
     state.resellerApplicationsData = [];
+    state.colourMappings = [];
     state.resellerDraft = {};
-    state.inventoryError = null;
-    state.historyError = null;
-    state.applicationError = null;
-    state.inventoryLoading = false;
-    state.historyLoading = false;
-    state.applicationsLoading = false;
-    render();
-    return;
-  }
-
-  const hasStoredSession = Boolean(SupabaseClient.readStoredSession()?.access_token);
-  if (LOGIN_BYPASS_ENABLED && !hasStoredSession) {
-    state.inventory = [];
-    state.orderRequests = [];
-    state.orderRequestItems = [];
-    state.resellerApplicationsData = [];
-    state.importJobs = [];
     state.inventoryError = null;
     state.historyError = null;
     state.applicationError = null;
@@ -646,6 +798,9 @@ async function loadProtectedData() {
       tasks.push(
         ["products", fetchAuthedSupabase(CatalogData.protectedProductSource(), CatalogData.protectedProductSelectQuery())],
         ["variants", fetchAuthedSupabase(CatalogData.protectedVariantSource(), CatalogData.protectedVariantSelectQuery())],
+        ["productPrices", fetchAuthedSupabase(CatalogData.protectedProductPriceSource(), CatalogData.protectedProductPriceSelectQuery())],
+        ["variantPrices", fetchAuthedSupabase(CatalogData.protectedVariantPriceSource(), CatalogData.protectedVariantPriceSelectQuery())],
+        ["colourMappings", fetchAuthedSupabase(CatalogData.protectedColourMappingSource(), CatalogData.protectedColourMappingSelectQuery())],
         ["inventory", fetchAuthedSupabase("inventory", "select=id,variant_id,sku,stock_quantity,updated_at&order=sku.asc&limit=5000")],
         ["orderRequests", fetchAuthedSupabase("order_requests", "select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100")],
         [
@@ -670,22 +825,40 @@ async function loadProtectedData() {
       );
     }
 
-    const settled = await Promise.all(tasks.map(([, task]) => task));
-    const data = Object.fromEntries(tasks.map(([name], index) => [name, settled[index]]));
+    const settled = await Promise.allSettled(tasks.map(([, task]) => task));
+    const data = {};
+    const failures = [];
+    tasks.forEach(([name], index) => {
+      const result = settled[index];
+      if (result.status === "fulfilled") {
+        data[name] = result.value;
+        return;
+      }
+      failures.push(`${name}: ${result.reason instanceof Error ? result.reason.message : "request failed"}`);
+    });
     if (data.products || data.variants) {
       const fallback = CatalogData.fallbackCatalog();
+      const pricedProducts = mergeAuthorizedPrices(data.products || state.products, data.productPrices || []);
+      const pricedVariants = mergeAuthorizedPrices(data.variants || state.variants, data.variantPrices || []);
       const catalogRows =
         (data.products || []).length || (data.variants || []).length
-          ? CatalogData.normalizeCatalogRows({ products: data.products || state.products, variants: data.variants || state.variants })
+          ? CatalogData.normalizeCatalogRows({ products: pricedProducts, variants: pricedVariants })
           : CatalogData.normalizeCatalogRows(fallback.products.length ? fallback : { products: state.products, variants: state.variants });
       state.products = catalogRows.products;
       state.variants = catalogRows.variants;
     }
     state.resellerApplicationsData = data.applications || [];
+    state.colourMappings = data.colourMappings || [];
     state.inventory = data.inventory || [];
     state.orderRequests = data.orderRequests || [];
     state.orderRequestItems = data.orderRequestItems || [];
     state.importJobs = data.importJobs || [];
+    if (failures.length) {
+      const message = `Some protected data could not load: ${failures.join("; ")}`;
+      state.inventoryError = message;
+      state.historyError = message;
+      state.applicationError = message;
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to load reseller data";
     state.inventoryError = message;
@@ -741,21 +914,6 @@ function authDisplayName() {
   return state.auth.profile?.company_name || state.auth.profile?.full_name || state.auth.user?.email || "Account";
 }
 
-function buildLocalAdminAuthState() {
-  if (typeof Auth.buildDevAdminAuthState === "function") return Auth.buildDevAdminAuthState();
-  return Auth.normalizeAuthState({
-    user: { id: "local-admin", email: "admin@ivansrun.africa" },
-    profile: {
-      id: "local-admin",
-      email: "admin@ivansrun.africa",
-      full_name: "Local Admin",
-      company_name: "Ivansrun Africa",
-      role: "admin",
-      approved: true,
-    },
-  });
-}
-
 function topNav() {
   const active = (routes) => (routes.includes(state.route) ? "active" : "");
   const publicNavItems = [
@@ -798,7 +956,7 @@ function currentPortalHomeRoute() {
 function mobileAreaLabel() {
   if (isAdminRoute()) return "Admin";
   if (isResellerRoute()) return "Reseller";
-  return "Ivansrun Africa";
+  return "Irunsvan Africa";
 }
 
 function isAdminRoute(route = state.route) {
@@ -806,7 +964,7 @@ function isAdminRoute(route = state.route) {
 }
 
 function isResellerRoute(route = state.route) {
-  return ["reseller", "history"].includes(route);
+  return ["reseller", "reseller-product", "history"].includes(route);
 }
 
 function mobileDrawerLabel() {
@@ -829,6 +987,7 @@ function mobileDrawerItems() {
   if (isResellerRoute()) {
     return [
       ["Shop", "reseller", ["reseller"]],
+      ["Product", "reseller-product", ["reseller-product"]],
       ["Request History", "history", ["history"]],
       ["Public Catalog", "store", ["store", "product"]],
       ["Become a Reseller", "apply", ["apply"]],
@@ -847,6 +1006,7 @@ function mobileContextBar() {
   if (!target) return "";
   const labels = {
     product: "Catalog",
+    "reseller-product": "Shop",
     history: "Inventory",
     products: "Admin",
     site: "Admin",
@@ -892,7 +1052,7 @@ function storefront() {
               ${ctaMarkup(hero.primaryCta, hero.primaryRoute, `button primary${buttonCharge}`)}
               ${ctaMarkup(hero.secondaryCta, hero.secondaryRoute, `button ghost${buttonCharge} subdued`)}
             </div>
-            <div class="hero-meta" aria-label="Ivansrun Africa catalog summary">
+            <div class="hero-meta" aria-label="Irunsvan Africa catalog summary">
               <span>${products.length} product lines</span>
               <span>3,735 SKUs</span>
               <span>Wholesale access after approval</span>
@@ -906,7 +1066,7 @@ function storefront() {
           <div class="section-header">
             <div>
               <span class="eyebrow dark">Catalog</span>
-              <h2>${state.loading ? "Loading products" : `${products.length} Ivansrun Africa products`}</h2>
+              <h2>${state.loading ? "Loading products" : `${products.length} Irunsvan Africa products`}</h2>
               <p class="section-note">Public browsing shows product information. Approved resellers see wholesale pricing, ordering, and live warehouse quantities.</p>
             </div>
             <select name="catalog-sort" aria-label="Sort catalog">
@@ -946,7 +1106,7 @@ function storefront() {
         <div>
           <span class="eyebrow dark">Africa wholesale workflow</span>
           <h2>Browse publicly. Order through approval.</h2>
-          <p>Customers can inspect the Ivansrun Africa product range without seeing warehouse quantities. Approved resellers get access to exact stock and order requests.</p>
+          <p>Customers can inspect the Irunsvan Africa product range without seeing warehouse quantities. Approved resellers get access to exact stock and order requests.</p>
         </div>
       </section>
       ${footer()}
@@ -1045,10 +1205,10 @@ function productDetail() {
           }
         </div>
         <div class="detail-copy">
-          <span class="eyebrow dark">${escapeHtml(product.sku || "Ivansrun Africa")}</span>
+          <span class="eyebrow dark">${escapeHtml(product.sku || "Irunsvan Africa")}</span>
           <h1>${escapeHtml(product.name || "Product")}</h1>
-          <img class="detail-brand-mark" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="Ivansrun Africa" />
-          <p class="section-note">Public buyers can browse product information. Pricing, exact stock, and ordering are reserved for approved Ivansrun Africa reseller accounts.</p>
+          <img class="detail-brand-mark" src="public/brand/Irunsvan_Blue-removebg-preview.svg" alt="Irunsvan Africa" />
+          <p class="section-note">Public buyers can browse product information. Pricing, exact stock, and ordering are reserved for approved Irunsvan Africa reseller accounts.</p>
           ${detail.colours.length ? selectorGroup("Colours", detail.colours) : ""}
           ${detail.sizes.length ? selectorGroup("Sizes", detail.sizes) : ""}
           <div class="detail-actions">
@@ -1118,7 +1278,7 @@ function resellerApplication() {
   return `
     <main class="form-page">
       <section class="form-hero">
-        <span class="eyebrow dark">Ivansrun Africa reseller access</span>
+        <span class="eyebrow dark">Irunsvan Africa reseller access</span>
         <h1>Apply to view live stock and request bulk orders.</h1>
         <p>Submit your business details for Africa wholesale access. Approval is required before exact inventory is visible.</p>
       </section>
@@ -1171,7 +1331,7 @@ function loginPage() {
         ${inputField("Email", "email", "name@example.com", "email")}
         ${inputField("Password", "password", "Password", "password")}
         <button class="button primary full" ${state.loginPending ? "disabled" : ""}>${state.loginPending ? "Signing In..." : "Continue"}</button>
-        <button type="button" class="button secondary full" data-action="dev-admin-login">Use Local Admin</button>
+        <button type="button" class="button secondary full" data-action="google-login">Continue with Google</button>
         <div class="split-actions">
           <button type="button" class="text-link" data-route="apply">Need reseller access?</button>
           <button type="button" class="text-link" data-route="admin">Admin area</button>
@@ -1204,13 +1364,18 @@ function processStep(number, title, copy) {
 
 function resellerPortal() {
   const rows = filteredInventoryRows();
+  const searchActive = Boolean(String(state.resellerSearch || "").trim());
+  const productGroups = Orders.visibleShopProductGroups(rows, {
+    productLimit: Math.max(24, state.products.length || 21),
+    optionLimit: 500,
+  });
   const orderItems = currentDraftItems();
   const summary = currentDraftSummary();
   return `
     <main class="portal-page">
       <section class="portal-header">
         <div>
-          <span class="eyebrow dark">Ivansrun Africa reseller portal</span>
+          <span class="eyebrow dark">Irunsvan Africa reseller portal</span>
           <h1>Wholesale Shop</h1>
           <p>Choose products, select colour and size options, then submit an order request for admin review.</p>
         </div>
@@ -1220,8 +1385,8 @@ function resellerPortal() {
         </div>
       </section>
       ${metricGrid([
-        ["Total Products", String(state.products.length), "Active lines"],
-        ["Available Options", String(state.variants.length || rows.length), "Colours and sizes"],
+        ["Total Products", String(state.products.length), "Available styles"],
+        ["In Stock Choices", String(rows.length), "Colours and sizes"],
         ["Order Mode", "Request", "Approval based"],
         ["Current Request", money(summary.subtotal), "USD"],
       ])}
@@ -1239,12 +1404,12 @@ function resellerPortal() {
             ${
               state.inventoryLoading
                 ? `<p class="notice">Loading products...</p>`
-                : rows.length
-                  ? resellerProductCards(rows)
-                  : `<p class="notice">No products match this search.</p>`
+                : productGroups.length
+                  ? resellerProductCards(productGroups)
+                  : `<p class="notice">${searchActive ? "No products match this search." : "No in-stock products are available for this reseller account yet."}</p>`
             }
           </div>
-          ${pager(`Showing ${rows.length ? `1-${rows.length}` : "0"} of ${rows.length} options`)}
+          ${pager(`Showing ${productGroups.length} products with ${rows.length} available colour and size choices${searchActive ? " matching search" : ""}`)}
         </div>
         <aside class="order-sidebar" id="portal-order">
           <div class="sidebar-head"><h2>Order Request</h2><p>${state.orderSubmitted ? "Submitted" : "Draft request"}</p></div>
@@ -1257,8 +1422,7 @@ function resellerPortal() {
                 <div class="order-item">
                   ${productVisual(item.productName, item.imageName)}
                   <div>
-                    <div class="order-title-row"><strong>${escapeHtml(item.productName)}</strong><button data-action="remove-order-item" data-variant-id="${escapeHtml(item.variantId)}" aria-label="Remove ${escapeHtml(item.sku)}">Remove</button></div>
-                    <p class="mono">SKU: ${escapeHtml(item.sku)}</p>
+                    <div class="order-title-row"><strong>${escapeHtml(item.productName)}</strong><button data-action="remove-order-item" data-variant-id="${escapeHtml(item.variantId)}" aria-label="Remove ${escapeHtml(item.productName)} ${escapeHtml(item.colour)} size ${escapeHtml(item.size)}">Remove</button></div>
                     <p>${escapeHtml(item.colour)} / Size ${escapeHtml(item.size)}</p>
                     <div class="line-total"><span>${item.requestedQuantity} x ${money(item.price)}</span><strong>${money(item.lineTotal)}</strong></div>
                   </div>
@@ -1300,24 +1464,8 @@ function portalQuickNav(summary) {
   `;
 }
 
-function resellerProductCards(rows) {
-  const groups = rows.reduce((map, row) => {
-    const key = row.productId || row.productSku || row.productName;
-    const group = map.get(key) || {
-      productName: row.productName,
-      category: row.category,
-      imageName: row.imageName,
-      price: row.price,
-      rows: [],
-    };
-    group.rows.push(row);
-    group.price = Math.min(Number(group.price || row.price || 0), Number(row.price || group.price || 0));
-    if (!group.imageName && row.imageName) group.imageName = row.imageName;
-    map.set(key, group);
-    return map;
-  }, new Map());
-
-  return [...groups.values()].map(resellerProductCard).join("");
+function resellerProductCards(groups) {
+  return groups.map(resellerProductCard).join("");
 }
 
 function availabilityLabel(stockQuantity) {
@@ -1328,40 +1476,207 @@ function availabilityLabel(stockQuantity) {
 }
 
 function resellerProductCard(group) {
-  const optionCount = group.rows.length;
+  const price = OperationsProducts.priceState(group.price, group.currency || "USD");
+  const colourGroups = resellerColourGroups(group.rows);
+  const selectedColour = selectedResellerColour(group.productId, colourGroups);
+  const selectedRows = colourGroups.find((entry) => entry.key === selectedColour)?.rows || colourGroups[0]?.rows || [];
+  const imageName = selectedRows[0]?.imageName || group.imageName;
+  const visibleColourCount = colourGroups.length;
+  const sizes = resellerAvailableSizes(group.rows);
+  const selectedPairCount = group.rows.reduce((total, row) => total + Number(state.resellerDraft[row.variantId] || 0), 0);
   return `
-    <article class="reseller-product-card">
-      ${productVisual(group.productName, group.imageName)}
+    <article class="reseller-product-card clickable-product-card" data-action="open-reseller-product" data-product-id="${escapeHtml(group.productId)}">
+      ${productVisual(group.productName, imageName)}
       <div class="reseller-product-copy">
         <div class="reseller-product-head">
           <div>
             <p>${escapeHtml(group.category || "Wholesale product")}</p>
             <h3>${escapeHtml(group.productName)}</h3>
           </div>
-          <strong>${money(group.price)}</strong>
+          <strong class="${price.priced ? "" : "price-pending"}">${escapeHtml(price.priced ? price.label : "Price pending")}</strong>
         </div>
-        <div class="variant-picker" aria-label="${escapeHtml(group.productName)} options">
-          ${group.rows.map(resellerVariantOption).join("")}
+        <div class="colour-strip" aria-label="${escapeHtml(group.productName)} colours">
+          ${colourGroups.map((colour) => resellerColourButton(group.productId, colour, selectedColour)).join("")}
         </div>
-        <p class="reseller-product-note">${optionCount} ${optionCount === 1 ? "option" : "options"} available for order request.</p>
+        <div class="product-card-actions">
+          <button class="button secondary full" data-route="reseller-product" data-product-id="${escapeHtml(group.productId)}">View & Order</button>
+          ${selectedPairCount ? `<span>${selectedPairCount} ${selectedPairCount === 1 ? "pair" : "pairs"} in request</span>` : ""}
+        </div>
+        <p class="reseller-product-note">${visibleColourCount} ${visibleColourCount === 1 ? "colour" : "colours"} available. Sizes: ${escapeHtml(sizes || "Check product page")}.</p>
       </div>
     </article>
   `;
 }
 
-function resellerVariantOption(row) {
-  const availability = availabilityLabel(row.stockQuantity);
-  const disabled = row.stockQuantity <= 0;
+function resellerColourGroups(rows = []) {
+  const groups = rows.reduce((map, row) => {
+    const key = String(row.colour || "Default colour").trim() || "Default colour";
+    const group = map.get(key) || {
+      key,
+      label: key,
+      imageName: row.imageName,
+      totalStock: 0,
+      rows: [],
+    };
+    if (!group.imageName && row.imageName) group.imageName = row.imageName;
+    group.totalStock += Number(row.stockQuantity || 0);
+    group.rows.push(row);
+    map.set(key, group);
+    return map;
+  }, new Map());
+
+  return [...groups.values()].map((group) => ({
+    ...group,
+    rows: group.rows.sort((left, right) => Number(left.size) - Number(right.size) || String(left.size).localeCompare(String(right.size))),
+  }));
+}
+
+function selectedResellerColour(productId, colourGroups = []) {
+  const selected = state.resellerColourSelection[productId];
+  if (selected && colourGroups.some((group) => group.key === selected)) return selected;
+  return colourGroups[0]?.key || "";
+}
+
+function resellerAvailableSizes(rows = []) {
+  return [...new Set(rows.map((row) => String(row.size || "").trim()).filter(Boolean))]
+    .sort((left, right) => Number(left) - Number(right) || left.localeCompare(right))
+    .join(", ");
+}
+
+function resellerColourButton(productId, colour, selectedColour) {
+  const isSelected = colour.key === selectedColour;
   return `
-    <div class="variant-option" data-inventory-line>
-      <div>
-        <strong>${escapeHtml([row.colour, row.size ? `Size ${row.size}` : ""].filter(Boolean).join(" / ") || row.productName)}</strong>
-        <span class="availability ${availability.className}">${availability.label}</span>
+    <button class="${isSelected ? "selected" : ""}" data-action="select-reseller-colour" data-product-id="${escapeHtml(productId)}" data-colour="${escapeHtml(colour.key)}" aria-pressed="${isSelected ? "true" : "false"}" title="${escapeHtml(colour.label)}">
+      ${productVisual(colour.label, colour.imageName)}
+      <span>${escapeHtml(colour.label)}</span>
+    </button>
+  `;
+}
+
+function selectedResellerProductGroup() {
+  const rows = Orders.availableInventoryRows(inventoryRows()).filter((row) => row.productId === state.selectedProductId);
+  return Orders.visibleShopProductGroups(rows, { productLimit: 1, optionLimit: 500 })[0] || null;
+}
+
+function resellerProductOrderPage() {
+  const group = selectedResellerProductGroup();
+  const orderItems = currentDraftItems();
+  const summary = currentDraftSummary();
+  if (!group) {
+    return `
+      <main class="portal-page">
+        <button class="text-link" data-route="reseller">Back to shop</button>
+        <section class="empty-state">
+          <h1>Product unavailable</h1>
+          <p>This product is not currently available for reseller ordering.</p>
+        </section>
+        ${footer(true)}
+      </main>
+    `;
+  }
+  const colourGroups = resellerColourGroups(group.rows);
+  const selectedColour = selectedResellerColour(group.productId, colourGroups);
+  const selectedRows = colourGroups.find((entry) => entry.key === selectedColour)?.rows || colourGroups[0]?.rows || [];
+  const selectedGroup = colourGroups.find((entry) => entry.key === selectedColour) || colourGroups[0];
+  const imageName = selectedRows[0]?.imageName || group.imageName;
+  const price = OperationsProducts.priceState(group.price, group.currency || "USD");
+  const canOrder = Boolean(group.priceKnown);
+  return `
+    <main class="portal-page reseller-detail-page">
+      <button class="text-link" data-route="reseller">Back to shop</button>
+      <section class="reseller-detail-grid">
+        <div class="reseller-detail-media">
+          ${productVisual(group.productName, imageName)}
+          <div class="colour-strip detail-colour-strip" aria-label="${escapeHtml(group.productName)} colours">
+            ${colourGroups.map((colour) => resellerColourButton(group.productId, colour, selectedColour)).join("")}
+          </div>
+        </div>
+        <div class="reseller-detail-order">
+          <div class="reseller-product-head">
+            <div>
+              <p>${escapeHtml(group.category || "Wholesale product")}</p>
+              <h1>${escapeHtml(group.productName)}</h1>
+            </div>
+            <strong class="${price.priced ? "" : "price-pending"}">${escapeHtml(price.priced ? price.label : "Price pending")}</strong>
+          </div>
+          <p class="reseller-product-note">${colourGroups.length} ${colourGroups.length === 1 ? "colour" : "colours"} available. Sizes: ${escapeHtml(resellerAvailableSizes(group.rows) || "Check availability")}.</p>
+          ${canOrder ? "" : `<p class="notice warning">Admin needs to set this product price before it can be added to a request.</p>`}
+          ${resellerBulkOrderMatrix({
+            group,
+            colourGroups,
+            selectedColour,
+            selectedRows,
+            canOrder,
+          })}
+        </div>
+        <aside class="order-sidebar reseller-detail-sidebar" id="portal-order">
+          <div class="sidebar-head"><h2>Current Request</h2><p>${summary.totalUnits} ${summary.totalUnits === 1 ? "pair" : "pairs"} selected</p></div>
+          <div class="order-items">
+            ${
+              orderItems.length
+                ? orderItems
+                    .map(
+                      (item) => `
+                <div class="order-item">
+                  ${productVisual(item.productName, item.imageName)}
+                  <div>
+                    <div class="order-title-row"><strong>${escapeHtml(item.productName)}</strong><button data-action="remove-order-item" data-variant-id="${escapeHtml(item.variantId)}" aria-label="Remove ${escapeHtml(item.productName)} ${escapeHtml(item.colour)} size ${escapeHtml(item.size)}">Remove</button></div>
+                    <p>${escapeHtml(item.colour)} / Size ${escapeHtml(item.size)}</p>
+                    <div class="line-total"><span>${item.requestedQuantity} x ${money(item.price)}</span><strong>${money(item.lineTotal)}</strong></div>
+                  </div>
+                </div>
+              `,
+                    )
+                    .join("")
+                : `<p class="notice">Add quantities from the size grid to build this request.</p>`
+            }
+          </div>
+          <form class="order-summary" data-form="order">
+            <div class="summary-row"><span>Total pairs</span><strong>${summary.totalUnits}</strong></div>
+            <div class="summary-row"><span>Subtotal</span><strong>${money(summary.subtotal)}</strong></div>
+            <label><span>Notes for admin</span><textarea name="order_notes">${escapeHtml(state.resellerNotes)}</textarea></label>
+            <button class="button primary full" ${state.orderSubmitPending || !orderItems.length ? "disabled" : ""}>Submit Order Request</button>
+          </form>
+        </aside>
+      </section>
+      ${footer(true)}
+    </main>
+  `;
+}
+
+function resellerBulkOrderMatrix({ group, colourGroups, selectedColour, selectedRows, canOrder }) {
+  const selectedGroup = colourGroups.find((entry) => entry.key === selectedColour) || colourGroups[0];
+  const selectedTotal = selectedRows.reduce((total, row) => total + Number(state.resellerDraft[row.variantId] || 0), 0);
+  return `
+    <div class="bulk-order-panel" data-bulk-order-product="${escapeHtml(group.productId)}">
+      <div class="bulk-order-head">
+        <div>
+          <strong>${escapeHtml(selectedGroup?.label || "Choose colour")}</strong>
+          <span>${selectedRows.length} sizes ready for bulk entry</span>
+        </div>
+        <span>${selectedTotal ? `${selectedTotal} ${selectedTotal === 1 ? "pair" : "pairs"} selected` : "Enter quantities"}</span>
       </div>
-      <div class="variant-option-actions">
-        <input class="qty-input" aria-label="Quantity for ${escapeHtml(row.colour)} size ${escapeHtml(row.size)}" type="number" min="0" max="${row.stockQuantity}" value="${state.resellerDraft[row.variantId] || ""}" data-qty-input="${escapeHtml(row.variantId)}" ${disabled ? "disabled" : ""} />
-        <button class="button mini" data-action="add-order-item" data-variant-id="${escapeHtml(row.variantId)}" ${disabled ? "disabled" : ""}>Add</button>
+      <div class="size-matrix" aria-label="${escapeHtml(group.productName)} ${escapeHtml(selectedGroup?.label || "")} size quantities">
+        ${selectedRows.map((row) => resellerSizeQuantityCell(row, canOrder)).join("")}
       </div>
+      <div class="bulk-order-actions">
+        <button class="button primary full" data-action="add-bulk-order" data-product-id="${escapeHtml(group.productId)}" ${canOrder ? "" : "disabled"}>Add selected pairs to request</button>
+        <button class="button secondary full" data-action="clear-bulk-order" data-product-id="${escapeHtml(group.productId)}">Clear this colour</button>
+      </div>
+    </div>
+  `;
+}
+
+function resellerSizeQuantityCell(row, productCanOrder = true) {
+  const availability = availabilityLabel(row.stockQuantity);
+  const disabled = row.stockQuantity <= 0 || !productCanOrder || !row.priceKnown;
+  return `
+    <div class="size-cell" data-inventory-line>
+      <label>
+        <span>Size ${escapeHtml(row.size || "-")}</span>
+        <input class="qty-input" aria-label="Quantity for ${escapeHtml(row.colour)} size ${escapeHtml(row.size)}" type="number" min="0" max="${row.stockQuantity}" value="${state.resellerDraft[row.variantId] || ""}" data-bulk-qty-input="${escapeHtml(row.variantId)}" ${disabled ? "disabled" : ""} />
+      </label>
+      <small class="availability ${availability.className}">${availability.label}</small>
     </div>
   `;
 }
@@ -1372,7 +1687,7 @@ function requestHistory() {
     <main class="portal-page">
       <section class="portal-header">
         <div>
-          <span class="eyebrow dark">Ivansrun Africa requests</span>
+          <span class="eyebrow dark">Irunsvan Africa requests</span>
           <h1>Request History</h1>
           <p>Track order requests from draft through admin approval.</p>
         </div>
@@ -1421,7 +1736,7 @@ function adminDashboard() {
       ${adminSidebar("admin")}
       <section class="admin-main">
         <header class="admin-topbar">
-          <div><h1>Ivansrun Africa Operations</h1><p>System overview and controls for catalog, stock, reseller access, and orders.</p></div>
+          <div><h1>Irunsvan Africa Operations</h1><p>System overview and controls for catalog, stock, reseller access, and orders.</p></div>
           <button class="icon-button" data-route="email">Alerts</button>
         </header>
         ${metricGrid([
@@ -1527,48 +1842,157 @@ function adminSiteControls() {
 }
 
 function adminProducts() {
-  const rows = inventoryRows();
-  const stockByProductId = rows.reduce((map, row) => {
-    const current = map.get(row.productId) || { total: 0, colours: new Set(), sizes: new Set() };
-    current.total += row.stockQuantity;
-    if (row.colour) current.colours.add(row.colour);
-    if (row.size) current.sizes.add(row.size);
-    map.set(row.productId, current);
-    return map;
-  }, new Map());
-  const products = catalogProducts();
+  const colourRows = colourReviewRows();
+  const productModels = adminProductModels();
+  const summary = OperationsProducts.summarizeAdminProducts(productModels);
+  const attentionCount = summary.missingPrice + summary.missingImage + summary.outOfStock;
   return `
     <main class="admin-layout">
       ${adminSidebar("products")}
       <section class="admin-main">
         <header class="admin-topbar">
-          <div><h1>Products</h1><p>Add products, check models, and confirm colors, sizes, images, and prices before stock uploads.</p></div>
-          <button class="icon-button" data-action="toggle-product-form">${state.productFormOpen ? "Close" : "Add Product"}</button>
+          <div><h1>Products</h1><p>Manage prices, images, publishing, and exact stock by product before resellers order.</p></div>
+          <button class="icon-button" data-action="toggle-product-form">${state.productFormOpen ? "Close Add Product" : "Add Product"}</button>
         </header>
         ${state.productFormSaved ? `<p class="notice success">${escapeHtml(state.productFormSaveMessage || "Product saved with generated color and size variants.")}</p>` : ""}
+        ${state.colourReviewSaved ? `<p class="notice success">Colour Review saved. Product names, images, and visibility are now aligned with the linked variants.</p>` : ""}
         ${state.productFormWarning ? `<p class="notice warning">${escapeHtml(state.productFormWarning)}</p>` : ""}
         ${state.productFormError ? `<p class="notice error">${escapeHtml(state.productFormError)}</p>` : ""}
-        ${state.productFormOpen ? productForm() : ""}
-        <section class="product-overview">
-          <div class="panel-toolbar"><h2>Product Setup</h2><span>${products.length} products</span></div>
-          <div class="overview-list">
-            ${products
-              .map((product) => {
-                const stock = stockByProductId.get(product.id) || { total: 0, colours: new Set(), sizes: new Set() };
-                return `<div class="overview-row">
-                  <strong>${escapeHtml(product.sku)}</strong>
-                  <span>${escapeHtml(product.name)}</span>
-                  <span>${escapeHtml(product.category || "Uncategorized")}</span>
-                  <span>${escapeHtml(`${stock.total} units`)}</span>
-                  <span>${escapeHtml(`${stock.colours.size} colors / ${stock.sizes.size} sizes`)}</span>
-                </div>`;
-              })
-              .join("")}
+        ${state.productPriceSaved ? `<p class="notice success">Product price saved. Reseller pricing will update on the next data refresh.</p>` : ""}
+        ${state.productPriceError ? `<p class="notice error">${escapeHtml(state.productPriceError)}</p>` : ""}
+        ${state.colourReviewError ? `<p class="notice error">${escapeHtml(state.colourReviewError)}</p>` : ""}
+        ${metricGrid([
+          ["Products", String(summary.total), "Loaded catalog"],
+          ["Total Stock", String(summary.totalUnits), "Units available"],
+          ["Missing Price", String(summary.missingPrice), "Needs admin"],
+          ["Needs Attention", String(attentionCount), "Price, image, or stock"],
+        ])}
+        <section class="admin-product-command">
+          <div>
+            <span class="eyebrow dark">Product management</span>
+            <h2>Existing Products</h2>
+            <p>Start here first. Add products only when a model is missing from this list.</p>
           </div>
-          <p class="import-note">Products define what exists. Inventory uploads only update stock against these products and generated variants.</p>
+          <button class="button secondary" data-action="toggle-product-form">${state.productFormOpen ? "Hide Add Product" : "Add New Product"}</button>
+        </section>
+        ${state.productFormOpen ? productForm() : ""}
+        <section class="admin-product-board">
+          <div class="panel-toolbar"><h2>Product Control Center</h2><span>${productModels.length} products</span></div>
+          ${state.inventoryError ? `<p class="notice error">${escapeHtml(state.inventoryError)}</p>` : ""}
+          ${
+            state.inventoryLoading
+              ? `<p class="notice">Loading product stock and pricing...</p>`
+              : productModels.length
+                ? `<div class="admin-product-list">${productModels.map(adminProductCard).join("")}</div>`
+                : `<p class="notice">No products are loaded yet. Upload a master inventory file or add the first product.</p>`
+          }
+          <p class="import-note">Products define what exists. Inventory uploads update stock against variants; prices and images are managed here.</p>
+        </section>
+        <section class="product-overview">
+          <div class="panel-toolbar"><h2>Colour Review</h2><span>${colourRows.length} mappings</span></div>
+          ${
+            colourRows.length
+              ? `
+                <form class="workflow-form colour-review-form" data-form="colour-review">
+                  <div class="colour-review-grid">
+                    ${colourRows
+                      .map(
+                        (row, index) => `
+                          <article class="colour-review-row">
+                            <div class="colour-review-meta">
+                              <strong>${escapeHtml(row.model_code)}</strong>
+                              <span>${escapeHtml(row.productName)}</span>
+                            </div>
+                            <label><span>Original colour</span><input name="original_colour_${index}" value="${escapeHtml(row.original_colour)}" readonly /></label>
+                            <label><span>Display colour</span><input name="colour_${index}" value="${escapeHtml(row.colour || row.original_colour)}" /></label>
+                            <label><span>Image</span><select name="image_name_${index}">
+                              <option value="">No image</option>
+                              ${row.imageOptions
+                                .map((image) => `<option value="${escapeHtml(image)}" ${row.image_name === image ? "selected" : ""}>${escapeHtml(image)}</option>`)
+                                .join("")}
+                            </select></label>
+                            <label class="toggle-row"><input name="published_${index}" type="checkbox" ${row.published ? "checked" : ""} /><span>Published</span></label>
+                            <input type="hidden" name="mapping_id_${index}" value="${escapeHtml(row.id)}" />
+                            <input type="hidden" name="product_id_${index}" value="${escapeHtml(row.product_id)}" />
+                            <input type="hidden" name="model_code_${index}" value="${escapeHtml(row.model_code)}" />
+                            <input type="hidden" name="color_code_${index}" value="${escapeHtml(row.color_code || "")}" />
+                          </article>
+                        `,
+                      )
+                      .join("")}
+                  </div>
+                  <button class="button primary" type="submit" ${state.colourReviewPending ? "disabled" : ""}>${state.colourReviewPending ? "Saving..." : "Save Colour Review"}</button>
+                </form>
+              `
+              : `<p class="import-note">Colour mappings appear here after a catalog seed import or once products with saved colours are loaded from Supabase.</p>`
+          }
         </section>
       </section>
     </main>
+  `;
+}
+
+function adminProductCard(model) {
+  return `
+    <article class="admin-product-card">
+      ${productVisual(model.name, model.imageName)}
+      <div class="admin-product-main">
+        <div class="admin-product-title">
+          <div>
+            <p>${escapeHtml(model.category)}</p>
+            <h3>${escapeHtml(model.name)}</h3>
+            <span class="mono">${escapeHtml(model.sku)} - Model ${escapeHtml(model.modelCode)}</span>
+          </div>
+          <div class="admin-product-price">
+            ${priceBadge(model.price)}
+            <div class="inline-price-editor" data-product-price-editor="${escapeHtml(model.id)}">
+              <input type="number" min="0" step="0.01" value="${model.price.priced ? escapeHtml(String(model.price.amount)) : ""}" aria-label="Price for ${escapeHtml(model.name)}" />
+              <button class="button mini" data-action="save-product-price" data-product-id="${escapeHtml(model.id)}">Save Price</button>
+            </div>
+          </div>
+        </div>
+        <div class="admin-product-stats">
+          <span><strong>${model.stockTotal}</strong> units</span>
+          <span><strong>${model.optionCount}</strong> SKU rows</span>
+          <span><strong>${model.colourCount}</strong> colors</span>
+          <span><strong>${model.sizeCount}</strong> sizes</span>
+          <span>${model.published ? "Published" : "Unpublished"}</span>
+        </div>
+        ${
+          model.warnings.length
+            ? `<div class="warning-row">${model.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>`
+            : `<div class="warning-row good"><span>Ready for reseller ordering</span></div>`
+        }
+        ${stockMatrixPreview(model.stockMatrix)}
+      </div>
+    </article>
+  `;
+}
+
+function stockMatrixPreview(matrix) {
+  if (!matrix.rows.length) return `<p class="import-note">No stock rows are linked to this product yet.</p>`;
+  const sizes = matrix.sizes.slice(0, 6);
+  return `
+    <div class="stock-matrix-preview">
+      <div class="stock-matrix-head">
+        <span>Color / Size</span>
+        ${sizes.map((size) => `<span>${escapeHtml(size)}</span>`).join("")}
+        <span>Total</span>
+      </div>
+      ${matrix.rows
+        .slice(0, 4)
+        .map(
+          (row) => `
+            <div class="stock-matrix-row">
+              <strong>${escapeHtml(row.colour)}</strong>
+              ${sizes.map((size) => `<span>${escapeHtml(String(row.sizes.find((cell) => cell.size === size)?.stockQuantity || 0))}</span>`).join("")}
+              <span>${escapeHtml(String(row.totalStock))}</span>
+            </div>
+          `,
+        )
+        .join("")}
+      ${matrix.rows.length > 4 || matrix.sizes.length > 6 ? `<p class="import-note">Showing top stock rows. Use inventory upload history for full SKU-level updates.</p>` : ""}
+    </div>
   `;
 }
 
@@ -1703,10 +2127,25 @@ function adminImports() {
         <header class="admin-topbar"><div><h1>Inventory</h1><p>Upload the master inventory file, review matched stock changes, then publish availability for resellers.</p></div></header>
         <section class="import-panel">
           <div class="upload-grid">
-            ${uploadBox("Upload Master Inventory", "Updates exact stock by matching model, color, and size against products already set up.", "inventory_xlsx", ".xlsx,.xls,.csv")}
+            ${uploadBox("Upload Master Inventory", "Builds the catalog from the master file or refreshes stock for products that are already set up.", "inventory_xlsx", ".xlsx,.xls,.csv")}
             ${uploadBox("Scan Media Pack", "Finds product folders and images so products can be reviewed and added later.", "media_pack_zip", ".zip")}
           </div>
+          <form class="stock-reset-panel" data-form="stock-reset">
+            <div>
+              <span class="eyebrow dark">Stock control</span>
+              <h2>Reset All Stock</h2>
+              <p>Set every stock quantity to zero while keeping products, colours, sizes, prices, and images intact. Upload the master inventory file afterwards to restore current availability.</p>
+              <small>${escapeHtml(`${state.inventory.length} stock rows will be reset.`)}</small>
+            </div>
+            <label>
+              Type RESET STOCK to confirm
+              <input name="stock_reset_confirmation" autocomplete="off" placeholder="RESET STOCK" ${state.stockResetPending ? "disabled" : ""} />
+            </label>
+            <button class="button secondary" type="submit" ${state.stockResetPending ? "disabled" : ""}>${state.stockResetPending ? "Resetting..." : "Reset stock to zero"}</button>
+          </form>
           ${state.importError ? `<p class="notice error">${escapeHtml(state.importError)}</p>` : ""}
+          ${state.stockResetError ? `<p class="notice error">${escapeHtml(state.stockResetError)}</p>` : ""}
+          ${state.stockResetSaved ? `<p class="notice success">All stock has been reset to zero. Upload the master inventory file when you are ready to publish fresh quantities.</p>` : ""}
           ${
             preview
               ? `
@@ -1718,10 +2157,12 @@ function adminImports() {
                   <div class="import-preview-grid">
                     <div><strong>${preview.products?.length || 0}</strong><span>Products</span></div>
                     <div><strong>${preview.variants?.length || 0}</strong><span>Variants</span></div>
+                    <div><strong>${preview.colourMappings?.length || 0}</strong><span>Colours</span></div>
                     <div><strong>${preview.inventoryRows?.length || 0}</strong><span>Inventory rows</span></div>
                     <div><strong>${(preview.errors?.length || 0) + (preview.stockExceptions?.length || 0)}</strong><span>Issues</span></div>
                   </div>
                   ${preview.type === "media_pack_zip" ? mediaPackPreviewDetails(preview) : ""}
+                  ${preview.seedSummary ? catalogSeedPreviewDetails(preview) : ""}
                   ${preview.stockSummary ? stockReviewDetails(preview) : ""}
                   ${
                     preview.errors.length
@@ -1748,7 +2189,7 @@ function adminImports() {
                   <div class="overview-list">
                     ${state.importJobs
                       .map(
-                        (job) => `<div class="overview-row"><strong>${escapeHtml(job.import_type)}</strong><span>${escapeHtml(job.filename)}</span><span>${escapeHtml(job.status)}</span></div>`,
+                        (job) => `<div class="overview-row"><strong>${escapeHtml(job.import_type)}</strong><span>${escapeHtml(job.filename)}</span><span>${escapeHtml(importJobStatusLabel(job))}</span></div>`,
                       )
                       .join("")}
                   </div>
@@ -1765,6 +2206,11 @@ function adminImports() {
       </section>
     </main>
   `;
+}
+
+function importJobStatusLabel(job) {
+  if (job?.status === "completed" && job?.error_message) return "completed with warnings";
+  return job?.status || "unknown";
 }
 
 function mediaPackPreviewDetails(preview) {
@@ -1803,6 +2249,26 @@ function mediaPackPreviewDetails(preview) {
         )
         .join("")}
     </div>
+  `;
+}
+
+function catalogSeedPreviewDetails(preview) {
+  const summary = preview.seedSummary || {};
+  return `
+    <div class="import-preview-grid media-preview-grid">
+      <div><strong>${summary.matchedModels || 0}</strong><span>Matched models</span></div>
+      <div><strong>${summary.variantCount || 0}</strong><span>Seed variants</span></div>
+      <div><strong>${summary.colourCount || 0}</strong><span>Colour groups</span></div>
+      <div><strong>${summary.skippedRows || 0}</strong><span>Skipped rows</span></div>
+    </div>
+    ${
+      Array.isArray(summary.missingSelectedModels) && summary.missingSelectedModels.length
+        ? `<div class="import-errors">${summary.missingSelectedModels
+            .slice(0, 8)
+            .map((modelCode) => `<p>${escapeHtml(`No inventory rows found for selected model ${modelCode}.`)}</p>`)
+            .join("")}</div>`
+        : ""
+    }
   `;
 }
 
@@ -1959,12 +2425,12 @@ function emailTemplatePreview() {
     },
     approval: {
       title: "Approval notice",
-      subject: "Your Ivansrun Africa reseller account was approved",
+      subject: "Your Irunsvan Africa reseller account was approved",
       lines: ["Approval status", "Login instructions", "Portal link", "Next steps for order requests"],
     },
     import: {
       title: "Import warning",
-      subject: "Ivansrun Africa import completed with warnings",
+      subject: "Irunsvan Africa import completed with warnings",
       lines: ["Import filename", "Processed rows", "Skipped rows", "Rows needing review"],
     },
   };
@@ -1987,8 +2453,8 @@ function emailCard(template, title, copy) {
 
 function infoPage(route) {
   const pages = {
-    about: ["About Ivansrun Africa", "High-performance footwear built around a reseller-ready operating model.", "Ivansrun Africa combines public product discovery with private wholesale inventory workflows for approved business buyers."],
-    contact: ["Contact", "Reach the Ivansrun Africa team for product, reseller, and order questions.", "Use the reseller application for wholesale access. General support requests are handled by the Ivansrun Africa operations team."],
+    about: ["About Irunsvan Africa", "High-performance footwear built around a reseller-ready operating model.", "Irunsvan Africa combines public product discovery with private wholesale inventory workflows for approved business buyers."],
+    contact: ["Contact", "Reach the Irunsvan Africa team for product, reseller, and order questions.", "Use the reseller application for wholesale access. General support requests are handled by the Irunsvan Africa operations team."],
     terms: ["Terms", "Clear operating terms for browsing, reseller requests, approval, and order confirmation.", "Order requests are not final purchases until reviewed and confirmed by admin."],
     privacy: ["Privacy", "Customer, reseller, and admin data is handled through protected account and inventory workflows.", "Public visitors can browse products without an account. Exact stock and order workflows require approved access."],
   };
@@ -1996,7 +2462,7 @@ function infoPage(route) {
   return `
     <main class="info-page">
       <section>
-        <span class="eyebrow dark">Ivansrun Africa</span>
+        <span class="eyebrow dark">Irunsvan Africa</span>
         <h1>${escapeHtml(title)}</h1>
         <p class="lead-copy">${escapeHtml(subtitle)}</p>
         <p>${escapeHtml(copy)}</p>
@@ -2055,7 +2521,7 @@ function footer(compact = false) {
       <div>${logo("blue")}<p>High-performance athletic footwear for Africa's reseller-ready inventory workflows.</p></div>
       <div><strong>Resources</strong><button data-route="store">Catalog</button><button data-route="apply">Reseller Terms</button><button data-route="contact">Support</button></div>
       <div><strong>Operations</strong><button data-route="history">Order Requests</button><button data-route="imports">Inventory Imports</button><button data-route="privacy">Privacy Policy</button></div>
-      <p class="copyright">Copyright 2026 Ivansrun Africa High-Performance Footwear.</p>
+      <p class="copyright">Copyright 2026 Irunsvan Africa High-Performance Footwear.</p>
     </footer>
   `;
 }
@@ -2071,6 +2537,7 @@ function routeView() {
     apply: resellerApplication,
     login: loginPage,
     reseller: resellerPortal,
+    "reseller-product": resellerProductOrderPage,
     history: requestHistory,
     admin: adminDashboard,
     products: adminProducts,
@@ -2097,9 +2564,9 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-action='dev-admin-login']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      await handleDevAdminLogin();
+  document.querySelectorAll("[data-action='google-login']").forEach((button) => {
+    button.addEventListener("click", () => {
+      handleGoogleLogin();
     });
   });
 
@@ -2171,6 +2638,8 @@ function bindEvents() {
       if (formName === "login") await handleLogin(form);
       if (formName === "site-controls") await saveSiteControls(form);
       if (formName === "product") await handleProductSubmit(form);
+      if (formName === "colour-review") await saveColourReview(form);
+      if (formName === "stock-reset") await handleStockReset(form);
       render();
     });
   });
@@ -2183,6 +2652,14 @@ function bindEvents() {
       state.productFormSaved = false;
       state.productFormSaveMessage = null;
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='save-product-price']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const productId = button.getAttribute("data-product-id");
+      const input = button.closest("[data-product-price-editor]")?.querySelector("input");
+      await handleProductPriceUpdate(productId, input?.value);
     });
   });
 
@@ -2203,6 +2680,47 @@ function bindEvents() {
   document.querySelectorAll("[name='order_notes']").forEach((input) => {
     input.addEventListener("input", () => {
       state.resellerNotes = input.value;
+    });
+  });
+
+  document.querySelectorAll("[data-action='open-reseller-product']").forEach((card) => {
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, textarea, select")) return;
+      setRoute("reseller-product", { productId: card.getAttribute("data-product-id") });
+    });
+  });
+
+  document.querySelectorAll("[data-action='toggle-quick-order']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const productId = button.getAttribute("data-product-id");
+      state.resellerQuickOrderProductId = state.resellerQuickOrderProductId === productId ? null : productId;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='select-reseller-colour']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const productId = button.getAttribute("data-product-id");
+      const colour = button.getAttribute("data-colour");
+      if (productId && colour) {
+        state.resellerColourSelection = {
+          ...state.resellerColourSelection,
+          [productId]: colour,
+        };
+      }
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='add-bulk-order']").forEach((button) => {
+    button.addEventListener("click", () => {
+      syncBulkOrderQuantities(button.closest("[data-bulk-order-product]"));
+    });
+  });
+
+  document.querySelectorAll("[data-action='clear-bulk-order']").forEach((button) => {
+    button.addEventListener("click", () => {
+      clearBulkOrderQuantities(button.closest("[data-bulk-order-product]"));
     });
   });
 
@@ -2349,6 +2867,33 @@ function syncDraftQuantity(variantId, quantity) {
   render();
 }
 
+function syncBulkOrderQuantities(container) {
+  if (!container) return;
+  const rowsByVariantId = new Map(inventoryRows().map((entry) => [entry.variantId, entry]));
+  let nextDraft = { ...state.resellerDraft };
+  container.querySelectorAll("[data-bulk-qty-input]").forEach((input) => {
+    const variantId = input.getAttribute("data-bulk-qty-input");
+    const row = rowsByVariantId.get(variantId);
+    if (!row) return;
+    nextDraft = Orders.updateDraftQuantity(nextDraft, row, input.value);
+  });
+  state.resellerDraft = nextDraft;
+  state.orderSubmitted = false;
+  render();
+}
+
+function clearBulkOrderQuantities(container) {
+  if (!container) return;
+  const nextDraft = { ...state.resellerDraft };
+  container.querySelectorAll("[data-bulk-qty-input]").forEach((input) => {
+    const variantId = input.getAttribute("data-bulk-qty-input");
+    delete nextDraft[variantId];
+  });
+  state.resellerDraft = nextDraft;
+  state.orderSubmitted = false;
+  render();
+}
+
 async function handleLogin(form) {
   const data = new FormData(form);
   state.loginPending = true;
@@ -2377,6 +2922,24 @@ async function handleLogin(form) {
   }
 }
 
+function oauthRedirectTo() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("oauth", "google");
+  url.hash = "";
+  return url.toString();
+}
+
+function handleGoogleLogin() {
+  state.authError = null;
+  state.loginPending = true;
+  render();
+  SupabaseClient.signInWithOAuth({
+    url: SUPABASE_URL,
+    provider: "google",
+    redirectTo: oauthRedirectTo(),
+  });
+}
+
 async function handleLogout() {
   await SupabaseClient.signOut();
   state.auth = Auth.normalizeAuthState();
@@ -2389,13 +2952,30 @@ async function handleLogout() {
   setRoute("store");
 }
 
-async function handleDevAdminLogin() {
-  state.auth = buildLocalAdminAuthState();
-  state.authError = null;
-  state.loginSubmitted = true;
-  state.routeNotice = null;
-  setRoute("admin");
-  await loadProtectedData();
+function buildOrderStockAdjustments(items) {
+  return items.map((item) => {
+    const requestedQuantity = Number(item.requestedQuantity || 0);
+    const stockQuantity = Number(item.stockQuantity || 0);
+    if (!item.inventoryId) throw new Error("This order contains a stock row that cannot be updated.");
+    if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0) throw new Error("Enter at least one pair before submitting an order.");
+    if (requestedQuantity > stockQuantity) {
+      throw new Error(`${item.productName || "This product"} ${item.colour || ""} size ${item.size || ""} only has ${stockQuantity} pairs available.`);
+    }
+    return {
+      id: item.inventoryId,
+      nextStock: Math.max(0, stockQuantity - requestedQuantity),
+    };
+  });
+}
+
+async function depleteSubmittedOrderStock(items) {
+  const adjustments = buildOrderStockAdjustments(items);
+  for (const adjustment of adjustments) {
+    await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
+      stock_quantity: adjustment.nextStock,
+      source: "order_submitted",
+    });
+  }
 }
 
 async function handleOrderSubmit(form) {
@@ -2407,14 +2987,17 @@ async function handleOrderSubmit(form) {
   render();
 
   try {
+    const draftItems = currentDraftItems();
+    buildOrderStockAdjustments(draftItems);
     const payload = Orders.buildOrderPayload({
       auth: state.auth,
-      items: currentDraftItems(),
+      items: draftItems,
       notes: state.resellerNotes,
     });
     const [createdRequest] = await insertAuthedSupabase("order_requests", payload.orderRequest);
     const itemsPayload = payload.orderItems.map((item) => ({ ...item, order_request_id: createdRequest.id }));
     await insertAuthedSupabase("order_request_items", itemsPayload);
+    await depleteSubmittedOrderStock(draftItems);
     state.resellerDraft = {};
     state.resellerNotes = "";
     state.orderSubmitted = true;
@@ -2423,7 +3006,7 @@ async function handleOrderSubmit(form) {
       eventType: "order_submitted",
       adminEmails: [],
       orderCode: formatRequestCode(createdRequest.id),
-      resellerCompany: state.auth.profile?.company_name || "Ivansrun reseller",
+      resellerCompany: state.auth.profile?.company_name || "Irunsvan reseller",
       resellerEmail: state.auth.user?.email || "",
       totalSkus: payload.orderItems.length,
       totalUnits: payload.orderItems.reduce((sum, item) => sum + item.quantity, 0),
@@ -2503,19 +3086,6 @@ async function handleApplicationSubmit(form) {
 async function handleOrderStatusUpdate(orderId, status) {
   try {
     const orderRequest = state.orderRequests.find((request) => request.id === orderId);
-    if (status === "approved" && orderRequest?.status !== "approved") {
-      const adjustments = AdminOrders.buildApprovalInventoryAdjustments({
-        orderId,
-        items: state.orderRequestItems,
-        inventory: state.inventory,
-      });
-      for (const adjustment of adjustments) {
-        await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
-          stock_quantity: adjustment.nextStock,
-          source: "order_approval",
-        });
-      }
-    }
     const patch = AdminOrders.buildOrderStatusPatch(status, `Updated from admin dashboard on ${new Date().toLocaleString()}`);
     await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, patch);
     if (orderRequest?.reseller_id) {
@@ -2527,7 +3097,7 @@ async function handleOrderStatusUpdate(orderId, status) {
         eventType: `order_${status}`,
         adminEmails: [profile?.email].filter(Boolean),
         orderCode: formatRequestCode(orderId),
-        resellerCompany: profile?.company_name || "Ivansrun reseller",
+        resellerCompany: profile?.company_name || "Irunsvan reseller",
         resellerEmail: profile?.email || "",
         totalSkus: 0,
         totalUnits: 0,
@@ -2538,6 +3108,45 @@ async function handleOrderStatusUpdate(orderId, status) {
     await loadProtectedData();
   } catch (error) {
     state.historyError = error instanceof Error ? error.message : "Unable to update order status";
+    render();
+  }
+}
+
+async function handleStockReset(form) {
+  const confirmation = String(new FormData(form).get("stock_reset_confirmation") || "").trim();
+  state.stockResetError = null;
+  state.stockResetSaved = false;
+
+  if (!state.auth.isAdmin) {
+    state.stockResetError = "Only an admin account can reset stock.";
+    return;
+  }
+
+  if (confirmation !== "RESET STOCK") {
+    state.stockResetError = "Type RESET STOCK to confirm the stock reset.";
+    return;
+  }
+
+  state.stockResetPending = true;
+  render();
+
+  try {
+    await patchAuthedSupabaseMinimal("inventory", "id=not.is.null", {
+      stock_quantity: 0,
+      source: "manual_stock_reset",
+    });
+    state.inventory = state.inventory.map((row) => ({
+      ...row,
+      stock_quantity: 0,
+      source: "manual_stock_reset",
+    }));
+    state.resellerDraft = {};
+    state.stockResetSaved = true;
+    await loadProtectedData();
+  } catch (error) {
+    state.stockResetError = error instanceof Error ? error.message : "Unable to reset stock";
+  } finally {
+    state.stockResetPending = false;
     render();
   }
 }
@@ -2631,6 +3240,53 @@ function applySavedProductToState(product, variants) {
   ];
 }
 
+function applySavedInventoryToState(rows) {
+  const savedRows = Array.isArray(rows) ? rows : [];
+  const bySku = new Map(state.inventory.map((row) => [String(row.sku || "").trim(), row]));
+  savedRows.forEach((row) => {
+    const sku = String(row.sku || "").trim();
+    if (!sku) return;
+    bySku.set(sku, row);
+  });
+  state.inventory = [...bySku.values()].sort((left, right) => String(left.sku || "").localeCompare(String(right.sku || "")));
+}
+
+function applySavedColourMappingsToState(rows) {
+  const savedRows = Array.isArray(rows) ? rows : [];
+  const keyFor = (row) => [row.product_id, row.original_colour, row.color_code || ""].join("::");
+  const byKey = new Map((state.colourMappings || []).map((row) => [keyFor(row), row]));
+  savedRows.forEach((row) => {
+    byKey.set(keyFor(row), row);
+  });
+  state.colourMappings = [...byKey.values()].sort((left, right) => String(left.model_code || "").localeCompare(String(right.model_code || "")));
+}
+
+function selectedProductImageLibrary() {
+  return state.products.reduce((library, product) => {
+    const modelCode = String(product.model_code || "").trim();
+    if (!modelCode) return library;
+    library[modelCode] = Array.isArray(product.image_names) ? product.image_names : [];
+    return library;
+  }, {});
+}
+
+function colourReviewRows() {
+  return (state.colourMappings || [])
+    .map((mapping) => {
+      const product = state.products.find((entry) => entry.id === mapping.product_id) || null;
+      return {
+        ...mapping,
+        productName: product?.name || `IRUNSVAN ${mapping.model_code}`,
+        imageOptions: Array.isArray(product?.image_names) ? product.image_names : [],
+      };
+    })
+    .sort((left, right) => {
+      const modelSort = String(left.model_code || "").localeCompare(String(right.model_code || ""));
+      if (modelSort) return modelSort;
+      return String(left.original_colour || "").localeCompare(String(right.original_colour || ""));
+    });
+}
+
 function productInputFromFormData(data, colourRows, imageNames) {
   return ProductEditor.buildProductInputFromEditor({
     fields: {
@@ -2644,6 +3300,69 @@ function productInputFromFormData(data, colourRows, imageNames) {
     colourRows,
     imageNames,
   });
+}
+
+async function saveColourReview(form) {
+  state.colourReviewPending = true;
+  state.colourReviewSaved = false;
+  state.colourReviewError = null;
+  render();
+
+  try {
+    const data = new FormData(form);
+    const rows = colourReviewRows().map((row, index) => ({
+      id: data.get(`mapping_id_${index}`),
+      product_id: data.get(`product_id_${index}`),
+      model_code: data.get(`model_code_${index}`),
+      original_colour: data.get(`original_colour_${index}`),
+      colour: data.get(`colour_${index}`),
+      color_code: data.get(`color_code_${index}`),
+      image_name: data.get(`image_name_${index}`),
+      published: data.get(`published_${index}`) === "on",
+    }));
+
+    const savedMappings = rows.length
+      ? await upsertAuthedSupabase("product_colour_mappings", ProductPersistence.buildColourMappingUpsertPayloads(rows), "product_id,original_colour,color_code")
+      : [];
+    const mappingKey = (row) => [row.product_id, row.original_colour, row.color_code || ""].join("::");
+    const mappingByKey = new Map(savedMappings.map((row) => [mappingKey(row), row]));
+
+    const variantUpdates = state.variants
+      .map((variant) => {
+        const mapping = mappingByKey.get(mappingKey(variant));
+        if (!mapping) return null;
+        return {
+          id: variant.id,
+          product_id: variant.product_id,
+          sku: variant.sku,
+          name: variant.name,
+          colour: mapping.colour,
+          original_colour: variant.original_colour,
+          color_code: variant.color_code,
+          size: variant.size,
+          base_price: variant.base_price,
+          base_currency: variant.base_currency,
+          image_name: mapping.image_name,
+          published: mapping.published,
+        };
+      })
+      .filter(Boolean);
+
+    const savedVariants = variantUpdates.length ? await upsertAuthedSupabase("product_variants", variantUpdates, "sku") : [];
+    if (savedVariants.length) {
+      const variantSkus = new Set(savedVariants.map((variant) => variant.sku));
+      state.variants = [
+        ...state.variants.filter((variant) => !variantSkus.has(variant.sku)),
+        ...savedVariants,
+      ].sort((left, right) => String(left.sku || "").localeCompare(String(right.sku || "")));
+    }
+    applySavedColourMappingsToState(savedMappings);
+    state.colourReviewSaved = true;
+  } catch (error) {
+    state.colourReviewError = error instanceof Error ? error.message : "Unable to save Colour Review";
+  } finally {
+    state.colourReviewPending = false;
+  }
 }
 
 async function handleProductSubmit(form) {
@@ -2686,6 +3405,20 @@ async function handleProductSubmit(form) {
       published: true,
     };
     const variantDrafts = ProductCatalogManager.generateProductVariants(savedProduct).map((variant) => ({ ...variant, published: true }));
+    const colourMappingPayload = ProductPersistence.buildColourMappingUpsertPayloads(
+      (savedProduct.colours || []).map((colour) => ({
+        product_id: savedProduct.id,
+        model_code: savedProduct.model_code,
+        original_colour: colour.original,
+        colour: colour.name,
+        color_code: colour.code,
+        image_name: colour.image,
+        published: true,
+      })),
+    );
+    const savedColourMappings = colourMappingPayload.length
+      ? await upsertAuthedSupabase("product_colour_mappings", colourMappingPayload, "product_id,original_colour,color_code")
+      : [];
     const savedVariantRows = await upsertAuthedSupabase(
       "product_variants",
       ProductPersistence.buildVariantUpsertPayloads(variantDrafts, savedProduct.id),
@@ -2700,6 +3433,7 @@ async function handleProductSubmit(form) {
       "sku",
     );
     applySavedProductToState(savedProduct, savedVariantRows);
+    applySavedColourMappingsToState(savedColourMappings);
     state.inventory = InventoryWorkflow.applyInventoryPublishPlan(
       state.inventory,
       InventoryWorkflow.buildInventoryPublishPlan({
@@ -2723,9 +3457,42 @@ async function handleProductSubmit(form) {
   }
 }
 
+async function handleProductPriceUpdate(productId, value) {
+  state.productPriceSaved = false;
+  state.productPriceError = null;
+
+  try {
+    const product = state.products.find((entry) => entry.id === productId);
+    if (!product) throw new Error("Product not found.");
+    const amount = Number(value);
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a product price greater than zero.");
+    const [savedProduct] = await updateAuthedSupabase("products", productId, {
+      base_price: amount,
+      base_currency: product.base_currency || "USD",
+    });
+    if (!savedProduct?.id) throw new Error("Supabase did not return the updated product.");
+    state.products = state.products.map((entry) =>
+      entry.id === productId
+        ? {
+            ...entry,
+            base_price: savedProduct.base_price,
+            base_currency: savedProduct.base_currency || entry.base_currency || "USD",
+          }
+        : entry,
+    );
+    state.productPriceSaved = true;
+  } catch (error) {
+    state.productPriceError = error instanceof Error ? error.message : "Unable to save product price";
+  } finally {
+    render();
+  }
+}
+
 async function handleImportFile(type, file) {
   state.importError = null;
   state.importPreview = null;
+  state.stockResetError = null;
+  state.stockResetSaved = false;
   render();
 
   try {
@@ -2741,6 +3508,8 @@ async function handleImportCommit() {
   if (!state.importPreview) return;
   state.importPending = true;
   state.importError = null;
+  state.stockResetError = null;
+  state.stockResetSaved = false;
   render();
 
   let importJobId = null;
@@ -2771,8 +3540,56 @@ async function handleImportCommit() {
           base_currency: variant.base_currency,
           image_name: variant.image_name,
           published: true,
-        }));
+      }));
       await upsertAuthedSupabase("product_variants", variantPayload, "sku");
+    }
+
+    if (state.importPreview.type === "catalog_seed_inventory") {
+      const productRows = await upsertAuthedSupabase(
+        "products",
+        state.importPreview.products.map((product) => ProductPersistence.buildProductUpsertPayload(product)),
+        "sku",
+      );
+      const productIdsBySku = new Map(productRows.map((row) => [row.sku, row.id]));
+
+      const colourMappingPayload = state.importPreview.colourMappings
+        .map((mapping) => ({
+          ...mapping,
+          product_id: productIdsBySku.get(`IRUNSVAN-${mapping.model_code}`),
+        }))
+        .filter((mapping) => mapping.product_id);
+      let savedColourMappings = [];
+      if (colourMappingPayload.length) {
+        savedColourMappings = await upsertAuthedSupabase(
+          "product_colour_mappings",
+          ProductPersistence.buildColourMappingUpsertPayloads(colourMappingPayload),
+          "product_id,original_colour,color_code",
+        );
+      }
+
+      const variantPayload = state.importPreview.variants
+        .filter((variant) => productIdsBySku.has(variant.product_sku))
+        .flatMap((variant) => ProductPersistence.buildVariantUpsertPayloads([variant], productIdsBySku.get(variant.product_sku)));
+      const savedVariantRows = await upsertAuthedSupabase("product_variants", variantPayload, "sku");
+
+      const variantIdsBySku = new Map(savedVariantRows.map((row) => [row.sku, row.id]));
+      const inventoryPayload = state.importPreview.inventoryRows
+        .filter((row) => variantIdsBySku.has(row.sku))
+        .map((row) => ({
+          variant_id: variantIdsBySku.get(row.sku),
+          sku: row.sku,
+          style_code: row.style_code,
+          stock_quantity: row.stock_quantity,
+          source: row.source,
+        }));
+      const savedInventoryRows = inventoryPayload.length ? await upsertAuthedSupabase("inventory", inventoryPayload, "sku") : [];
+
+      productRows.forEach((product) => {
+        const productVariants = savedVariantRows.filter((variant) => variant.product_id === product.id);
+        applySavedProductToState(product, productVariants);
+      });
+      applySavedColourMappingsToState(savedColourMappings);
+      applySavedInventoryToState(savedInventoryRows);
     }
 
     if (state.importPreview.type === "inventory_xlsx") {
@@ -2843,7 +3660,7 @@ async function handleImportCommit() {
 
 function applyRevealMotion() {
   const targets = document.querySelectorAll(
-    ".hero-content, .section-header, .lab-section > *, .detail-grid > *, .form-hero, .workflow-form, .process-panel, .metric-card, .inventory-panel, .order-sidebar, .admin-card, .import-panel, .product-overview, .timeline-panel, .email-card, .info-page section",
+    ".hero-content, .section-header, .lab-section > *, .detail-grid > *, .form-hero, .process-panel, .email-card, .info-page section",
   );
 
   targets.forEach((target) => target.classList.add("reveal"));
@@ -2887,15 +3704,6 @@ window.addEventListener("popstate", (event) => {
 });
 
 async function initAuth() {
-  if (LOGIN_BYPASS_ENABLED) {
-    state.auth = buildLocalAdminAuthState();
-    state.authError = null;
-    state.authLoading = false;
-    await loadProtectedData();
-    render();
-    return;
-  }
-
   try {
     const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });
     state.auth = Auth.normalizeAuthState(restored);
@@ -2911,10 +3719,22 @@ async function initAuth() {
 }
 
 async function initializeApp() {
-  syncRouteFromLocation();
+  const oauthResult = SupabaseClient.consumeOAuthSessionFromUrl();
+  const oauthError = SupabaseClient.consumeOAuthError();
+  if (oauthResult.error || oauthError) {
+    state.route = "login";
+    state.authError = oauthResult.error || oauthError;
+  }
   render();
   await loadCatalog();
   await initAuth();
+  if (oauthResult.error || oauthError) state.authError = oauthResult.error || oauthError;
+  if (oauthResult.session?.access_token && state.auth.isAuthenticated) {
+    setRoute(Auth.fallbackRouteForRole(state.auth.role), {}, { replaceHistory: true, scroll: false });
+  } else {
+    syncRouteFromLocation();
+    render();
+  }
 }
 
 initializeApp();

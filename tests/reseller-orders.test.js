@@ -1,6 +1,8 @@
 const assert = require("node:assert/strict");
 const {
   buildInventoryRows,
+  availableInventoryRows,
+  visibleShopProductGroups,
   updateDraftQuantity,
   draftItems,
   draftSummary,
@@ -70,10 +72,43 @@ assert.deepEqual(rows[0], {
   colour: "Bright Orange / Ocean Blue",
   size: "38",
   price: 30,
+  priceKnown: true,
   currency: "USD",
   stockQuantity: 117,
   imageName: "001-1.jpg",
 });
+
+assert.deepEqual(
+  availableInventoryRows([
+    ...rows,
+    { ...rows[0], variantId: "variant-3", sku: "202300100140", stockQuantity: 0 },
+  ]).map((row) => row.variantId),
+  ["variant-1", "variant-2"],
+);
+
+assert.deepEqual(
+  visibleShopProductGroups([
+    ...rows,
+    { ...rows[0], variantId: "variant-3", sku: "202300100140", size: "40", stockQuantity: 8 },
+    { ...rows[0], variantId: "variant-4", productId: "product-2", productName: "IRUNSVAN 002", productSku: "IRUNSVAN-002", sku: "202300200138", stockQuantity: 5 },
+  ], { productLimit: 1, optionLimit: 2 }),
+  [
+    {
+      productId: "product-1",
+      productName: "IRUNSVAN 001 Running Shoe",
+      productSku: "IRUNSVAN-001",
+      category: "Running Shoes",
+      imageName: "001-1.jpg",
+      price: 30,
+      priceKnown: true,
+      currency: "USD",
+      totalStock: 128,
+      optionCount: 3,
+      hiddenOptionCount: 1,
+      rows: [rows[0], rows[1]],
+    },
+  ],
+);
 
 let draft = {};
 draft = updateDraftQuantity(draft, rows[0], 4);
@@ -101,6 +136,7 @@ assert.deepEqual(items[0], {
   colour: "Bright Orange / Ocean Blue",
   size: "39",
   price: 30,
+  priceKnown: true,
   currency: "USD",
   stockQuantity: 3,
   imageName: "001-2.jpg",
@@ -140,6 +176,15 @@ assert.throws(
       items: [{ ...items[0], requestedQuantity: 4, stockQuantity: 3 }],
     }),
   /available stock/i,
+);
+
+assert.throws(
+  () =>
+    buildOrderPayload({
+      auth: { user: { id: "user-1" }, isReseller: true, isAdmin: false },
+      items: [{ ...items[0], price: null, priceKnown: false }],
+    }),
+  /approved product price/i,
 );
 
 assert.deepEqual(

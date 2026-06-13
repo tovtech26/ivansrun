@@ -6,6 +6,7 @@ const {
 } = require("../src/mobile-navigation.js");
 
 assert.deepEqual(backTargetForRoute("product"), { route: "store" });
+assert.deepEqual(backTargetForRoute("reseller-product"), { route: "reseller" });
 assert.deepEqual(backTargetForRoute("history"), { route: "reseller" });
 assert.deepEqual(backTargetForRoute("products"), { route: "admin" });
 assert.deepEqual(backTargetForRoute("site"), { route: "admin" });
@@ -16,7 +17,9 @@ assert.deepEqual(backTargetForRoute("store"), null);
 
 assert.equal(buildRouteUrl("store"), "#/store");
 assert.equal(buildRouteUrl("product", { productId: "fallback-001" }), "#/product/fallback-001");
+assert.equal(buildRouteUrl("reseller-product", { productId: "product-001" }), "#/reseller-product/product-001");
 assert.deepEqual(parseRouteUrl("#/product/fallback-001"), { route: "product", productId: "fallback-001" });
+assert.deepEqual(parseRouteUrl("#/reseller-product/product-001"), { route: "reseller-product", productId: "product-001" });
 assert.deepEqual(parseRouteUrl("#/imports"), { route: "imports", productId: null });
 assert.deepEqual(parseRouteUrl("#/bad"), null);
 

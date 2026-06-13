@@ -1,5 +1,6 @@
 (function attachSupabaseClient(root) {
   const AUTH_STORAGE_KEY = "ivansrun_auth_session";
+  const OAUTH_ERROR_STORAGE_KEY = "ivansrun_oauth_error";
 
   function headers(key, accessToken) {
     return {
@@ -22,6 +23,59 @@
 
   function clearStoredSession() {
     localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
+
+  function buildOAuthUrl({ url, provider = "google", redirectTo }) {
+    const authorizeUrl = new URL(`${url}/auth/v1/authorize`);
+    authorizeUrl.searchParams.set("provider", provider);
+    if (redirectTo) authorizeUrl.searchParams.set("redirect_to", redirectTo);
+    return authorizeUrl.toString();
+  }
+
+  function signInWithOAuth({ url, provider = "google", redirectTo }) {
+    const authUrl = buildOAuthUrl({ url, provider, redirectTo });
+    root.location.assign(authUrl);
+  }
+
+  function oauthSessionFromHash(hash = "") {
+    const params = new URLSearchParams(String(hash || "").replace(/^#/, ""));
+    const accessToken = params.get("access_token");
+    if (!accessToken) {
+      const error = params.get("error_description") || params.get("error");
+      return { handled: Boolean(error), error };
+    }
+    return {
+      handled: true,
+      session: {
+        access_token: accessToken,
+        refresh_token: params.get("refresh_token") || "",
+        expires_in: Number(params.get("expires_in") || 0),
+        expires_at: params.get("expires_at") ? Number(params.get("expires_at")) : null,
+        token_type: params.get("token_type") || "bearer",
+        provider_token: params.get("provider_token") || null,
+        provider_refresh_token: params.get("provider_refresh_token") || null,
+      },
+    };
+  }
+
+  function consumeOAuthSessionFromUrl() {
+    if (!root.location?.hash) return { handled: false };
+    const result = oauthSessionFromHash(root.location.hash);
+    if (!result.handled) return result;
+    if (result.session?.access_token) writeStoredSession(result.session);
+    if (result.error) localStorage.setItem(OAUTH_ERROR_STORAGE_KEY, result.error);
+
+    const cleanUrl = new URL(root.location.href);
+    cleanUrl.hash = "";
+    cleanUrl.searchParams.delete("oauth");
+    root.history?.replaceState?.({}, "", `${cleanUrl.pathname}${cleanUrl.search}`);
+    return result;
+  }
+
+  function consumeOAuthError() {
+    const error = localStorage.getItem(OAUTH_ERROR_STORAGE_KEY);
+    localStorage.removeItem(OAUTH_ERROR_STORAGE_KEY);
+    return error;
   }
 
   async function signInWithPassword({ url, key, email, password }) {
@@ -106,10 +160,16 @@
 
   const api = {
     AUTH_STORAGE_KEY,
+    OAUTH_ERROR_STORAGE_KEY,
     headers,
     readStoredSession,
     writeStoredSession,
     clearStoredSession,
+    buildOAuthUrl,
+    signInWithOAuth,
+    oauthSessionFromHash,
+    consumeOAuthSessionFromUrl,
+    consumeOAuthError,
     signInWithPassword,
     signUpWithPassword,
     fetchCurrentUser,

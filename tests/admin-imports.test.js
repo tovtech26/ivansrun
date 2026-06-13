@@ -1,5 +1,5 @@
 const assert = require("node:assert/strict");
-const { buildImportPreview } = require("../src/admin-imports.js");
+const { buildImportPreview, buildImportJobFinish } = require("../src/admin-imports.js");
 
 const preview = buildImportPreview({
   type: "inventory_xlsx",
@@ -26,5 +26,25 @@ assert.deepEqual(preview.publishPlan.summary, {
   totalNextStock: 10,
 });
 assert.equal(preview.publishPlan.absentRows[0].sku, "SKU-3");
+
+const seedPreview = buildImportPreview({
+  type: "catalog_seed_inventory",
+  filename: "MASTER INVENTORY FILE.xlsx",
+  rowsTotal: 3748,
+  processedRows: 1312,
+  products: [{ sku: "IRUNSVAN-028" }],
+  variants: [{ sku: "202302800138" }],
+  colourMappings: [{ model_code: "028", original_colour: "亮桔色/海蓝" }],
+  inventoryRows: [{ sku: "202302800138", stock_quantity: 0 }],
+  seedSummary: { matchedModels: 20, variantCount: 1312, colourCount: 144, skippedRows: 2436 },
+  errors: [],
+});
+
+assert.equal(seedPreview.colourMappings.length, 1);
+assert.equal(seedPreview.seedSummary.variantCount, 1312);
+assert.equal(seedPreview.inventoryRows[0].stock_quantity, 0);
+
+assert.equal(buildImportJobFinish({ processedRows: 12, errorMessage: "3 rows need review" }).status, "completed");
+assert.equal(buildImportJobFinish({ processedRows: 0, errorMessage: "No rows matched" }).status, "failed");
 
 console.log("admin-imports tests passed");

@@ -1,6 +1,6 @@
 (function attachAuth(root) {
   const PUBLIC_ROUTES = new Set(["store", "product", "apply", "login", "about", "contact", "terms", "privacy"]);
-  const RESELLER_ROUTES = new Set(["reseller", "history"]);
+  const RESELLER_ROUTES = new Set(["reseller", "reseller-product", "history"]);
   const ADMIN_ROUTES = new Set(["admin", "products", "site", "approvals", "imports", "email"]);
 
   function normalizeRole(role) {
@@ -46,20 +46,6 @@
     }
   }
 
-  function buildDevAdminAuthState() {
-    return normalizeAuthState({
-      user: { id: "local-admin", email: "admin@ivansrun.africa" },
-      profile: {
-        id: "local-admin",
-        email: "admin@ivansrun.africa",
-        full_name: "Local Admin",
-        company_name: "Ivansrun Africa",
-        role: "admin",
-        approved: true,
-      },
-    });
-  }
-
   const api = {
     PUBLIC_ROUTES,
     RESELLER_ROUTES,
@@ -68,7 +54,6 @@
     normalizeAuthState,
     canAccessRoute,
     fallbackRouteForRole,
-    buildDevAdminAuthState,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

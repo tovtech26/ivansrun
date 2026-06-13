@@ -3,10 +3,17 @@ const {
   fallbackCatalog,
   productSelectQuery,
   variantSelectQuery,
+  colourMappingSelectQuery,
   protectedProductSource,
   protectedVariantSource,
+  protectedColourMappingSource,
+  protectedProductPriceSource,
+  protectedVariantPriceSource,
   protectedProductSelectQuery,
   protectedVariantSelectQuery,
+  protectedColourMappingSelectQuery,
+  protectedProductPriceSelectQuery,
+  protectedVariantPriceSelectQuery,
   normalizeCatalogRows,
 } = require("../src/catalog-data.js");
 
@@ -21,13 +28,24 @@ assert.equal(
   variantSelectQuery(),
   "select=id,product_id,sku,name,colour,original_colour,color_code,size,image_name,published&published=eq.true&order=sku.asc&limit=5000",
 );
+assert.equal(
+  colourMappingSelectQuery(),
+  "select=id,product_id,model_code,original_colour,colour,color_code,image_name,published&published=eq.true&order=model_code.asc&limit=5000",
+);
 
 assert.equal(productSelectQuery().includes("base_price"), false);
 assert.equal(variantSelectQuery().includes("base_price"), false);
-assert.equal(protectedProductSelectQuery().includes("base_price"), true);
-assert.equal(protectedVariantSelectQuery().includes("base_price"), true);
+assert.equal(colourMappingSelectQuery().includes("base_price"), false);
+assert.equal(protectedProductSelectQuery().includes("base_price"), false);
+assert.equal(protectedVariantSelectQuery().includes("base_price"), false);
 assert.equal(protectedProductSource(), "reseller_products");
 assert.equal(protectedVariantSource(), "reseller_product_variants");
+assert.equal(protectedProductPriceSource(), "authorized_product_prices");
+assert.equal(protectedVariantPriceSource(), "authorized_variant_prices");
+assert.equal(protectedProductPriceSelectQuery(), "select=id,base_price,base_currency&order=id.asc&limit=5000");
+assert.equal(protectedVariantPriceSelectQuery(), "select=id,base_price,base_currency&order=id.asc&limit=5000");
+assert.equal(protectedColourMappingSource(), "product_colour_mappings");
+assert.equal(protectedColourMappingSelectQuery(), "select=id,product_id,model_code,original_colour,colour,color_code,image_name,published&order=model_code.asc&limit=5000");
 
 assert.deepEqual(
   normalizeCatalogRows({

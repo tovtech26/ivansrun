@@ -17,10 +17,15 @@ const types = {
 };
 
 http
-  .createServer((request, response) => {
+  .createServer(async (request, response) => {
+    const startedAt = Date.now();
     const url = new URL(request.url, `http://${host}`);
     const requestedPath = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
     const filePath = path.join(root, requestedPath);
+
+    response.on("finish", () => {
+      console.log(`[static-server] ${request.method} ${requestedPath} -> ${response.statusCode} ${Date.now() - startedAt}ms`);
+    });
 
     if (!filePath.startsWith(root)) {
       response.writeHead(403);

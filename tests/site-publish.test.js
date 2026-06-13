@@ -4,7 +4,7 @@ const { buildSitePublishPayloads } = require("../src/site-publish.js");
 assert.deepEqual(
   buildSitePublishPayloads({
     hero: {
-      eyebrow: "Ivansrun Africa",
+      eyebrow: "Irunsvan Africa",
       title: "Built to move Africa.",
       copy: "Wholesale-ready performance footwear.",
       backgroundImage: "/Flyer Templates/Hero.jpg",
@@ -28,7 +28,7 @@ assert.deepEqual(
   }, "admin-1"),
   {
     heroRow: {
-      eyebrow: "Ivansrun Africa",
+      eyebrow: "Irunsvan Africa",
       title: "Built to move Africa.",
       copy: "Wholesale-ready performance footwear.",
       background_image: "/Flyer Templates/Hero.jpg",

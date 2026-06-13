@@ -11,6 +11,14 @@ npm run build
 npm run serve:dist
 ```
 
+Manual local workbook verification:
+
+```bash
+node tests/catalog-seed-real-master.test.js
+```
+
+This test is intentionally not part of `npm test` because it depends on the local workbook at `D:\downloads from my laptop\MASTER INVENTORY FILE.xlsx`.
+
 Open:
 
 ```text
@@ -30,6 +38,7 @@ supabase/sql/006_public_catalog_policy_fix.sql
 supabase/sql/007_site_controls.sql
 supabase/sql/008_product_catalog_workflow.sql
 supabase/sql/009_reseller_price_privacy_and_grants.sql
+supabase/sql/011_sku_first_catalog_import.sql
 ```
 
 If your Supabase project already exists and the app is showing errors like:
@@ -42,6 +51,12 @@ run this catch-up repair file once:
 
 ```text
 supabase/sql/010_schema_catchup_repair.sql
+```
+
+After `010_schema_catchup_repair.sql`, run:
+
+```text
+supabase/sql/011_sku_first_catalog_import.sql
 ```
 
 This repair file is idempotent. It creates the missing site-control tables, adds the later catalog columns, recreates the reseller pricing views, restores public-safe grants, and ensures the product image bucket policy exists.
@@ -85,11 +100,26 @@ This prevents direct route refreshes from returning Not Found.
 
 ## Operating Workflow
 
-1. Admin creates products from the Products page.
-2. Product variants are generated from colours and sizes.
-3. Every new variant starts with inventory `0`.
-4. Admin uploads the manufacturer master inventory file.
-5. The preview shows matched rows, unmatched rows, changed rows, and rows that will reset to zero.
-6. Publishing the import resets tracked stock first, then applies the new matched stock.
-7. Approved resellers submit order requests.
-8. Admin approval deducts stock and blocks approval if stock is no longer enough.
+1. Run the schema SQL through `supabase/sql/011_sku_first_catalog_import.sql`.
+2. Open `Admin -> Inventory`.
+3. Upload the master inventory file to build the selected catalog from the manufacturer rows.
+4. Review the preview for products, colour mappings, variants, skipped rows, and missing selected models.
+5. Commit the catalog seed so products, manufacturer-SKU variants, and zero-stock inventory rows are saved.
+6. Upload a later master inventory file to publish stock.
+7. Review SKU matches, changed stock, and rows that will reset to zero.
+8. Publish the stock update.
+9. Use `Admin -> Products -> Colour Review` to rename customer-facing colours, choose images, and control what is published.
+10. Admin can still add manual products from the Products page when needed.
+11. Approved resellers submit order requests.
+12. Admin approval deducts stock and blocks approval if stock is no longer enough.
+
+Manufacturer SKU is the permanent variant key. Colour and size are used for display and review. Future stock updates must match by SKU first.
+
+Current known master file reference:
+
+- `3,748` inventory rows
+- `76` total models
+- `21` selected product folders
+- `20` selected models found in inventory
+- `1,312` selected SKU rows
+- `165` has no matching inventory rows

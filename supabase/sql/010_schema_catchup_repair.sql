@@ -59,6 +59,7 @@ alter table public.product_variants
 
 do $$
 begin
+  alter type public.import_job_type add value if not exists 'catalog_seed_inventory';
   alter type public.import_job_type add value if not exists 'media_pack_zip';
 exception
   when duplicate_object then null;
@@ -178,8 +179,6 @@ select
   description,
   short_description,
   category,
-  base_price,
-  base_currency,
   image_names,
   published
 from public.products
@@ -199,8 +198,6 @@ select
   product_variants.original_colour,
   product_variants.color_code,
   product_variants.size,
-  product_variants.base_price,
-  product_variants.base_currency,
   product_variants.image_name,
   product_variants.published
 from public.product_variants
@@ -260,6 +257,50 @@ grant select, insert, update, delete on public.order_request_items to authentica
 grant select, insert, update, delete on public.reseller_applications to authenticated;
 grant select, insert, update, delete on public.profiles to authenticated;
 grant select, insert, update, delete on public.import_jobs to authenticated;
+
+update public.products
+set model_code = regexp_replace(sku, '^IRUNSVAN-', '')
+where (model_code is null or btrim(model_code) = '')
+  and sku ~ '^IRUNSVAN-[0-9A-Za-z_-]+$';
+
+update public.product_variants
+set original_colour = colour
+where (original_colour is null or btrim(original_colour) = '')
+  and colour is not null
+  and btrim(colour) <> '';
+
+insert into public.product_colour_mappings (
+  product_id,
+  model_code,
+  original_colour,
+  colour,
+  color_code,
+  image_name,
+  published
+)
+select distinct
+  p.id,
+  p.model_code,
+  v.original_colour,
+  v.colour,
+  coalesce(v.color_code, ''),
+  first_value(v.image_name) over (
+    partition by p.id, v.original_colour, coalesce(v.color_code, '')
+    order by v.image_name nulls last
+  ),
+  true
+from public.products p
+join public.product_variants v on v.product_id = p.id
+where p.model_code is not null
+  and btrim(p.model_code) <> ''
+  and v.original_colour is not null
+  and btrim(v.original_colour) <> ''
+on conflict (product_id, original_colour, color_code) do update set
+  model_code = excluded.model_code,
+  colour = excluded.colour,
+  image_name = coalesce(public.product_colour_mappings.image_name, excluded.image_name),
+  published = excluded.published,
+  updated_at = now();
 
 insert into storage.buckets (id, name, public)
 values ('product-images', 'product-images', true)

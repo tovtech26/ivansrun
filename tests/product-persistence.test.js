@@ -3,6 +3,7 @@ const {
   PRODUCT_IMAGE_BUCKET,
   buildProductUpsertPayload,
   buildVariantUpsertPayloads,
+  buildColourMappingUpsertPayloads,
   buildZeroInventoryPayloads,
   buildStoragePath,
   buildStoredImageRecords,
@@ -70,6 +71,51 @@ assert.deepEqual(
       base_price: 38,
       base_currency: "USD",
       image_name: "products/irunsvan-2503/20260605-front.jpg",
+      published: true,
+    },
+  ],
+);
+assert.equal(
+  buildVariantUpsertPayloads(
+    [
+      {
+        sku: "202425030137",
+        name: "IRUNSVAN 2503 Shadow Wing PRO+ - Green / Orange - Size 37",
+        colour: "Green / Orange",
+        original_colour: "绿野仙踪/青橙",
+        color_code: "001",
+        size: "37",
+        base_price: 58,
+        base_currency: "USD",
+        image_name: "2503-1.jpg",
+        published: true,
+      },
+    ],
+    "product-2503",
+  )[0].sku,
+  "202425030137",
+);
+
+assert.deepEqual(
+  buildColourMappingUpsertPayloads([
+    {
+      product_id: "product-2503",
+      model_code: "2503",
+      original_colour: "绿野仙踪/青橙",
+      colour: "Green / Orange",
+      color_code: "001",
+      image_name: "2503-1.jpg",
+      published: true,
+    },
+  ]),
+  [
+    {
+      product_id: "product-2503",
+      model_code: "2503",
+      original_colour: "绿野仙踪/青橙",
+      colour: "Green / Orange",
+      color_code: "001",
+      image_name: "2503-1.jpg",
       published: true,
     },
   ],

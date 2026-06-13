@@ -18,8 +18,6 @@ select
   description,
   short_description,
   category,
-  base_price,
-  base_currency,
   image_names,
   published
 from public.products
@@ -39,8 +37,6 @@ select
   product_variants.original_colour,
   product_variants.color_code,
   product_variants.size,
-  product_variants.base_price,
-  product_variants.base_currency,
   product_variants.image_name,
   product_variants.published
 from public.product_variants

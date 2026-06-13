@@ -4,6 +4,10 @@
     ["商品编码", "sku"],
     ["颜色及规格", "colour_size"],
     ["库存", "stock"],
+    ["款式编码", "style_code"],
+    ["商品编码", "sku"],
+    ["颜色及规格", "colour_size"],
+    ["库存", "stock"],
   ]);
 
   function normalizeHeader(header) {
