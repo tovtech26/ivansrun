@@ -14,6 +14,8 @@ const ROUTES = [
   "history",
   "admin",
   "team",
+  "requests",
+  "applications",
   "products",
   "site",
   "approvals",
@@ -1016,6 +1018,7 @@ function setRouteNotice(type, message) {
 }
 
 function routeForAccess(route) {
+  if (route === "approvals") return routeForAccess("requests");
   if (Auth.canAccessRoute(route, state.auth)) {
     setRouteNotice(null, "");
     return route;
@@ -1071,15 +1074,17 @@ function topNav() {
     ["Products", "store", ["store", "product"]],
     ["Find a Reseller", "find-reseller", ["find-reseller"]],
     ["Apply as a Reseller", "apply", ["apply"]],
-    ["Login", "login", ["login", "admin-login"]],
+    ...(state.auth.isAuthenticated ? [] : [["Login", "login", ["login", "admin-login"]]]),
   ];
   const drawerItems = mobileDrawerItems();
   const drawerLabel = mobileDrawerLabel();
   const homeRoute = currentPortalHomeRoute();
   const portalMode = currentPortalMode();
   const desktopItems = portalMode === "public" ? publicNavItems : drawerItems;
+  const adminReturn = state.auth.isAdmin && portalMode === "public" ? `<button data-route="admin" class="admin-return">Back to Admin</button>` : "";
   const navActions = state.auth.isAuthenticated
     ? `
+      ${adminReturn}
       <div class="account-chip">
         <span>${escapeHtml(authDisplayName())}</span>
         <small>${escapeHtml(roleLabel())}</small>
@@ -1123,7 +1128,7 @@ function mobileAreaLabel() {
 }
 
 function isAdminRoute(route = state.route) {
-  return ["admin", "team", "products", "site", "approvals", "imports", "email"].includes(route);
+  return ["admin", "team", "requests", "applications", "products", "site", "approvals", "imports", "email"].includes(route);
 }
 
 function isResellerRoute(route = state.route) {
@@ -1140,10 +1145,11 @@ function mobileDrawerItems() {
   if (currentPortalMode() === "admin") {
     return [
       ["Dashboard", "admin", ["admin"]],
+      ["Requests", "requests", ["requests"]],
+      ["Applications", "applications", ["applications"]],
       ["Team", "team", ["team"]],
       ["Products", "products", ["products"]],
       ["Inventory Uploads", "imports", ["imports"]],
-      ["Orders & Applications", "approvals", ["approvals"]],
       ["Site Controls", "site", ["site"]],
       ["Account", "account", ["account"]],
       ["View Public Site", "store", ["store", "product"]],
@@ -1158,9 +1164,9 @@ function mobileDrawerItems() {
       ];
     }
     return [
-      ["Shop", "reseller", ["reseller"]],
+      ["Request Products", "reseller", ["reseller"]],
       ["Product", "reseller-product", ["reseller-product"]],
-      ["Request History", "history", ["history"]],
+      ["My Requests", "history", ["history"]],
       ["Account", "account", ["account"]],
       ["Public Catalog", "store", ["store", "product"]],
       ["Become a Reseller", "apply", ["apply"]],
@@ -1183,6 +1189,8 @@ function mobileContextBar() {
     history: "Inventory",
     products: "Admin",
     site: "Admin",
+    requests: "Admin",
+    applications: "Admin",
     approvals: "Admin",
     imports: "Admin",
     email: "Admin",
@@ -2069,7 +2077,7 @@ function adminDashboard() {
       ${adminSidebar("admin")}
       <section class="admin-main">
         <header class="admin-topbar">
-          <div><h1>Irunsvan Africa Operations</h1><p>System overview and controls for catalog, stock, reseller access, and orders.</p></div>
+          <div><h1>Irunsvan Africa Operations</h1><p>System overview and controls for catalog, stock, reseller access, and product requests.</p></div>
           <button class="icon-button" data-route="email">Alerts</button>
         </header>
         ${metricGrid([
@@ -2083,9 +2091,10 @@ function adminDashboard() {
             "Reseller Applications",
             ["Company", "Country", "Status", "Actions"],
             state.resellerApplicationsData.map((application) => [application.company_name, application.country || "—", application.status, "Review"]),
+            "applications",
           )}
           ${adminTable(
-            "Order Requests",
+            "Product Requests",
             ["Order #", "Items / Qty", "Status", "Action"],
             orderRecords.map((record) => [
               record.code,
@@ -2093,6 +2102,7 @@ function adminDashboard() {
               record.status,
               "Review",
             ]),
+            "requests",
           )}
         </section>
         <section class="product-overview">
@@ -2129,6 +2139,7 @@ function adminTeam() {
         <section class="form-grid">
           <form class="workflow-form" data-form="team-role">
             <h2>Assign access</h2>
+            <p class="form-note">To add an admin, have the person sign in or submit a reseller application first. Then enter that existing account email here and set the role to Admin.</p>
             ${state.teamError ? `<p class="notice error">${escapeHtml(state.teamError)}</p>` : ""}
             ${state.teamSaved ? `<p class="notice success">Account access updated.</p>` : ""}
             ${inputField("Existing Account Email", "email", "name@example.com", "email")}
@@ -2450,6 +2461,121 @@ function productColorRow(index, imageOptions) {
   `;
 }
 
+function requestItemsForRecord(recordId) {
+  return state.orderRequestItems.filter((item) => item.order_request_id === recordId);
+}
+
+function profileForUserId(userId) {
+  return state.staffProfiles.find((profile) => profile.id === userId) || null;
+}
+
+function adminRequestItemList(record) {
+  const items = requestItemsForRecord(record.id);
+  if (!items.length) return `<p class="notice">No items are attached to this request.</p>`;
+  return `
+    <div class="request-item-list">
+      ${items
+        .map(
+          (item) => `
+            <div class="request-item-row">
+              <strong>${escapeHtml(item.product_name || item.sku || "Product")}</strong>
+              <span>${escapeHtml([item.colour, item.size ? `Size ${item.size}` : ""].filter(Boolean).join(" / ") || "Option not specified")}</span>
+              <span>${escapeHtml(`${Number(item.quantity || 0)} pairs`)}</span>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function adminRequests() {
+  const orderRecords = requestHistoryRecords();
+  return `
+    <main class="admin-layout">
+      ${adminSidebar("requests")}
+      <section class="admin-main">
+        <header class="admin-topbar"><div><h1>Product Requests</h1><p>Review reseller request lists and respond with a simple yes or no.</p></div></header>
+        <section class="admin-panels">
+          <div class="admin-card">
+            <div class="panel-toolbar"><h2>Submitted Requests</h2><span>${orderRecords.length} requests</span></div>
+            <div class="approval-stack">
+              ${
+                orderRecords.length
+                  ? orderRecords
+                      .map((record) => {
+                        const request = state.orderRequests.find((entry) => entry.id === record.id);
+                        const reseller = profileForUserId(request?.reseller_id);
+                        return `
+                          <article class="approval-item request-review-item">
+                            <div>
+                              <strong>${escapeHtml(record.code)}</strong>
+                              <p>${escapeHtml(reseller?.company_name || reseller?.email || "Reseller account")}</p>
+                              <p>${escapeHtml(`${record.totalItems} items / ${record.totalUnits} pairs`)}</p>
+                              ${adminRequestItemList(record)}
+                              <p>${escapeHtml(record.notes || "No reseller notes provided.")}</p>
+                              ${record.adminNotes ? `<p>${escapeHtml(`Admin note: ${record.adminNotes}`)}</p>` : ""}
+                            </div>
+                            <div class="approval-actions">
+                              ${statusPill(record.status)}
+                              <button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="approved">Can Supply</button>
+                              <button class="button mini secondary" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="rejected">Cannot Supply</button>
+                            </div>
+                          </article>
+                        `;
+                      })
+                      .join("")
+                  : `<p class="notice">No product requests available yet.</p>`
+              }
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  `;
+}
+
+function adminApplications() {
+  return `
+    <main class="admin-layout">
+      ${adminSidebar("applications")}
+      <section class="admin-main">
+        <header class="admin-topbar"><div><h1>Applications</h1><p>Approve reseller access after reviewing company details.</p></div></header>
+        <section class="admin-panels">
+          <div class="admin-card">
+            <div class="panel-toolbar"><h2>Reseller Applications</h2><span>${state.resellerApplicationsData.length} applications</span></div>
+            <div class="approval-stack">
+              ${
+                state.resellerApplicationsData.length
+                  ? state.resellerApplicationsData
+                      .map(
+                        (application) => `
+                      <article class="approval-item">
+                        <div>
+                          <strong>${escapeHtml(application.company_name)}</strong>
+                          <p>${escapeHtml(`${application.full_name} / ${application.email}`)}</p>
+                          <p>${escapeHtml(`${application.country || "Country not provided"}${application.phone ? ` / ${application.phone}` : ""}`)}</p>
+                          <p>${escapeHtml(application.message || "No reseller notes provided.")}</p>
+                        </div>
+                        <div class="approval-actions">
+                          ${statusPill(application.status)}
+                          <button class="button mini" data-action="application-status" data-application-id="${escapeHtml(application.id)}" data-user-id="${escapeHtml(application.user_id)}" data-status="approved">Approve</button>
+                          <button class="button mini secondary" data-action="application-status" data-application-id="${escapeHtml(application.id)}" data-user-id="${escapeHtml(application.user_id)}" data-status="rejected">Reject</button>
+                        </div>
+                      </article>
+                    `,
+                      )
+                      .join("")
+                  : `<p class="notice">No reseller applications available yet.</p>`
+              }
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+  `;
+}
+
 function adminApprovals() {
   const orderRecords = requestHistoryRecords();
   return `
@@ -2505,7 +2631,6 @@ function adminApprovals() {
                           ${statusPill(record.status)}
                           <button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="approved">Approve</button>
                           <button class="button mini secondary" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="rejected">Reject</button>
-                          <button class="button mini secondary" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="fulfilled">Fulfill</button>
                         </div>
                       </article>
                     `,
@@ -2776,10 +2901,11 @@ function adminSidebar(activeRoute) {
       ${logo("blue")}<span class="admin-chip">Africa Ops</span>
       <nav>
         ${adminLink("Dashboard", "admin", activeRoute)}
+        ${adminLink("Requests", "requests", activeRoute)}
+        ${adminLink("Applications", "applications", activeRoute)}
         ${adminLink("Team", "team", activeRoute)}
         ${adminLink("Products", "products", activeRoute)}
         ${adminLink("Inventory", "imports", activeRoute)}
-        ${adminLink("Orders", "approvals", activeRoute)}
         ${adminLink("Site Controls", "site", activeRoute)}
       </nav>
     </aside>
@@ -2790,10 +2916,10 @@ function adminLink(label, route, activeRoute) {
   return `<button class="${route === activeRoute ? "active" : ""}" data-route="${route}">${escapeHtml(label)}</button>`;
 }
 
-function adminTable(title, headers, rows) {
+function adminTable(title, headers, rows, route = "requests") {
   return `
     <div class="admin-card">
-      <div class="admin-card-head"><h2>${escapeHtml(title)}</h2><button data-route="approvals">View all</button></div>
+      <div class="admin-card-head"><h2>${escapeHtml(title)}</h2><button data-route="${escapeHtml(route)}">View all</button></div>
       <div class="table-wrap">
         <table>
           <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("")}</tr></thead>
@@ -2948,6 +3074,8 @@ function routeView() {
     history: requestHistory,
     admin: adminDashboard,
     team: adminTeam,
+    requests: adminRequests,
+    applications: adminApplications,
     products: adminProducts,
     site: adminSiteControls,
     approvals: adminApprovals,

@@ -58,6 +58,16 @@ assert.equal(appSource.includes("console.info(\"[server-monitor]\""), true, "Fro
 assert.equal(appSource.includes("response.clone().text()"), true, "Frontend monitoring must capture failing response bodies without consuming them.");
 assert.equal(appSource.includes("Promise.allSettled(tasks.map"), true, "Protected data loading must preserve successful feeds when one protected request fails.");
 assert.equal(appSource.includes("Some protected data could not load:"), true, "Partial protected data failures must be visible without hiding loaded inventory.");
+assert.equal(appSource.includes('"requests"'), true, "Admin routes must include a dedicated Requests page.");
+assert.equal(appSource.includes('"applications"'), true, "Admin routes must include a dedicated Applications page.");
+assert.equal(appSource.includes("function adminRequests()"), true, "Admin request review must have its own focused view.");
+assert.equal(appSource.includes("function adminApplications()"), true, "Reseller applications must have their own focused admin view.");
+assert.equal(appSource.includes('["Requests", "requests", ["requests"]]'), true, "Admin navigation must expose Requests as a first-level item.");
+assert.equal(appSource.includes('["Applications", "applications", ["applications"]]'), true, "Admin navigation must expose Applications as a first-level item.");
+assert.equal(appSource.includes("Orders & Applications"), false, "Admin navigation must not combine requests and applications into one ambiguous section.");
+assert.equal(appSource.includes('data-route="admin" class="admin-return"'), true, "Logged-in admins viewing the public site must get a persistent Back to Admin control.");
+assert.equal(appSource.includes('data-status="fulfilled"'), false, "Request review must not expose fulfillment as a one-click admin action.");
+assert.equal(appSource.includes("Product Requests"), true, "Admin copy must use request language instead of ecommerce order language.");
 assert.equal(appSource.includes("<h2>Live Inventory</h2>"), false, "Reseller portal must not present ordering as a live inventory table.");
 assert.equal(appSource.includes("<th>Exact Stock</th>"), false, "Reseller portal must not expose exact-stock table headings.");
 assert.equal(appSource.includes("Add live inventory lines"), false, "Reseller draft copy must describe products, not inventory lines.");

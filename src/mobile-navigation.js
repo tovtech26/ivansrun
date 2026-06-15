@@ -12,6 +12,8 @@
     "history",
     "admin",
     "team",
+    "requests",
+    "applications",
     "products",
     "site",
     "approvals",
@@ -23,7 +25,7 @@
     "privacy",
   ]);
 
-  const ADMIN_CHILDREN = new Set(["team", "products", "site", "approvals", "imports", "email"]);
+  const ADMIN_CHILDREN = new Set(["team", "requests", "applications", "products", "site", "approvals", "imports", "email"]);
   const INFO_ROUTES = new Set(["find-reseller", "apply", "login", "admin-login", "account", "about", "contact", "terms", "privacy"]);
 
   function backTargetForRoute(route) {

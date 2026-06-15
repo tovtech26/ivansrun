@@ -46,6 +46,10 @@ assert.equal(canAccessRoute("site", { role: "admin" }), true);
 assert.equal(canAccessRoute("team", { role: "admin" }), true);
 assert.equal(canAccessRoute("products", { role: "admin" }), true);
 assert.equal(canAccessRoute("imports", { role: "admin" }), true);
+assert.equal(canAccessRoute("requests", { role: "admin" }), true);
+assert.equal(canAccessRoute("applications", { role: "admin" }), true);
+assert.equal(canAccessRoute("requests", { role: "reseller" }), false);
+assert.equal(canAccessRoute("applications", { role: "reseller" }), false);
 
 assert.equal(fallbackRouteForRole("public"), "login");
 assert.equal(fallbackRouteForRole("pending_reseller"), "apply");
