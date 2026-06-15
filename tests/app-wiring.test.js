@@ -38,8 +38,12 @@ assert.equal(supabaseClientSource.includes("function authErrorMessage("), true, 
 assert.equal(supabaseClientSource.includes("function oauthResultFromSearch("), true, "Supabase client must inspect OAuth callback query parameters.");
 assert.equal(supabaseClientSource.includes("function oauthSessionFromHash("), true, "Supabase client must parse OAuth callback hash sessions.");
 assert.equal(authSource.includes("buildDevAdminAuthState"), false, "Auth module must not export fake dev admin state.");
-assert.equal(appSource.includes("loadCatalog();\ninitAuth();"), false, "Startup must not race public catalog loading against protected auth loading.");
-assert.equal(appSource.includes("await loadCatalog();\n  await initAuth();"), true, "Startup must load public catalog before protected auth data.");
+assert.equal(appSource.includes("loadCatalog();\ninitAuth();"), false, "Startup must not fire catalog and auth without explicit orchestration.");
+assert.equal(appSource.includes("await loadCatalog();\n  await initAuth();"), false, "OAuth callback routing must not wait for the public catalog before auth restore.");
+assert.equal(appSource.includes("const catalogLoad = loadCatalog();"), true, "Startup must begin catalog loading without blocking auth restore.");
+assert.equal(appSource.includes("await initAuth({ loadProtected: false });"), true, "OAuth callback routing must restore auth before protected data loading.");
+assert.equal(appSource.includes("state.authBootstrapPending = false;"), true, "Auth bootstrap screen must be cleared before background protected data loading.");
+assert.equal(appSource.includes("loadProtectedData().catch"), true, "Protected data should load in the background after sign-in routing.");
 assert.equal(appSource.includes("const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });"), true, "Startup must restore real Supabase sessions before protected data loading.");
 assert.equal(supabaseClientSource.includes("if (!session?.access_token) return { session: null, user: null, profile: null };"), true, "Auth restore must not create protected access without a real Supabase session.");
 assert.equal(appSource.includes("Sign in as a test reseller"), false, "Reseller portal must not mention test-session login paths.");
@@ -110,6 +114,9 @@ assert.equal(indexSource.includes("ivansrun-bulk-order-v1"), false, "Index must 
 assert.equal(indexSource.includes("ivansrun-auth-stock-v2"), false, "Index must not keep the stale auth stock cache key after bulk-order UI fixes.");
 assert.equal(indexSource.includes("ivansrun-ops-repair-v1"), false, "Index must not keep the stale operations cache key after auth and stock visibility fixes.");
 assert.equal(indexSource.includes("operations-products.js"), true, "Index must load the operations product view-model helper before app.js.");
+assert.equal(indexSource.includes("xlsx.full.min.js"), false, "XLSX import library must be lazy-loaded only when admin imports need it.");
+assert.equal(indexSource.includes("jszip.min.js"), false, "JSZip import library must be lazy-loaded only when admin imports need it.");
+assert.equal(appSource.includes("async function ensureImportLibraries("), true, "Admin imports must load spreadsheet/archive libraries on demand.");
 assert.equal(indexSource.includes("ivansrun-reseller-shop-v4"), false, "Index must not keep the stale reseller portal v4 cache key.");
 assert.equal(indexSource.includes("ivansrun-reseller-shop-v3"), false, "Index must not keep the stale reseller portal v3 cache key.");
 assert.equal(indexSource.includes("ivansrun-reseller-shop-v2"), false, "Index must not keep the stale reseller portal v2 cache key.");

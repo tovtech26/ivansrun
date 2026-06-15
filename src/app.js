@@ -51,6 +51,11 @@ const SERVER_MONITOR_ENABLED =
   typeof window !== "undefined" &&
   (["localhost", "127.0.0.1", ""].includes(window.location.hostname) ||
     new URLSearchParams(window.location.search).get("monitor") === "servers");
+const IMPORT_LIBRARY_URLS = {
+  xlsx: "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js",
+  jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
+};
+const importLibraryLoads = {};
 
 function readStoredSiteContent() {
   try {
@@ -546,6 +551,33 @@ async function publishActiveSiteContent(siteContent) {
   await insertAuthedSupabase("hero_sections", payloads.heroRow);
   await insertAuthedSupabase("site_themes", payloads.themeRow);
   await insertAuthedSupabase("site_content", payloads.contentRow);
+}
+
+function loadExternalScript(key, src, globalName) {
+  if (window[globalName]) return Promise.resolve();
+  if (importLibraryLoads[key]) return importLibraryLoads[key];
+  importLibraryLoads[key] = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      delete importLibraryLoads[key];
+      reject(new Error(`${globalName} could not be loaded.`));
+    };
+    document.head.appendChild(script);
+  });
+  return importLibraryLoads[key];
+}
+
+async function ensureImportLibraries(type, fileName = "") {
+  const needsSpreadsheet = type === "inventory_xlsx" && !/\.csv$/i.test(fileName);
+  if (needsSpreadsheet) {
+    await loadExternalScript("xlsx", IMPORT_LIBRARY_URLS.xlsx, "XLSX");
+  }
+  if (type === "media_pack_zip") {
+    await loadExternalScript("jszip", IMPORT_LIBRARY_URLS.jszip, "JSZip");
+  }
 }
 
 async function buildImportPreviewFromFile(type, file) {
@@ -3157,6 +3189,7 @@ function bindEvents() {
       const file = input.files?.[0];
       const type = input.getAttribute("data-import-type");
       if (file && type) {
+        await ensureImportLibraries(type, file.name);
         await handleImportFile(type, file);
       }
     });
@@ -3320,8 +3353,8 @@ async function handleLogin(form) {
     }
     state.loginSubmitted = true;
     state.routeNotice = null;
-    await loadProtectedData();
     setRoute(Auth.fallbackRouteForRole(state.auth.role), {}, { replaceHistory: true, scroll: false });
+    loadProtectedDataInBackground();
   } catch (error) {
     state.auth = Auth.normalizeAuthState();
     state.authError = error instanceof Error ? error.message : "Unable to sign in";
@@ -4274,12 +4307,23 @@ window.addEventListener("popstate", (event) => {
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
 
-async function initAuth() {
+function loadProtectedDataInBackground() {
+  if (!state.auth.isAuthenticated) return;
+  loadProtectedData().catch((error) => {
+    const message = error instanceof Error ? error.message : "Unable to load reseller data";
+    state.inventoryError = message;
+    state.historyError = message;
+    state.applicationError = message;
+    render();
+  });
+}
+
+async function initAuth({ loadProtected = true } = {}) {
   try {
     const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });
     state.auth = Auth.normalizeAuthState(restored);
     state.authError = authProfileError(state.auth);
-    await loadProtectedData();
+    if (loadProtected) await loadProtectedData();
   } catch (error) {
     state.auth = Auth.normalizeAuthState();
     state.authError = error instanceof Error ? error.message : "Unable to restore account session";
@@ -4300,13 +4344,14 @@ async function initializeApp() {
     state.authError = oauthResult.error || oauthError;
   }
   render();
-  await loadCatalog();
-  await initAuth();
+  const catalogLoad = loadCatalog();
+  await initAuth({ loadProtected: false });
   if (oauthResult.error || oauthError) state.authError = oauthResult.error || oauthError;
   if ((oauthResult.session?.access_token && state.auth.isAuthenticated) || (passwordResetHint && state.auth.isAuthenticated)) {
     if (passwordResetHint) {
       state.passwordResetMode = true;
       setRoute("account", {}, { replaceHistory: true, scroll: false });
+      loadProtectedDataInBackground();
       return;
     }
     if (loginRouteHint === "admin-login" && !state.auth.isAdmin) {
@@ -4317,13 +4362,16 @@ async function initializeApp() {
       return;
     }
     setRoute(Auth.fallbackRouteForRole(state.auth.role), {}, { replaceHistory: true, scroll: false });
+    loadProtectedDataInBackground();
   } else {
     syncRouteFromLocation();
     if (loginRouteHint && !window.location.hash) {
       state.route = loginRouteHint;
     }
     render();
+    loadProtectedDataInBackground();
   }
+  await catalogLoad;
 }
 
 initializeApp();
