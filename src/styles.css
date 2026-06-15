@@ -999,6 +999,17 @@ h4 {
   padding: 12px;
 }
 
+.invite-link-row {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.invite-link-row input {
+  flex: 1;
+  min-width: 0;
+}
+
 .password-help-card {
   margin-top: 16px;
 }
@@ -2150,6 +2161,10 @@ textarea {
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
+}
+
+.admin-return-bar .admin-return {
+  white-space: nowrap;
 }
 
 .upload-grid {

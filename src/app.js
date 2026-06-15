@@ -104,6 +104,7 @@ const state = {
   resellerApplicationsData: [],
   importJobs: [],
   staffProfiles: [],
+  adminInvites: [],
   loading: true,
   authLoading: true,
   authBootstrapPending: hasPendingOAuthCallback() || hasStoredAuthSession(),
@@ -153,6 +154,15 @@ const state = {
   productPriceError: null,
   productImageDrafts: [],
   emailTemplatePreview: null,
+  adminInviteToken: null,
+  adminInviteDetails: null,
+  adminInviteLookupPending: false,
+  adminInviteClaimPending: false,
+  adminInviteError: null,
+  adminInviteCreatedLink: null,
+  adminInviteCreatedEmail: null,
+  teamInviteCreatePending: false,
+  teamInviteError: null,
   mobileNavOpen: false,
   catalogFiltersOpen: false,
   navigationDepth: 0,
@@ -450,6 +460,19 @@ async function invokeAuthedRpc(functionName, payload) {
     method: "POST",
     headers: {
       ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await buildResponseError(`${functionName} invoke failed`, response);
+  return response.json();
+}
+
+async function invokePublicRpc(functionName, payload) {
+  const response = await monitoredFetch(`rpc:${functionName}`, `${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+    method: "POST",
+    headers: {
+      ...SupabaseClient.headers(SUPABASE_KEY, SUPABASE_KEY),
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
@@ -826,6 +849,24 @@ function currentUserCountry() {
   return latestOwnApplication()?.country || "Not set";
 }
 
+function buildAdminInviteUrl(token) {
+  const url = new URL(window.location.origin + window.location.pathname);
+  url.searchParams.set("invite", token);
+  return url.toString();
+}
+
+async function hashInviteToken(token) {
+  const bytes = new TextEncoder().encode(String(token || ""));
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function consumeAdminInviteHint() {
+  const url = new URL(window.location.href);
+  const token = url.searchParams.get("invite");
+  return token ? token.trim() : null;
+}
+
 function currentPortalMode() {
   if (isAdminRoute() || (state.route === "account" && state.auth.isAdmin)) return "admin";
   if (isResellerRoute() || (state.route === "account" && state.auth.isAuthenticated)) return "reseller";
@@ -883,6 +924,7 @@ async function loadProtectedData() {
     state.resellerApplicationsData = [];
     state.colourMappings = [];
     state.staffProfiles = [];
+    state.adminInvites = [];
     state.resellerDraft = {};
     state.inventoryError = null;
     state.historyError = null;
@@ -935,6 +977,7 @@ async function loadProtectedData() {
     if (state.auth.isAdmin) {
       tasks.push(
         ["profiles", fetchAuthedSupabase("profiles", "select=id,email,full_name,company_name,phone,role&order=role.asc,email.asc&limit=200")],
+        ["adminInvites", fetchAuthedSupabase("admin_invites", "select=id,email,status,note,created_by,claimed_by,created_at,expires_at,used_at,revoked_at&order=created_at.desc&limit=200")],
         [
           "importJobs",
           fetchAuthedSupabase(
@@ -974,6 +1017,7 @@ async function loadProtectedData() {
     state.orderRequestItems = data.orderRequestItems || [];
     state.importJobs = data.importJobs || [];
     state.staffProfiles = data.profiles || [];
+    state.adminInvites = data.adminInvites || [];
     if (failures.length) {
       const message = `Some protected data could not load: ${failures.join("; ")}`;
       state.inventoryError = message;
@@ -1002,7 +1046,7 @@ function setRoute(route, params = {}, options = {}) {
   state.catalogFiltersOpen = false;
   if (options.writeHistory !== false) {
     const historyState = { route: nextRoute, productId: state.selectedProductId || null };
-    const url = MobileNavigation.buildRouteUrl(nextRoute, historyState);
+    const url = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, historyState)}`;
     if (options.replaceHistory) {
       window.history.replaceState(historyState, "", url);
     } else {
@@ -1056,7 +1100,7 @@ function loginPageContent(route = state.route) {
       copy: "Only approved admin accounts can open product controls, inventory uploads, and reseller approvals.",
       submitLabel: "Continue to Admin",
       linkOne: ["Back to reseller login", "login"],
-      linkTwo: ["Apply as a Reseller", "apply"],
+      linkTwo: ["Back to public site", "store"],
     };
   }
   return {
@@ -1074,18 +1118,32 @@ function topNav() {
   const publicNavItems = [
     ["Products", "store", ["store", "product"]],
     ["Find a Reseller", "find-reseller", ["find-reseller"]],
-    ["Apply as a Reseller", "apply", ["apply"]],
-    ...(state.auth.isAuthenticated ? [] : [["Login", "login", ["login", "admin-login"]]]),
+    ...(state.auth.isAuthenticated
+      ? []
+      : [
+          ["Apply as a Reseller", "apply", ["apply"]],
+          ["Login", "login", ["login", "admin-login"]],
+        ]),
   ];
+  const resellerNavItems = state.auth.isPending
+    ? [
+        ["Application", "apply", ["apply"]],
+        ["Account", "account", ["account"]],
+        ["Public Catalog", "store", ["store", "product"]],
+      ]
+    : [
+        ["Request Products", "reseller", ["reseller"]],
+        ["My Requests", "history", ["history"]],
+        ["Account", "account", ["account"]],
+        ["Public Catalog", "store", ["store", "product"]],
+      ];
   const drawerItems = mobileDrawerItems();
   const drawerLabel = mobileDrawerLabel();
   const homeRoute = currentPortalHomeRoute();
   const portalMode = currentPortalMode();
-  const desktopItems = portalMode === "public" ? publicNavItems : drawerItems;
-  const adminReturn = state.auth.isAdmin && portalMode === "public" ? `<button data-route="admin" class="admin-return">Back to Admin</button>` : "";
+  const desktopItems = portalMode === "public" ? publicNavItems : portalMode === "reseller" ? resellerNavItems : [];
   const navActions = state.auth.isAuthenticated
     ? `
-      ${adminReturn}
       <div class="account-chip">
         <span>${escapeHtml(authDisplayName())}</span>
         <small>${escapeHtml(roleLabel())}</small>
@@ -1171,6 +1229,31 @@ function mobileDrawerItems() {
       ["Account", "account", ["account"]],
       ["Public Catalog", "store", ["store", "product"]],
       ["Become a Reseller", "apply", ["apply"]],
+    ];
+  }
+  if (state.auth.isAuthenticated) {
+    if (state.auth.isAdmin) {
+      return [
+        ["Products", "store", ["store", "product"]],
+        ["Find a Reseller", "find-reseller", ["find-reseller"]],
+        ["Account", "account", ["account"]],
+        ["Back to Admin", "admin", ["admin"]],
+      ];
+    }
+    if (state.auth.isPending) {
+      return [
+        ["Products", "store", ["store", "product"]],
+        ["Find a Reseller", "find-reseller", ["find-reseller"]],
+        ["Application", "apply", ["apply"]],
+        ["Account", "account", ["account"]],
+      ];
+    }
+    return [
+      ["Products", "store", ["store", "product"]],
+      ["Find a Reseller", "find-reseller", ["find-reseller"]],
+      ["Request Products", "reseller", ["reseller"]],
+      ["My Requests", "history", ["history"]],
+      ["Account", "account", ["account"]],
     ];
   }
   return [
@@ -2124,6 +2207,7 @@ function adminTeam() {
   const admins = state.staffProfiles.filter((profile) => profile.role === "admin");
   const resellers = state.staffProfiles.filter((profile) => profile.role === "reseller");
   const pending = state.staffProfiles.filter((profile) => profile.role === "pending_reseller");
+  const invites = state.adminInvites || [];
   return `
     <main class="admin-layout">
       ${adminSidebar("team")}
@@ -2135,8 +2219,23 @@ function adminTeam() {
           ["Admins", String(admins.length), "Operations accounts"],
           ["Approved Resellers", String(resellers.length), "Can place wholesale requests"],
           ["Pending Accounts", String(pending.length), "Need review or promotion"],
+          ["Admin Invites", String(invites.filter((invite) => invite.status === "pending").length), "Private links waiting to be used"],
           ["Total Profiles", String(state.staffProfiles.length), "Stored user records"],
         ])}
+        <section class="admin-panels">
+          <div class="admin-card">
+            <div class="panel-toolbar"><h2>Create Admin Invite</h2><span>Private link only</span></div>
+            ${state.teamInviteError ? `<p class="notice error">${escapeHtml(state.teamInviteError)}</p>` : ""}
+            ${state.adminInviteCreatedLink ? `<p class="notice success">Invite created for ${escapeHtml(state.adminInviteCreatedEmail || "the selected email")}.</p>` : ""}
+            ${state.adminInviteCreatedLink ? `<div class="invite-link-row"><label><span>Invite Link</span><input readonly value="${escapeHtml(state.adminInviteCreatedLink)}" /></label><button type="button" class="button secondary" data-action="copy-admin-invite" data-link="${escapeHtml(state.adminInviteCreatedLink)}">Copy Invite Link</button></div>` : ""}
+            <form class="workflow-form" data-form="admin-invite">
+              ${inputField("Invite Email", "invite_email", "name@example.com", "email")}
+              <label><span>Expires in Days</span><input name="expires_days" type="number" min="1" max="30" value="7" /></label>
+              <label><span>Note</span><textarea name="invite_note" placeholder="Optional note for this invite."></textarea></label>
+              <button class="button primary full" ${state.teamInviteCreatePending ? "disabled" : ""}>${state.teamInviteCreatePending ? "Creating..." : "Create Invite Link"}</button>
+            </form>
+          </div>
+        </section>
         <section class="form-grid">
           <form class="workflow-form" data-form="team-role">
             <h2>Assign access</h2>
@@ -2175,6 +2274,38 @@ function adminTeam() {
                           )
                           .join("")
                       : `<tr><td colspan="5">No staff or reseller profiles loaded yet.</td></tr>`
+                  }
+                </tbody>
+              </table>
+            </div>
+            <div class="panel-toolbar" style="margin-top: 24px;"><h2>Admin Invites</h2><span>${invites.length} total</span></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Email</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead>
+                <tbody>
+                  ${
+                    invites.length
+                      ? invites
+                          .map((invite) => {
+                            const inviteExpired = invite.status === "pending" && invite.expires_at && new Date(invite.expires_at).getTime() < Date.now();
+                            const status = inviteExpired ? "expired" : invite.status;
+                            return `
+                              <tr>
+                                <td>${escapeHtml(invite.email)}</td>
+                                <td>${statusPill(status)}</td>
+                                <td>${escapeHtml(new Date(invite.expires_at).toLocaleDateString())}</td>
+                                <td>
+                                  ${
+                                    invite.status === "pending"
+                                      ? `<button class="button mini secondary" data-action="revoke-admin-invite" data-invite-id="${escapeHtml(invite.id)}">Revoke</button>`
+                                      : `<span class="form-note">${escapeHtml(invite.status === "used" ? "Already claimed" : invite.status === "revoked" ? "Revoked" : "Expired")}</span>`
+                                  }
+                                </td>
+                              </tr>
+                            `;
+                          })
+                          .join("")
+                      : `<tr><td colspan="4">No admin invites created yet.</td></tr>`
                   }
                 </tbody>
               </table>
@@ -3047,11 +3178,27 @@ function catalogPager({ startIndex, endIndex, totalProducts, currentPage, totalP
 }
 
 function footer(compact = false) {
+  const resourceButtons = `
+    <button data-route="store">Products</button>
+    <button data-route="find-reseller">Find a Reseller</button>
+    <button data-route="contact">Support</button>
+  `;
+  const operationButtons = state.auth.isAuthenticated
+    ? `
+      <button data-route="account">Account</button>
+      <button data-action="logout">Logout</button>
+    `
+    : `
+      <button data-route="apply">Apply as a Reseller</button>
+      <button data-route="login">Login</button>
+      <button data-route="admin-login">Admin Login</button>
+      <button data-route="privacy">Privacy Policy</button>
+    `;
   return `
     <footer class="${compact ? "footer compact" : "footer"}">
       <div>${logo("blue")}<p>High-performance athletic footwear for Africa's reseller-ready inventory workflows.</p></div>
-      <div><strong>Resources</strong><button data-route="store">Products</button><button data-route="find-reseller">Find a Reseller</button><button data-route="contact">Support</button></div>
-      <div><strong>Operations</strong><button data-route="apply">Apply as a Reseller</button><button data-route="login">Login</button><button data-route="admin-login">Admin Login</button><button data-route="privacy">Privacy Policy</button></div>
+      <div><strong>Resources</strong>${resourceButtons}</div>
+      <div><strong>Operations</strong>${operationButtons}</div>
       <p class="copyright">Copyright 2026 Irunsvan Africa High-Performance Footwear.</p>
     </footer>
   `;
@@ -3175,10 +3322,34 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='copy-admin-invite']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const link = String(button.getAttribute("data-link") || "").trim();
+      if (!link) return;
+      try {
+        await navigator.clipboard.writeText(link);
+      } catch {
+        const input = document.createElement("input");
+        input.value = link;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand("copy");
+        input.remove();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-action='revoke-admin-invite']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await handleAdminInviteRevoke(button.getAttribute("data-invite-id"));
+    });
+  });
+
   document.querySelectorAll("[data-form]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
       const formName = form.getAttribute("data-form");
+      if (formName === "admin-invite") await handleAdminInviteCreate(form);
       if (formName === "application") await handleApplicationSubmit(form);
       if (formName === "order") await handleOrderSubmit(form);
       if (formName === "login") await handleLogin(form);
@@ -3406,7 +3577,8 @@ function syncRouteFromLocation(options = {}) {
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;
   if (options.replaceHistory !== false) {
-    window.history.replaceState({ route: nextRoute, productId: state.selectedProductId || null }, "", MobileNavigation.buildRouteUrl(nextRoute, { productId: state.selectedProductId }));
+    const cleanUrl = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, { productId: state.selectedProductId })}`;
+    window.history.replaceState({ route: nextRoute, productId: state.selectedProductId || null }, "", cleanUrl);
   }
 }
 
@@ -3630,6 +3802,116 @@ async function handleTeamRoleSave(form) {
   }
 }
 
+async function loadAdminInviteDetails(token) {
+  const inviteToken = String(token || "").trim();
+  if (!inviteToken) return null;
+  state.adminInviteLookupPending = true;
+  state.adminInviteError = null;
+  render();
+
+  try {
+    const result = await invokePublicRpc("lookup_admin_invite", { p_token: inviteToken });
+    const invite = Array.isArray(result) ? result[0] : result;
+    if (!invite?.email) {
+      throw new Error("This admin invite link is invalid or has already been used.");
+    }
+    state.adminInviteDetails = invite;
+    return invite;
+  } catch (error) {
+    state.adminInviteDetails = null;
+    state.adminInviteError = error instanceof Error ? error.message : "Unable to load admin invite";
+    return null;
+  } finally {
+    state.adminInviteLookupPending = false;
+    render();
+  }
+}
+
+async function handleAdminInviteCreate(form) {
+  const data = new FormData(form);
+  const email = String(data.get("invite_email") || "").trim().toLowerCase();
+  const note = String(data.get("invite_note") || "").trim();
+  const expiresDays = Number(data.get("expires_days") || 7);
+  state.teamInviteCreatePending = true;
+  state.teamInviteError = null;
+  state.adminInviteCreatedLink = null;
+  state.adminInviteCreatedEmail = null;
+  render();
+
+  try {
+    if (!email) throw new Error("Enter the email address for the invite.");
+    if (!Number.isFinite(expiresDays) || expiresDays < 1 || expiresDays > 30) {
+      throw new Error("Choose an expiration between 1 and 30 days.");
+    }
+    const token = crypto.randomUUID();
+    const tokenHash = await hashInviteToken(token);
+    const expiresAt = new Date(Date.now() + expiresDays * 24 * 60 * 60 * 1000).toISOString();
+    await insertAuthedSupabase("admin_invites", {
+      email,
+      token_hash: tokenHash,
+      created_by: state.auth.user?.id || null,
+      note: note || null,
+      expires_at: expiresAt,
+    });
+    state.adminInviteCreatedLink = buildAdminInviteUrl(token);
+    state.adminInviteCreatedEmail = email;
+    form.reset();
+  } catch (error) {
+    state.teamInviteError = error instanceof Error ? error.message : "Unable to create admin invite";
+  } finally {
+    state.teamInviteCreatePending = false;
+    render();
+  }
+}
+
+async function handleAdminInviteRevoke(inviteId) {
+  const id = String(inviteId || "").trim();
+  if (!id) return;
+  try {
+    await patchAuthedSupabase("admin_invites", `id=eq.${encodeURIComponent(id)}`, {
+      status: "revoked",
+      revoked_at: new Date().toISOString(),
+    });
+    state.adminInvites = (state.adminInvites || []).map((invite) =>
+      invite.id === id ? { ...invite, status: "revoked", revoked_at: new Date().toISOString() } : invite,
+    );
+    render();
+  } catch (error) {
+    state.teamInviteError = error instanceof Error ? error.message : "Unable to revoke invite";
+    render();
+  }
+}
+
+async function claimAdminInvite(token) {
+  const inviteToken = String(token || "").trim();
+  if (!inviteToken) return;
+  state.adminInviteClaimPending = true;
+  state.adminInviteError = null;
+  render();
+
+  try {
+    await invokeAuthedRpc("claim_admin_invite", { p_token: inviteToken });
+    const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });
+    state.auth = Auth.normalizeAuthState(restored);
+    state.adminInviteToken = null;
+    state.adminInviteDetails = null;
+    state.adminInviteLookupPending = false;
+    state.adminInviteClaimPending = false;
+    state.adminInviteError = null;
+    setRoute("admin", {}, { replaceHistory: true, scroll: false });
+    loadProtectedDataInBackground();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to claim admin invite";
+    state.adminInviteError = message;
+    state.adminInviteClaimPending = false;
+    if (state.auth.isAuthenticated) {
+      await SupabaseClient.signOut();
+      state.auth = Auth.normalizeAuthState();
+    }
+    render();
+  }
+}
+
 function consumeLoginRouteHint() {
   const url = new URL(window.location.href);
   const loginHint = url.searchParams.get("login");
@@ -3674,6 +3956,15 @@ async function handleLogout() {
   state.accountProfileError = null;
   state.accountPasswordSaved = false;
   state.accountPasswordError = null;
+  state.adminInviteToken = null;
+  state.adminInviteDetails = null;
+  state.adminInviteLookupPending = false;
+  state.adminInviteClaimPending = false;
+  state.adminInviteError = null;
+  state.adminInviteCreatedLink = null;
+  state.adminInviteCreatedEmail = null;
+  state.teamInviteCreatePending = false;
+  state.teamInviteError = null;
   state.resellerDraft = {};
   state.resellerNotes = "";
   state.orderSubmitted = false;
@@ -4415,17 +4706,75 @@ function applyRevealMotion() {
 
 function render() {
   SiteControls.applySiteTheme(state.siteContent.theme, document.documentElement);
-  document.getElementById("app").innerHTML = state.authBootstrapPending ? authBootstrapView() : adminPublicBar() + topNav() + routeView();
+  if (state.adminInviteToken) {
+    document.getElementById("app").innerHTML = adminInvitePage();
+  } else {
+    document.getElementById("app").innerHTML = state.authBootstrapPending ? authBootstrapView() : adminPublicBar() + topNav() + routeView();
+  }
   bindEvents();
   applyRevealMotion();
 }
 
+function adminInvitePage() {
+  const invite = state.adminInviteDetails;
+  const inviteExpired = Boolean(invite && invite.expires_at && new Date(invite.expires_at).getTime() < Date.now());
+  const inviteStatus = invite?.status === "used" ? "This invite has already been used." : invite?.status === "revoked" ? "This invite has been revoked." : inviteExpired ? "This invite has expired." : null;
+  const inviteCopy = invite
+    ? `This invite was created for ${invite.email}. Sign in with Google using that address to claim admin access.`
+    : state.adminInviteLookupPending
+      ? "Checking this invite link..."
+      : state.adminInviteError
+        ? state.adminInviteError
+        : "Open the invite link from your email to continue.";
+  return `
+    <main class="form-page narrow">
+      <section class="form-hero">
+        <span class="eyebrow dark">Admin Invite</span>
+        <h1>Sign in with Google to claim admin access.</h1>
+        <p>${escapeHtml(inviteCopy)}</p>
+      </section>
+      <section class="form-grid">
+        <div class="workflow-form">
+          ${inviteStatus ? `<p class="notice error">${escapeHtml(inviteStatus)}</p>` : ""}
+          ${state.adminInviteError && !inviteStatus ? `<p class="notice error">${escapeHtml(state.adminInviteError)}</p>` : ""}
+          ${invite?.note ? `<p class="notice">${escapeHtml(invite.note)}</p>` : ""}
+          <p class="form-note">Only the Google account that matches the invite email can claim this admin invite. If you sign in with the wrong account, the request will be rejected.</p>
+          <button class="button primary full" data-action="google-login" ${state.loginPending || state.adminInviteClaimPending || Boolean(inviteStatus) ? "disabled" : ""}>${state.adminInviteClaimPending ? "Claiming..." : "Continue with Google"}</button>
+          <button type="button" class="button secondary full" data-route="store">Back to Public Site</button>
+        </div>
+        <aside class="process-panel">
+          <h2>Invite flow</h2>
+          ${processStep("1", "Open invite link", "Use the private link sent by the admin.")}
+          ${processStep("2", "Sign in with Google", "Use the exact email address that received the invite.")}
+          ${processStep("3", "Claim access", "The account is promoted to admin after the email matches.")}
+        </aside>
+      </section>
+    </main>
+  `;
+}
+
 function adminPublicBar() {
-  if (!state.auth.isAdmin || currentPortalMode() !== "public") return "";
+  if (!state.auth.isAuthenticated || currentPortalMode() !== "public") return "";
+  if (state.auth.isAdmin) {
+    return `
+      <div class="admin-return-bar">
+        <span>You are signed in as admin.</span>
+        <button data-route="admin" class="admin-return button mini">Back to Admin</button>
+      </div>
+    `;
+  }
+  if (state.auth.isReseller) {
+    return `
+      <div class="admin-return-bar">
+        <span>You are signed in as a reseller.</span>
+        <button data-route="reseller" class="admin-return button mini">Go to Reseller Portal</button>
+      </div>
+    `;
+  }
   return `
     <div class="admin-return-bar">
-      <span>You are signed in as admin.</span>
-      <button class="button mini" data-route="admin">Back to Admin</button>
+      <span>You are signed in.</span>
+      <button data-route="${Auth.fallbackRouteForRole(state.auth.role)}" class="admin-return button mini">Go to Your Workspace</button>
     </div>
   `;
 }
@@ -4485,17 +4834,31 @@ async function initializeApp() {
   const oauthResult = SupabaseClient.consumeOAuthSessionFromUrl();
   const loginRouteHint = consumeLoginRouteHint();
   const passwordResetHint = consumePasswordResetHint();
+  const adminInviteToken = consumeAdminInviteHint();
   const oauthError = SupabaseClient.consumeOAuthError();
   const hasOAuthError = Boolean(oauthResult.error || oauthError);
+  if (adminInviteToken) {
+    state.adminInviteToken = adminInviteToken;
+    loadAdminInviteDetails(adminInviteToken);
+  }
   if (hasOAuthError) {
     state.route = loginRouteHint || "login";
     state.authError = oauthResult.error || oauthError;
-    window.history.replaceState({}, "", MobileNavigation.buildRouteUrl(state.route));
+    window.history.replaceState({}, "", `${window.location.pathname}${MobileNavigation.buildRouteUrl(state.route)}`);
   }
   render();
   const catalogLoad = loadCatalog();
   await initAuth({ loadProtected: false });
   if (hasOAuthError) state.authError = oauthResult.error || oauthError;
+  if (state.adminInviteToken && state.auth.isAuthenticated) {
+    await claimAdminInvite(state.adminInviteToken);
+    await catalogLoad;
+    return;
+  }
+  if (state.adminInviteToken) {
+    await catalogLoad;
+    return;
+  }
   if ((oauthResult.session?.access_token && state.auth.isAuthenticated) || (passwordResetHint && state.auth.isAuthenticated)) {
     if (passwordResetHint) {
       state.passwordResetMode = true;

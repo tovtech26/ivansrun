@@ -1,0 +1,142 @@
+UI Gaps Audit
+
+Date: 2026-06-15
+Scope: Public site, reseller portal, admin console, account/login flows
+
+1. Navigation is not yet a complete site map.
+   - The app has mode-based navigation, but there is no stable global structure that clearly shows the full information hierarchy.
+   - There is no breadcrumb trail or page-level map.
+   - Users can see where they are, but not always where they should go next.
+
+2. The app still feels like three stitched-together tools.
+   - Public, reseller, and admin flows exist, but the transition between them is not fully coherent.
+   - The overall experience still requires the user to infer context instead of the interface making it obvious.
+
+3. Request workflow language is inconsistent.
+   - Reseller areas still use ecommerce-like language such as shop, order request, submit order request, and current request.
+   - Admin areas use review language such as can supply and cannot supply.
+   - The two sides do not use one shared mental model.
+
+4. The request lifecycle is incomplete on the reseller side.
+   - A reseller can submit a request and view history, but there is no detailed request status journey.
+   - There is no clear response loop showing what admin decided and what the reseller should do next.
+   - History is currently too flat for a real operations workflow.
+
+5. The admin workflow is split into overlapping concepts.
+   - Requests, applications, and approvals overlap in meaning.
+   - One route is effectively rewritten into another, which makes the structure feel unfinished.
+   - The operator has to guess which screen is the authoritative place to work.
+
+6. There are redundant or confusing admin entry points.
+   - Requests and approvals are both present.
+   - This creates duplicated mental models for the same job.
+   - A human operator should not need to choose between multiple screens for the same queue.
+
+7. The app does not clearly prioritize admin work.
+   - Inventory uploads, media scans, stock reset, product editing, colour review, requests, applications, team, site controls, and email templates all compete for attention.
+   - There is no strong "what needs attention now" layer.
+   - The dashboard feels busy instead of guided.
+
+8. The account surface is underdeveloped for a multi-role system.
+   - The account page shows profile and password fields, but it does not clearly answer status, next step, or role-specific capability.
+   - Pending reseller users do not get a strong operational path.
+   - Admin handoff and admin addition flows are not obvious.
+
+9. Role-context leaks still exist in navigation and footer areas.
+   - Some authenticated surfaces still expose login links that are no longer relevant.
+   - The user sees controls that do not match their current state.
+   - This weakens the sense that the app understands who is using it.
+
+10. Some labels are misleading for the user context.
+    - The mobile context bar and some route labels do not always match the mental model of the person using the page.
+    - Examples include history being framed in a way that can feel like inventory.
+    - Label consistency needs another pass.
+
+11. The UI does not preserve work-in-progress strongly enough.
+    - Catalog search, filters, page position, reseller search, and drafts are mostly local state.
+    - Refreshing or revisiting can lose context.
+    - The app feels less stable than a working portal should.
+
+12. The public experience is not fully self-explanatory.
+    - Public visitors can browse, find a reseller, apply, or log in, but the hierarchy between those actions is not strong enough.
+    - The site gives options, but not enough guidance.
+    - The homepage still needs a clearer primary path.
+
+13. The login and role entry flow still needs more clarity.
+    - Admin login and reseller login are separated, but the surrounding language does not fully explain why.
+    - The user is not always told what they can do after login.
+    - The transition from authentication to workspace is still too generic.
+
+14. Button meaning is overloaded.
+    - Buttons are used for navigation, state changes, and data actions with similar visual weight.
+    - Go-to actions and commit actions are not always visually separated.
+    - This makes the interface slower to read.
+
+15. The admin console has too much density without enough grouping.
+    - There are many administrative surfaces with different jobs.
+    - Some of them need tighter grouping and better defaults.
+    - The operator experience still needs a stronger information architecture.
+
+16. The UI does not always tell the user what happens next.
+    - Many screens use generic states such as loading, submitted, draft, or review required.
+    - Those states are technically correct but not always actionable.
+    - Human users need the next step, not only the current state.
+
+17. Some surfaces still imply e-commerce behavior.
+    - The reseller portal still visually and textually resembles a shop.
+    - The business model is request/review, not checkout.
+    - The UI needs to remove the remaining shopping mental model.
+
+18. There is not yet a strong role-specific home for each audience.
+    - Public users, resellers, and admins all need a clear home screen.
+    - The current setup lets them reach a home, but does not always make it feel like the canonical starting point.
+
+19. The app lacks a unified operational flow for team/admin management.
+    - Adding another admin, promoting a staff user, and understanding access boundaries are not exposed as a clean workflow.
+    - This will become more important as the site grows.
+
+20. Some screens are technically present but not yet meaningful enough.
+    - Certain routes exist without a strong reason for the user to visit them.
+    - A route existing in code is not the same thing as a useful screen in the product.
+
+Notes for future additions:
+- Append new gaps under the relevant number or add a new number if it is a new issue.
+- Keep each gap framed as a human problem first, not a code problem.
+- When a screenshot reveals a visual issue, add it here with the exact screen and what is wrong.
+
+Screenshot-specific gaps added on 2026-06-15:
+
+21. Admin navigation is overloaded and repetitive.
+    - The admin screenshot shows a top nav, a left nav, and user controls all competing on the same screen.
+    - Account appears more than once.
+    - View Public Site sits beside admin controls, which makes the workspace feel less intentional.
+    - The page reads like a development shell rather than a finished operations console.
+
+22. The role switch concept is not clear enough.
+    - The user can be logged in as admin and still see public actions such as Apply as a Reseller.
+    - That makes the role boundary feel fuzzy.
+    - The UI needs a clearer workspace separation and a clearer way to switch between modes.
+
+23. Public navigation still exposes too many entry points at once.
+    - The public screenshot shows Products, Find a Reseller, Apply as a Reseller, and Login all at equal weight.
+    - The right side also shows account/logout controls for an already authenticated session.
+    - The page feels busy and does not guide the user toward one obvious next action.
+
+24. Public product cards still feel operational instead of customer-facing.
+    - Labels such as Reseller access and View details appear together in a way that is not immediately self-explanatory.
+    - The card hierarchy does not make it obvious what a normal visitor should do versus what an approved reseller should do.
+    - This blurs the line between browsing and wholesaling.
+
+25. Menu buttons do not yet read like a coherent system.
+    - Buttons are scattered across header, sidebar, footer, hero, and cards with similar weight.
+    - The user has to visually sort navigation from actions from role links.
+    - The result looks unfinished and harder to trust.
+
+26. The admin and public surfaces do not yet feel like distinct workspaces.
+    - The admin page and public page both expose too much navigation chrome.
+    - The role-specific identity of each workspace is present, but not strong enough.
+    - The user should feel like they moved into a separate environment, not just a different section of the same page.
+
+27. The current UI still exposes development-stage scaffolding.
+    - Sidebar, top nav, hero CTAs, footer links, and workspace controls all remain visible at once in places where a finished product would hide some of them.
+    - The layout is functional, but not yet edited down to the parts a human needs first.

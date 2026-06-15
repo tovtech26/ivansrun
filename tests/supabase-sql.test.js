@@ -9,6 +9,7 @@ const authorizedPriceSql = readFileSync(join(__dirname, "..", "supabase", "sql",
 const skuSourceTruthSql = readFileSync(join(__dirname, "..", "supabase", "sql", "013_sku_zip_source_truth_images.sql"), "utf8");
 const brandCleanupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "014_irunsvan_brand_text_cleanup.sql"), "utf8");
 const accountDirectorySql = readFileSync(join(__dirname, "..", "supabase", "sql", "015_account_and_directory.sql"), "utf8");
+const adminInvitesSql = readFileSync(join(__dirname, "..", "supabase", "sql", "016_admin_invites.sql"), "utf8");
 
 assert.match(pricePrivacySql, /create or replace view public\.reseller_products\s+with \(security_invoker = true\)/i);
 assert.match(pricePrivacySql, /create or replace view public\.reseller_product_variants\s+with \(security_invoker = true\)/i);
@@ -75,5 +76,14 @@ assert.match(accountDirectorySql, /create or replace view public\.reseller_direc
 assert.match(accountDirectorySql, /applications\.status = 'approved'::public\.application_status/i);
 assert.match(accountDirectorySql, /profiles\.role = 'reseller'::public\.user_role/i);
 assert.match(accountDirectorySql, /grant select on public\.reseller_directory to anon, authenticated/i);
+
+assert.match(adminInvitesSql, /create type public\.admin_invite_status as enum \('pending', 'used', 'revoked', 'expired'\)/i);
+assert.match(adminInvitesSql, /create table if not exists public\.admin_invites/i);
+assert.match(adminInvitesSql, /token_hash text not null unique/i);
+assert.match(adminInvitesSql, /create policy "admin_invites_admin_all"/i);
+assert.match(adminInvitesSql, /create or replace function public\.lookup_admin_invite/i);
+assert.match(adminInvitesSql, /create or replace function public\.claim_admin_invite/i);
+assert.match(adminInvitesSql, /grant execute on function public\.lookup_admin_invite\(text\) to anon, authenticated/i);
+assert.match(adminInvitesSql, /grant execute on function public\.claim_admin_invite\(text\) to authenticated/i);
 
 console.log("supabase-sql tests passed");
