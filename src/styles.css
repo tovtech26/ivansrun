@@ -2136,6 +2136,22 @@ textarea {
   margin: -4px 0 4px;
 }
 
+.admin-return-bar {
+  align-items: center;
+  background: #f7f4ef;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 20px;
+}
+
+.admin-return-bar span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .upload-grid {
   display: grid;
   gap: 22px;

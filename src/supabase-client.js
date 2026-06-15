@@ -11,6 +11,9 @@
 
   function authErrorMessage(body, fallback) {
     const message = String(body?.msg || body?.error_description || body?.error || body?.message || fallback || "Authentication failed").trim();
+    if (/bad_oauth_state/i.test(message)) {
+      return "OAuth sign-in state expired. Start from a fresh login page and try again.";
+    }
     if (/invalid login credentials/i.test(message)) return "Invalid email or password.";
     if (/email not confirmed/i.test(message)) return "Confirm your email address before signing in.";
     if (/provider is not enabled|unsupported provider|oauth provider.*disabled/i.test(message)) {
@@ -52,7 +55,7 @@
 
   function oauthResultFromSearch(search = "") {
     const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
-    const error = params.get("error_description") || params.get("error");
+    const error = params.get("error_description") || params.get("error") || params.get("error_code");
     const code = params.get("code");
     if (error) return { handled: true, error: authErrorMessage({ error_description: error }, "OAuth sign-in failed") };
     if (code) {
@@ -93,6 +96,7 @@
       cleanSearchUrl.hash = "";
       cleanSearchUrl.searchParams.delete("oauth");
       cleanSearchUrl.searchParams.delete("code");
+      cleanSearchUrl.searchParams.delete("error_code");
       cleanSearchUrl.searchParams.delete("error");
       cleanSearchUrl.searchParams.delete("error_description");
       root.history?.replaceState?.({}, "", `${cleanSearchUrl.pathname}${cleanSearchUrl.search}`);
@@ -107,6 +111,7 @@
     const cleanUrl = new URL(root.location.href);
     cleanUrl.hash = "";
     cleanUrl.searchParams.delete("oauth");
+    cleanUrl.searchParams.delete("error_code");
     root.history?.replaceState?.({}, "", `${cleanUrl.pathname}${cleanUrl.search}`);
     return result;
   }

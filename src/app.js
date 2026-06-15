@@ -77,6 +77,7 @@ function hasPendingOAuthCallback() {
   return (
     search.has("oauth") ||
     search.has("code") ||
+    search.has("error_code") ||
     search.has("error") ||
     search.has("error_description") ||
     hash.includes("access_token=") ||
@@ -3493,6 +3494,10 @@ async function handleLogin(form) {
 
 function passwordRecoveryRedirectTo() {
   const url = new URL(window.location.href);
+  url.searchParams.delete("code");
+  url.searchParams.delete("error");
+  url.searchParams.delete("error_code");
+  url.searchParams.delete("error_description");
   url.searchParams.set("reset", "password");
   url.hash = "";
   return url.toString();
@@ -3500,6 +3505,10 @@ function passwordRecoveryRedirectTo() {
 
 function oauthRedirectTo() {
   const url = new URL(window.location.href);
+  url.searchParams.delete("code");
+  url.searchParams.delete("error");
+  url.searchParams.delete("error_code");
+  url.searchParams.delete("error_description");
   url.searchParams.set("oauth", "google");
   if (isAdminLoginRoute()) url.searchParams.set("login", "admin");
   else url.searchParams.delete("login");
@@ -4406,9 +4415,19 @@ function applyRevealMotion() {
 
 function render() {
   SiteControls.applySiteTheme(state.siteContent.theme, document.documentElement);
-  document.getElementById("app").innerHTML = state.authBootstrapPending ? authBootstrapView() : topNav() + routeView();
+  document.getElementById("app").innerHTML = state.authBootstrapPending ? authBootstrapView() : adminPublicBar() + topNav() + routeView();
   bindEvents();
   applyRevealMotion();
+}
+
+function adminPublicBar() {
+  if (!state.auth.isAdmin || currentPortalMode() !== "public") return "";
+  return `
+    <div class="admin-return-bar">
+      <span>You are signed in as admin.</span>
+      <button class="button mini" data-route="admin">Back to Admin</button>
+    </div>
+  `;
 }
 
 function authBootstrapView() {

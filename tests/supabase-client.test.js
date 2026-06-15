@@ -42,6 +42,11 @@ assert.deepEqual(oauthResultFromSearch("?error=access_denied&error_description=G
   error: "Google login is not configured in Supabase yet.",
 });
 
+assert.deepEqual(oauthResultFromSearch("?error_code=bad_oauth_state"), {
+  handled: true,
+  error: "OAuth sign-in state expired. Start from a fresh login page and try again.",
+});
+
 assert.deepEqual(oauthResultFromSearch("?code=auth-code-123"), {
   handled: true,
   error: "OAuth callback returned an authorization code that this client cannot exchange automatically.",

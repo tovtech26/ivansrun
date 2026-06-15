@@ -37,6 +37,8 @@ assert.equal(supabaseClientSource.includes("function buildOAuthUrl("), true, "Su
 assert.equal(supabaseClientSource.includes("function authErrorMessage("), true, "Supabase client must normalize auth provider and credential errors.");
 assert.equal(supabaseClientSource.includes("function oauthResultFromSearch("), true, "Supabase client must inspect OAuth callback query parameters.");
 assert.equal(supabaseClientSource.includes("function oauthSessionFromHash("), true, "Supabase client must parse OAuth callback hash sessions.");
+assert.equal(supabaseClientSource.includes("error_code"), true, "OAuth error_code must be treated as a callback parameter.");
+assert.equal(appSource.includes('searchParams.delete("error_code")'), true, "OAuth redirect URLs must not keep stale error_code query parameters.");
 assert.equal(authSource.includes("buildDevAdminAuthState"), false, "Auth module must not export fake dev admin state.");
 assert.equal(appSource.includes("loadCatalog();\ninitAuth();"), false, "Startup must not fire catalog and auth without explicit orchestration.");
 assert.equal(appSource.includes("await loadCatalog();\n  await initAuth();"), false, "OAuth callback routing must not wait for the public catalog before auth restore.");
@@ -66,6 +68,8 @@ assert.equal(appSource.includes('["Requests", "requests", ["requests"]]'), true,
 assert.equal(appSource.includes('["Applications", "applications", ["applications"]]'), true, "Admin navigation must expose Applications as a first-level item.");
 assert.equal(appSource.includes("Orders & Applications"), false, "Admin navigation must not combine requests and applications into one ambiguous section.");
 assert.equal(appSource.includes('data-route="admin" class="admin-return"'), true, "Logged-in admins viewing the public site must get a persistent Back to Admin control.");
+assert.equal(appSource.includes("function adminPublicBar()"), true, "Public admin sessions must render a dedicated return bar.");
+assert.equal(appSource.includes("admin-return-bar"), true, "Public admin sessions must visibly separate admin return controls from normal navigation.");
 assert.equal(appSource.includes('data-status="fulfilled"'), false, "Request review must not expose fulfillment as a one-click admin action.");
 assert.equal(appSource.includes("Product Requests"), true, "Admin copy must use request language instead of ecommerce order language.");
 assert.equal(appSource.includes("<h2>Live Inventory</h2>"), false, "Reseller portal must not present ordering as a live inventory table.");
