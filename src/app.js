@@ -4486,14 +4486,16 @@ async function initializeApp() {
   const loginRouteHint = consumeLoginRouteHint();
   const passwordResetHint = consumePasswordResetHint();
   const oauthError = SupabaseClient.consumeOAuthError();
-  if (oauthResult.error || oauthError) {
+  const hasOAuthError = Boolean(oauthResult.error || oauthError);
+  if (hasOAuthError) {
     state.route = loginRouteHint || "login";
     state.authError = oauthResult.error || oauthError;
+    window.history.replaceState({}, "", MobileNavigation.buildRouteUrl(state.route));
   }
   render();
   const catalogLoad = loadCatalog();
   await initAuth({ loadProtected: false });
-  if (oauthResult.error || oauthError) state.authError = oauthResult.error || oauthError;
+  if (hasOAuthError) state.authError = oauthResult.error || oauthError;
   if ((oauthResult.session?.access_token && state.auth.isAuthenticated) || (passwordResetHint && state.auth.isAuthenticated)) {
     if (passwordResetHint) {
       state.passwordResetMode = true;
@@ -4511,9 +4513,11 @@ async function initializeApp() {
     setRoute(Auth.fallbackRouteForRole(state.auth.role), {}, { replaceHistory: true, scroll: false });
     loadProtectedDataInBackground();
   } else {
-    syncRouteFromLocation();
-    if (loginRouteHint && !window.location.hash) {
-      state.route = loginRouteHint;
+    if (!hasOAuthError) {
+      syncRouteFromLocation();
+      if (loginRouteHint && !window.location.hash) {
+        state.route = loginRouteHint;
+      }
     }
     render();
     loadProtectedDataInBackground();

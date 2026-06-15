@@ -33,6 +33,9 @@ assert.equal(appSource.includes('data-action="google-login"'), true, "Login page
 assert.equal(appSource.includes("function handleGoogleLogin()"), true, "Google OAuth login must have a dedicated handler.");
 assert.equal(appSource.includes("SupabaseClient.signInWithOAuth({"), true, "Google login must use Supabase OAuth instead of bypass logic.");
 assert.equal(appSource.includes("SupabaseClient.consumeOAuthSessionFromUrl()"), true, "Startup must consume Supabase OAuth callback sessions.");
+assert.equal(appSource.includes("const hasOAuthError = Boolean(oauthResult.error || oauthError);"), true, "OAuth error handling must be explicit during startup.");
+assert.equal(appSource.includes('window.history.replaceState({}, "", MobileNavigation.buildRouteUrl(state.route));'), true, "OAuth errors must clean the visible URL before routing.");
+assert.equal(appSource.includes("if (!hasOAuthError) {"), true, "OAuth errors must not fall through to the hash-based route restore.");
 assert.equal(supabaseClientSource.includes("function buildOAuthUrl("), true, "Supabase client must build provider OAuth authorize URLs.");
 assert.equal(supabaseClientSource.includes("function authErrorMessage("), true, "Supabase client must normalize auth provider and credential errors.");
 assert.equal(supabaseClientSource.includes("function oauthResultFromSearch("), true, "Supabase client must inspect OAuth callback query parameters.");
