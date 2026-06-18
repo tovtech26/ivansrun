@@ -1955,7 +1955,7 @@ function resellerPortal() {
             <button class="button primary full" ${state.orderSubmitPending || !summary.itemCount ? "disabled" : ""}>${state.orderSubmitPending ? "Submitting..." : "Submit Order Request"}</button>
             ${
               state.orderSubmitted
-                ? `<p class="notice success">Order request submitted. Admin review is now required before confirmation.</p>`
+                ? `<p class="notice success">Request sent. Admin review will decide whether stock is deducted.</p>`
                 : `<p class="notice">Order requests are reviewed before confirmation. Stock updates only after approval.</p>`
             }
           </form>
@@ -2727,13 +2727,19 @@ function adminRequestItemList(record) {
   `;
 }
 
+function requestImpactSummary(record) {
+  const totalItems = Number(record.totalItems || 0);
+  const totalUnits = Number(record.totalUnits || 0);
+  return `${totalItems} ${totalItems === 1 ? "SKU line" : "SKU lines"} · ${totalUnits} ${totalUnits === 1 ? "pair" : "pairs"}`;
+}
+
 function adminRequests() {
   const orderRecords = requestHistoryRecords();
   return `
     <main class="admin-layout">
       ${adminSidebar("requests")}
       <section class="admin-main">
-        <header class="admin-topbar"><div><h1>Product Requests</h1><p>Review reseller request lists and approve them only when stock should be deducted.</p></div></header>
+        <header class="admin-topbar"><div><h1>Product Requests</h1><p>Approve only when the inventory move is correct.</p></div></header>
         <section class="admin-panels">
           <div class="admin-card">
             <div class="panel-toolbar"><h2>Submitted Requests</h2><span>${orderRecords.length} requests</span></div>
@@ -2746,16 +2752,24 @@ function adminRequests() {
                         const reseller = profileForUserId(request?.reseller_id);
                         return `
                           <article class="approval-item request-review-item">
-                            <div>
-                              <strong>${escapeHtml(record.code)}</strong>
-                              <p>${escapeHtml(reseller?.company_name || reseller?.email || "Reseller account")}</p>
-                              <p>${escapeHtml(`${record.totalItems} items / ${record.totalUnits} pairs`)}</p>
+                            <div class="approval-item-body">
+                              <div class="approval-item-head">
+                                <strong>${escapeHtml(record.code)}</strong>
+                                ${statusPill(record.status)}
+                              </div>
+                              <div class="request-meta-line">
+                                <span>${escapeHtml(reseller?.company_name || reseller?.email || "Reseller account")}</span>
+                                <span>${escapeHtml(requestImpactSummary(record))}</span>
+                              </div>
+                              <div class="request-meta-line">
+                                <span>Request total</span>
+                                <strong>${money(record.subtotal)}</strong>
+                              </div>
                               ${adminRequestItemList(record)}
-                              <p>${escapeHtml(record.notes || "No reseller notes provided.")}</p>
-                              ${record.adminNotes ? `<p>${escapeHtml(`Admin note: ${record.adminNotes}`)}</p>` : ""}
+                              <p class="request-note">${escapeHtml(record.notes || "No reseller notes provided.")}</p>
+                              ${record.adminNotes ? `<p class="request-note">${escapeHtml(`Admin note: ${record.adminNotes}`)}</p>` : ""}
                             </div>
                             <div class="approval-actions">
-                              ${statusPill(record.status)}
                               <button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="approved">Approve and deduct stock</button>
                               <button class="button mini secondary" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="rejected">Cannot Supply</button>
                             </div>
@@ -2859,15 +2873,20 @@ function adminApprovals() {
                       .map(
                         (record) => `
                       <article class="approval-item">
-                        <div>
-                          <strong>${escapeHtml(record.code)}</strong>
-                          <p>${escapeHtml(`${record.totalItems} SKUs / ${record.totalUnits} units / ${money(record.subtotal)}`)}</p>
-                          <p>${escapeHtml(record.notes || "No reseller notes provided.")}</p>
-                          ${record.adminNotes ? `<p>${escapeHtml(`Admin note: ${record.adminNotes}`)}</p>` : ""}
+                        <div class="approval-item-body">
+                          <div class="approval-item-head">
+                            <strong>${escapeHtml(record.code)}</strong>
+                            ${statusPill(record.status)}
+                          </div>
+                          <div class="request-meta-line">
+                            <span>${escapeHtml(requestImpactSummary(record))}</span>
+                            <strong>${money(record.subtotal)}</strong>
+                          </div>
+                          <p class="request-note">${escapeHtml(record.notes || "No reseller notes provided.")}</p>
+                          ${record.adminNotes ? `<p class="request-note">${escapeHtml(`Admin note: ${record.adminNotes}`)}</p>` : ""}
                         </div>
                         <div class="approval-actions">
-                          ${statusPill(record.status)}
-                          <button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="approved">Approve</button>
+                          <button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="approved">Approve and deduct stock</button>
                           <button class="button mini secondary" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="rejected">Reject</button>
                         </div>
                       </article>
