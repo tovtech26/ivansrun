@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+globalThis.IrunsvanProductImages = require("../src/product-images.js");
 const { buildProductDetailModel } = require("../src/product-detail.js");
 
 const product = {
@@ -34,5 +35,30 @@ assert.deepEqual(model.colours, ["Bright Orange / Ocean Blue", "Elegant Black"])
 assert.deepEqual(model.sizes, ["38", "39"]);
 assert.equal(model.relatedProducts.length, 2);
 assert.deepEqual(model.relatedProducts.map((item) => item.sku), ["IRUNSVAN-005", "IRUNSVAN-020"]);
+
+const dbMixedPathModel = buildProductDetailModel({
+  product: {
+    id: "product-2503",
+    sku: "IRUNSVAN-2503",
+    name: "IRUNSVAN 2503 Running Shoe",
+    category: "Running Shoes",
+    image_names: [
+      "/public/product-images/SKUs/2503/2503-1.jpg",
+      "/public/product-images/SKUs/2503/2503-2.jpg",
+    ],
+  },
+  variants: [
+    { id: "variant-2503-1", product_id: "product-2503", colour: "Emerald Trail / Cyan Orange", size: "37", image_name: "2503-1.jpg" },
+    { id: "variant-2503-2", product_id: "product-2503", colour: "Fresh Green Orange", size: "37", image_name: "2503-2.jpg" },
+  ],
+  catalogProducts: [],
+  supabaseUrl: "https://llicocwonbokahpbireg.supabase.co",
+});
+
+assert.deepEqual(dbMixedPathModel.gallery.map((image) => image.imageName), ["2503-1.jpg", "2503-2.jpg"]);
+assert.deepEqual(dbMixedPathModel.gallery.map((image) => image.imageUrl), [
+  "/public/product-images/SKUs/2503/2503-1.jpg",
+  "/public/product-images/SKUs/2503/2503-2.jpg",
+]);
 
 console.log("product-detail tests passed");

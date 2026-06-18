@@ -1,11 +1,36 @@
 (function attachProductDetail(root) {
-  function unique(values = []) {
-    return [...new Set(values.filter(Boolean).map((value) => String(value).trim()).filter(Boolean))];
+  const ProductImages =
+    root.IrunsvanProductImages ||
+    (typeof require !== "undefined" ? require("./product-images.js") : null);
+
+  function imageKey(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    if (/^https?:\/\//i.test(text)) return text;
+    const parts = text.split("/").filter(Boolean);
+    return parts[parts.length - 1] || text;
+  }
+
+  function unique(values = [], keyFor = (value) => String(value).trim()) {
+    const seen = new Set();
+    return values
+      .filter(Boolean)
+      .map((value) => String(value).trim())
+      .filter(Boolean)
+      .filter((value) => {
+        const key = keyFor(value);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
   }
 
   function resolveImageUrl(imageName, supabaseUrl) {
     const value = String(imageName || "").trim();
     if (!value) return "";
+    if (ProductImages?.resolveProductImageUrl) {
+      return ProductImages.resolveProductImageUrl(value, supabaseUrl);
+    }
     if (/^https?:\/\//i.test(value) || value.startsWith("/")) return value;
     return `${String(supabaseUrl || "").replace(/\/$/, "")}/storage/v1/object/public/product-images/${encodeURIComponent(value)}`;
   }
@@ -14,7 +39,7 @@
     const galleryNames = unique([
       ...variants.map((variant) => variant.image_name),
       ...(Array.isArray(product?.image_names) ? product.image_names : []),
-    ]);
+    ], imageKey);
 
     const gallery = galleryNames.map((imageName) => ({
       imageName,
