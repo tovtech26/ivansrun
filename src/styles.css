@@ -1540,6 +1540,21 @@ td {
   text-transform: uppercase;
 }
 
+.product-facts {
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.product-facts span {
+  background: var(--soft);
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+}
+
 .variant-picker {
   display: grid;
   gap: 10px;
@@ -1559,9 +1574,9 @@ td {
   color: var(--ink);
   cursor: pointer;
   display: grid;
-  flex: 0 0 104px;
-  gap: 6px;
-  padding: 6px;
+  flex: 0 0 150px;
+  gap: 8px;
+  padding: 10px 12px;
   text-align: left;
 }
 
@@ -1582,13 +1597,28 @@ td {
   display: none;
 }
 
+.colour-dot {
+  background: linear-gradient(135deg, var(--ink), var(--blue));
+  border-radius: 999px;
+  display: inline-block;
+  height: 11px;
+  width: 11px;
+}
+
 .colour-strip span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.colour-strip-more {
+  align-self: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .product-card-actions {
@@ -1634,6 +1664,20 @@ td {
   display: block;
   font-size: 12px;
   font-weight: 800;
+}
+
+.bulk-order-sizes {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bulk-order-sizes span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .size-matrix {
@@ -1706,6 +1750,10 @@ td {
   font-size: clamp(28px, 2.45vw, 38px);
   line-height: 1.08;
   margin: 4px 0 0;
+}
+
+.detail-facts {
+  margin-top: -4px;
 }
 
 .reseller-detail-order .reseller-product-head {
@@ -1807,7 +1855,7 @@ td {
 
 .sidebar-head,
 .order-summary {
-  padding: 22px;
+  padding: 20px;
 }
 
 .sidebar-head {
@@ -1815,7 +1863,7 @@ td {
 }
 
 .sidebar-head h2 {
-  font-size: 28px;
+  font-size: 22px;
 }
 
 .sidebar-head p {
@@ -1827,9 +1875,9 @@ td {
 .order-items {
   display: grid;
   gap: 18px;
-  max-height: 410px;
+  max-height: 420px;
   overflow: auto;
-  padding: 22px;
+  padding: 20px;
 }
 
 .order-item {
@@ -1864,6 +1912,10 @@ td {
   background: var(--soft);
   display: grid;
   gap: 12px;
+}
+
+.order-summary textarea {
+  min-height: 72px;
 }
 
 .summary-row {

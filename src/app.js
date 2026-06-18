@@ -838,7 +838,7 @@ function currentDraftItems() {
 }
 
 function currentDraftSummary() {
-  return Orders.draftSummary(currentDraftItems());
+  return Orders.buildDraftSummaryLabel(Orders.draftSummary(currentDraftItems()));
 }
 
 function formatRequestCode(id) {
@@ -1888,8 +1888,8 @@ function resellerPortal() {
       <section class="portal-header">
         <div>
           <span class="eyebrow dark">Irunsvan Africa reseller portal</span>
-          <h1>Wholesale Shop</h1>
-          <p>Choose products, select colour and size options, then submit an order request for admin review.</p>
+          <h1>Wholesale shop</h1>
+          <p>Browse the range, open a product, pick one color, then add sizes and quantities to a request cart.</p>
         </div>
         <div class="portal-actions">
           <button class="button secondary" data-route="history">Request History</button>
@@ -1921,10 +1921,10 @@ function resellerPortal() {
                   : `<p class="notice">${searchActive ? "No products match this search." : "No in-stock products are available for this reseller account yet."}</p>`
             }
           </div>
-          ${pager(`Showing ${productGroups.length} products with ${rows.length} available colour and size choices${searchActive ? " matching search" : ""}`)}
+          ${pager(`Showing ${productGroups.length} products with ${rows.length} available SKU rows${searchActive ? " matching search" : ""}`)}
         </div>
         <aside class="order-sidebar" id="portal-order">
-          <div class="sidebar-head"><h2>Order Request</h2><p>${state.orderSubmitted ? "Submitted" : "Draft request"}</p></div>
+          <div class="sidebar-head"><h2>Request cart</h2><p>${state.orderSubmitted ? "Submitted" : `${summary.itemCount} ${summary.itemCount === 1 ? "line" : "lines"} ready`}</p></div>
           <div class="order-items">
             ${
               orderItems.length
@@ -1956,7 +1956,7 @@ function resellerPortal() {
             ${
               state.orderSubmitted
                 ? `<p class="notice success">Order request submitted. Admin review is now required before confirmation.</p>`
-                : `<p class="notice">Order requests are reviewed before confirmation. Stock is not reserved until approved.</p>`
+                : `<p class="notice">Order requests are reviewed before confirmation. Stock updates only after approval.</p>`
             }
           </form>
         </aside>
@@ -2007,14 +2007,20 @@ function resellerProductCard(group) {
           </div>
           <strong class="${price.priced ? "" : "price-pending"}">${escapeHtml(price.priced ? price.label : "Price pending")}</strong>
         </div>
-        <div class="colour-strip" aria-label="${escapeHtml(group.productName)} colours">
-          ${colourGroups.map((colour) => resellerColourButton(group.productId, colour, selectedColour)).join("")}
+        <div class="product-facts">
+          <span>${visibleColourCount} ${visibleColourCount === 1 ? "color" : "colors"}</span>
+          <span>${group.optionCount} SKU rows</span>
+          <span>${sizes || "Sizes vary by color"}</span>
+        </div>
+        <div class="colour-strip" aria-label="${escapeHtml(group.productName)} colors">
+          ${colourGroups.slice(0, 6).map((colour) => resellerColourButton(group.productId, colour, selectedColour)).join("")}
+          ${colourGroups.length > 6 ? `<span class="colour-strip-more">+${colourGroups.length - 6} more</span>` : ""}
         </div>
         <div class="product-card-actions">
           <button class="button secondary full" data-route="reseller-product" data-product-id="${escapeHtml(group.productId)}">View & Order</button>
           ${selectedPairCount ? `<span>${selectedPairCount} ${selectedPairCount === 1 ? "pair" : "pairs"} in request</span>` : ""}
         </div>
-        <p class="reseller-product-note">${visibleColourCount} ${visibleColourCount === 1 ? "colour" : "colours"} available. Sizes: ${escapeHtml(sizes || "Check product page")}.</p>
+        <p class="reseller-product-note">Open the product page to choose one color, then add sizes quickly.</p>
       </div>
     </article>
   `;
@@ -2059,7 +2065,7 @@ function resellerColourButton(productId, colour, selectedColour) {
   const isSelected = colour.key === selectedColour;
   return `
     <button class="${isSelected ? "selected" : ""}" data-action="select-reseller-colour" data-product-id="${escapeHtml(productId)}" data-colour="${escapeHtml(colour.key)}" aria-pressed="${isSelected ? "true" : "false"}" title="${escapeHtml(colour.label)}">
-      ${productVisual(colour.label, colour.imageName)}
+      <span class="colour-dot" aria-hidden="true"></span>
       <span>${escapeHtml(colour.label)}</span>
     </button>
   `;
@@ -2093,6 +2099,7 @@ function resellerProductOrderPage() {
   const imageName = selectedRows[0]?.imageName || group.imageName;
   const price = OperationsProducts.priceState(group.price, group.currency || "USD");
   const canOrder = Boolean(group.priceKnown);
+  const selectedSummary = selectedRows.length ? `${selectedRows.length} sizes in ${selectedGroup?.label || "this color"}` : "Choose a color to continue";
   return `
     <main class="portal-page reseller-detail-page">
       <button class="text-link" data-route="reseller">Back to shop</button>
@@ -2111,7 +2118,12 @@ function resellerProductOrderPage() {
             </div>
             <strong class="${price.priced ? "" : "price-pending"}">${escapeHtml(price.priced ? price.label : "Price pending")}</strong>
           </div>
-          <p class="reseller-product-note">${colourGroups.length} ${colourGroups.length === 1 ? "colour" : "colours"} available. Sizes: ${escapeHtml(resellerAvailableSizes(group.rows) || "Check availability")}.</p>
+          <div class="product-facts detail-facts">
+            <span>${colourGroups.length} ${colourGroups.length === 1 ? "color" : "colors"}</span>
+            <span>${resellerAvailableSizes(group.rows) || "Check availability"}</span>
+            <span>${selectedSummary}</span>
+          </div>
+          <p class="reseller-product-note">Select one color, then enter quantities for the available sizes below.</p>
           ${canOrder ? "" : `<p class="notice warning">Admin needs to set this product price before it can be added to a request.</p>`}
           ${resellerBulkOrderMatrix({
             group,
@@ -2122,7 +2134,7 @@ function resellerProductOrderPage() {
           })}
         </div>
         <aside class="order-sidebar reseller-detail-sidebar" id="portal-order">
-          <div class="sidebar-head"><h2>Current Request</h2><p>${summary.totalUnits} ${summary.totalUnits === 1 ? "pair" : "pairs"} selected</p></div>
+          <div class="sidebar-head"><h2>Request cart</h2><p>${summary.totalUnits} ${summary.totalUnits === 1 ? "pair" : "pairs"} selected</p></div>
           <div class="order-items">
             ${
               orderItems.length
@@ -2146,8 +2158,9 @@ function resellerProductOrderPage() {
           <form class="order-summary" data-form="order">
             <div class="summary-row"><span>Total pairs</span><strong>${summary.totalUnits}</strong></div>
             <div class="summary-row"><span>Subtotal</span><strong>${money(summary.subtotal)}</strong></div>
-            <label><span>Notes for admin</span><textarea name="order_notes">${escapeHtml(state.resellerNotes)}</textarea></label>
+            <label><span>Notes for admin</span><textarea name="order_notes" placeholder="Optional notes for admin">${escapeHtml(state.resellerNotes)}</textarea></label>
             <button class="button primary full" ${state.orderSubmitPending || !orderItems.length ? "disabled" : ""}>Submit Order Request</button>
+            <p class="notice">Stock updates after admin approval.</p>
           </form>
         </aside>
       </section>
@@ -2164,15 +2177,19 @@ function resellerBulkOrderMatrix({ group, colourGroups, selectedColour, selected
       <div class="bulk-order-head">
         <div>
           <strong>${escapeHtml(selectedGroup?.label || "Choose colour")}</strong>
-          <span>${selectedRows.length} sizes ready for bulk entry</span>
+          <span>${selectedRows.length} sizes ready for entry</span>
         </div>
         <span>${selectedTotal ? `${selectedTotal} ${selectedTotal === 1 ? "pair" : "pairs"} selected` : "Enter quantities"}</span>
+      </div>
+      <div class="bulk-order-sizes">
+        <span>Color</span>
+        <strong>${escapeHtml(selectedGroup?.label || "Choose a color")}</strong>
       </div>
       <div class="size-matrix" aria-label="${escapeHtml(group.productName)} ${escapeHtml(selectedGroup?.label || "")} size quantities">
         ${selectedRows.map((row) => resellerSizeQuantityCell(row, canOrder)).join("")}
       </div>
       <div class="bulk-order-actions">
-        <button class="button primary full" data-action="add-bulk-order" data-product-id="${escapeHtml(group.productId)}" ${canOrder ? "" : "disabled"}>Add selected pairs to request</button>
+        <button class="button primary full" data-action="add-bulk-order" data-product-id="${escapeHtml(group.productId)}" ${canOrder ? "" : "disabled"}>Add selected pairs</button>
         <button class="button secondary full" data-action="clear-bulk-order" data-product-id="${escapeHtml(group.productId)}">Clear this colour</button>
       </div>
     </div>
@@ -2712,7 +2729,7 @@ function adminRequests() {
     <main class="admin-layout">
       ${adminSidebar("requests")}
       <section class="admin-main">
-        <header class="admin-topbar"><div><h1>Product Requests</h1><p>Review reseller request lists and respond with a simple yes or no.</p></div></header>
+        <header class="admin-topbar"><div><h1>Product Requests</h1><p>Review reseller request lists and approve them only when stock should be deducted.</p></div></header>
         <section class="admin-panels">
           <div class="admin-card">
             <div class="panel-toolbar"><h2>Submitted Requests</h2><span>${orderRecords.length} requests</span></div>
@@ -2735,7 +2752,7 @@ function adminRequests() {
                             </div>
                             <div class="approval-actions">
                               ${statusPill(record.status)}
-                              <button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="approved">Can Supply</button>
+                              <button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="approved">Approve and deduct stock</button>
                               <button class="button mini secondary" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="rejected">Cannot Supply</button>
                             </div>
                           </article>
@@ -4091,16 +4108,6 @@ function buildOrderStockAdjustments(items) {
   });
 }
 
-async function depleteSubmittedOrderStock(items) {
-  const adjustments = buildOrderStockAdjustments(items);
-  for (const adjustment of adjustments) {
-    await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
-      stock_quantity: adjustment.nextStock,
-      source: "order_submitted",
-    });
-  }
-}
-
 async function handleOrderSubmit(form) {
   state.orderSubmitPending = true;
   state.orderSubmitted = false;
@@ -4120,7 +4127,6 @@ async function handleOrderSubmit(form) {
     const [createdRequest] = await insertAuthedSupabase("order_requests", payload.orderRequest);
     const itemsPayload = payload.orderItems.map((item) => ({ ...item, order_request_id: createdRequest.id }));
     await insertAuthedSupabase("order_request_items", itemsPayload);
-    await depleteSubmittedOrderStock(draftItems);
     state.resellerDraft = {};
     state.resellerNotes = "";
     state.orderSubmitted = true;
@@ -4224,8 +4230,38 @@ async function handleApplicationSubmit(form) {
 async function handleOrderStatusUpdate(orderId, status) {
   try {
     const orderRequest = state.orderRequests.find((request) => request.id === orderId);
+    const currentStatus = orderRequest?.status || "submitted";
+    const approvalItems = state.orderRequestItems.filter((item) => item.order_request_id === orderId);
     const patch = AdminOrders.buildOrderStatusPatch(status, `Updated from admin dashboard on ${new Date().toLocaleString()}`);
+    const shouldAdjustInventory = status === "approved" && currentStatus !== "approved";
+    const inventoryAdjustments = shouldAdjustInventory
+      ? AdminOrders.buildApprovalInventoryAdjustments({ orderId, items: approvalItems, inventory: state.inventory })
+      : [];
     await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, patch);
+    if (shouldAdjustInventory) {
+      const appliedAdjustments = [];
+      try {
+        for (const adjustment of inventoryAdjustments) {
+          await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
+            stock_quantity: adjustment.nextStock,
+            source: "order_approved",
+          });
+          appliedAdjustments.push(adjustment);
+        }
+      } catch (inventoryError) {
+        for (const adjustment of appliedAdjustments.reverse()) {
+          await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
+            stock_quantity: adjustment.previousStock,
+            source: "order_request_revert",
+          }).catch(() => {});
+        }
+        await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, {
+          status: currentStatus,
+          admin_notes: orderRequest?.admin_notes || null,
+        }).catch(() => {});
+        throw inventoryError;
+      }
+    }
     if (orderRequest?.reseller_id) {
       const [profile] = await fetchAuthedSupabase(
         "profiles",

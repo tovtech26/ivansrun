@@ -6,6 +6,7 @@ const {
   updateDraftQuantity,
   draftItems,
   draftSummary,
+  buildDraftSummaryLabel,
   buildOrderPayload,
 } = require("../src/reseller-orders.js");
 
@@ -148,6 +149,14 @@ assert.deepEqual(draftSummary(items), {
   itemCount: 1,
   totalUnits: 3,
   subtotal: 90,
+});
+
+assert.deepEqual(buildDraftSummaryLabel(draftSummary(items)), {
+  itemCount: 1,
+  totalUnits: 3,
+  subtotal: 90,
+  itemLabel: "1 item",
+  unitLabel: "3 pairs",
 });
 
 assert.throws(

@@ -116,6 +116,19 @@
     );
   }
 
+  function buildDraftSummaryLabel(summary = {}) {
+    const itemCount = Number(summary.itemCount || 0);
+    const totalUnits = Number(summary.totalUnits || 0);
+    const subtotal = Number(summary.subtotal || 0);
+    return {
+      itemCount,
+      totalUnits,
+      subtotal,
+      itemLabel: `${itemCount} ${itemCount === 1 ? "item" : "items"}`,
+      unitLabel: `${totalUnits} ${totalUnits === 1 ? "pair" : "pairs"}`,
+    };
+  }
+
   function buildOrderPayload({ auth = {}, items = [], notes = "" } = {}) {
     if (!auth?.user?.id || (!auth.isReseller && !auth.isAdmin)) {
       throw new Error("An authenticated reseller account is required to submit an order.");
@@ -168,6 +181,7 @@
     updateDraftQuantity,
     draftItems,
     draftSummary,
+    buildDraftSummaryLabel,
     buildOrderPayload,
   };
 

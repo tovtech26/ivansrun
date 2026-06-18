@@ -108,6 +108,9 @@ assert.equal(appSource.includes("function resellerBulkOrderMatrix("), true, "Res
 assert.equal(appSource.includes("data-action=\"select-reseller-colour\""), true, "Reseller shop must let buyers choose colours visually before ordering sizes.");
 assert.equal(appSource.includes("data-action=\"add-bulk-order\""), true, "Reseller shop must add selected size quantities as a bulk order action.");
 assert.equal(appSource.includes("data-bulk-qty-input"), true, "Reseller shop must use size quantity inputs in the bulk matrix.");
+assert.equal(appSource.includes("colour-dot"), true, "Reseller colour chips must use simple swatches instead of image tiles.");
+assert.equal(appSource.includes("product-facts"), true, "Reseller cards must show compact product facts.");
+assert.equal(appSource.includes("Approve and deduct stock"), true, "Admin approval action must make the stock change explicit.");
 assert.equal(appSource.includes('<p class="mono">SKU:'), false, "Reseller order summary must not expose backend SKU labels.");
 assert.equal(appSource.includes("Available Options"), false, "Reseller metrics must use buyer-friendly language instead of backend option labels.");
 assert.equal(appSource.includes(".inventory-panel, .order-sidebar"), false, "Functional reseller panels must not be hidden behind reveal observer opacity.");
@@ -130,9 +133,11 @@ assert.equal(appSource.includes("async function handleStockReset("), true, "Admi
 assert.equal(appSource.includes("async function patchAuthedSupabaseMinimal("), true, "Bulk stock reset must use minimal PATCH responses.");
 assert.equal(appSource.includes('patchAuthedSupabaseMinimal("inventory", "id=not.is.null"'), true, "Stock reset must zero every inventory row.");
 assert.equal(appSource.includes("source: \"manual_stock_reset\""), true, "Stock reset must mark inventory rows with a reset source.");
-assert.equal(appSource.includes("async function depleteSubmittedOrderStock("), true, "Order submission must deplete stock immediately.");
-assert.equal(appSource.includes("source: \"order_submitted\""), true, "Submitted orders must mark stock rows as order-submitted adjustments.");
-assert.equal(appSource.includes("AdminOrders.buildApprovalInventoryAdjustments"), false, "Admin approval must not deplete stock a second time.");
+assert.equal(appSource.includes("async function depleteSubmittedOrderStock("), false, "Order submission must not deplete stock immediately.");
+assert.equal(appSource.includes("source: \"order_submitted\""), false, "Submitted orders must not change inventory immediately.");
+assert.equal(appSource.includes("AdminOrders.buildApprovalInventoryAdjustments"), true, "Admin approval must allocate stock from the actual request items.");
+assert.equal(appSource.includes("source: \"order_approved\""), true, "Approved orders must mark stock rows as order-approved adjustments.");
+assert.equal(appSource.includes("Stock updates only after approval."), true, "Reseller messaging must match approval-based stock deduction.");
 assert.equal(appSource.includes("Price pending"), true, "Reseller shop must show pending price instead of a false zero price.");
 assert.equal(appSource.includes('<div><button disabled>Prev</button><button class="active">1</button><button>2</button><button>3</button><button>Next</button></div>'), false, "Catalog pager must not be static fake controls.");
 assert.equal(appSource.includes("data-action=\"catalog-page\""), true, "Catalog pager buttons must have real page actions.");
