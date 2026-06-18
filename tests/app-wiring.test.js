@@ -113,7 +113,8 @@ assert.equal(appSource.includes("colour-dot"), true, "Reseller colour chips must
 assert.equal(appSource.includes("product-facts"), true, "Reseller cards must show compact product facts.");
 assert.equal(appSource.includes("units exact stock"), true, "Reseller cards must show the exact stock total.");
 assert.equal(appSource.includes("in stock"), true, "Reseller size rows must show exact stock counts.");
-assert.equal(appSource.includes("builder-colour-card"), true, "Reseller product ordering must use row-style color selectors.");
+assert.equal(appSource.includes("builder-colour-order-card"), true, "Reseller product ordering must use color cards with size inputs inside.");
+assert.equal(appSource.includes("builder-colour-order-list"), true, "Reseller product ordering must list color cards as the main order form.");
 assert.equal(appSource.includes("builder-size-row"), true, "Reseller product ordering must use form-style size quantity rows.");
 assert.equal(appSource.includes("setRoute(\"request-confirmation\")"), true, "Order submission must navigate to the confirmation page.");
 assert.equal(appSource.includes("Approve and deduct stock"), true, "Admin approval action must make the stock change explicit.");

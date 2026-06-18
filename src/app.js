@@ -2100,19 +2100,31 @@ function resellerColourButton(productId, colour, selectedColour) {
   `;
 }
 
-function resellerColourCard(productId, colour, selectedColour) {
-  const isSelected = colour.key === selectedColour;
+function resellerColourOrderCard(productId, colour, canOrder) {
   const sizes = resellerAvailableSizes(colour.rows);
+  const selectedTotal = colour.rows.reduce((total, row) => total + Number(state.resellerDraft[row.variantId] || 0), 0);
   return `
-    <button class="builder-colour-card ${isSelected ? "selected" : ""}" data-action="select-reseller-colour" data-product-id="${escapeHtml(productId)}" data-colour="${escapeHtml(colour.key)}" aria-pressed="${isSelected ? "true" : "false"}">
-      <span class="builder-colour-image">${productVisual(colour.label, colour.imageName)}</span>
-      <span class="builder-colour-copy">
-        <strong>${escapeHtml(colour.label)}</strong>
-        <span>${escapeHtml(`${colour.totalStock} units in stock`)}</span>
-        <span>${escapeHtml(`Sizes ${sizes || "available"}`)}</span>
-      </span>
-      <span class="builder-colour-state">${isSelected ? "Selected" : "Select"}</span>
-    </button>
+    <article class="builder-colour-order-card" data-bulk-order-product="${escapeHtml(productId)}" data-colour="${escapeHtml(colour.key)}">
+      <div class="builder-colour-card-head">
+        <div class="builder-colour-image">${productVisual(colour.label, colour.imageName)}</div>
+        <div class="builder-colour-copy">
+          <strong>${escapeHtml(colour.label)}</strong>
+          <span>${escapeHtml(`${colour.totalStock} units in stock`)}</span>
+          <span>${escapeHtml(`Sizes ${sizes || "available"}`)}</span>
+        </div>
+        <div class="builder-colour-total">
+          <strong>${selectedTotal}</strong>
+          <span>${selectedTotal === 1 ? "pair" : "pairs"}</span>
+        </div>
+      </div>
+      <div class="builder-size-list" aria-label="${escapeHtml(colour.label)} size quantities">
+        ${colour.rows.map((row) => resellerSizeQuantityCell(row, canOrder)).join("")}
+      </div>
+      <div class="bulk-order-actions">
+        <button class="button primary full" data-action="add-bulk-order" data-product-id="${escapeHtml(productId)}" ${canOrder ? "" : "disabled"}>Update request</button>
+        <button class="button secondary full" data-action="clear-bulk-order" data-product-id="${escapeHtml(productId)}">Clear color</button>
+      </div>
+    </article>
   `;
 }
 
@@ -2138,13 +2150,9 @@ function resellerProductOrderPage() {
     `;
   }
   const colourGroups = resellerColourGroups(group.rows);
-  const selectedColour = selectedResellerColour(group.productId, colourGroups);
-  const selectedRows = colourGroups.find((entry) => entry.key === selectedColour)?.rows || colourGroups[0]?.rows || [];
-  const selectedGroup = colourGroups.find((entry) => entry.key === selectedColour) || colourGroups[0];
-  const imageName = selectedRows[0]?.imageName || group.imageName;
+  const imageName = colourGroups[0]?.imageName || group.imageName;
   const price = OperationsProducts.priceState(group.price, group.currency || "USD");
   const canOrder = Boolean(group.priceKnown);
-  const selectedSummary = selectedRows.length ? `${selectedRows.length} sizes in ${selectedGroup?.label || "this color"}` : "Choose a color to continue";
   return `
     <main class="portal-page reseller-detail-page reseller-builder-page">
       <button class="text-link" data-route="reseller">Back to shop</button>
@@ -2166,20 +2174,13 @@ function resellerProductOrderPage() {
         </aside>
         <section class="builder-form-panel">
           <div class="builder-section-head">
-            <h2>Choose color</h2>
-            <span>${escapeHtml(selectedSummary)}</span>
+            <h2>Choose colors and sizes</h2>
+            <span>${escapeHtml(`${colourGroups.length} color cards`)}</span>
           </div>
-          <div class="builder-colour-list" aria-label="${escapeHtml(group.productName)} colors">
-            ${colourGroups.map((colour) => resellerColourCard(group.productId, colour, selectedColour)).join("")}
+          <div class="builder-colour-order-list" aria-label="${escapeHtml(group.productName)} color size order cards">
+            ${colourGroups.map((colour) => resellerColourOrderCard(group.productId, colour, canOrder)).join("")}
           </div>
           ${canOrder ? "" : `<p class="notice warning">Admin needs to set this product price before it can be added to a request.</p>`}
-          ${resellerBulkOrderMatrix({
-            group,
-            colourGroups,
-            selectedColour,
-            selectedRows,
-            canOrder,
-          })}
         </section>
         <aside class="order-sidebar reseller-detail-sidebar builder-summary-panel" id="portal-order">
           <div class="sidebar-head"><h2>Request cart</h2><p>${summary.totalUnits} ${summary.totalUnits === 1 ? "pair" : "pairs"} selected</p></div>
@@ -4278,7 +4279,9 @@ async function handleOrderSubmit(form) {
     state.resellerDraft = {};
     state.resellerNotes = "";
     state.orderSubmitted = true;
-    await loadProtectedData();
+    state.orderSubmitPending = false;
+    setRoute("request-confirmation");
+    loadProtectedDataInBackground();
     sendOrderNotification({
       eventType: "order_submitted",
       adminEmails: [],
@@ -4290,7 +4293,6 @@ async function handleOrderSubmit(form) {
       subtotal: payload.orderItems.reduce((sum, item) => sum + Number(item.base_price || 0) * item.quantity, 0),
       notes: payload.orderRequest.notes || "",
     }).catch(() => {});
-    setRoute("request-confirmation");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to submit order request";
     state.inventoryError = message;
