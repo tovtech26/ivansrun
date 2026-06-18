@@ -6,6 +6,7 @@ const ROUTES = [
   "product",
   "find-reseller",
   "apply",
+  "signup",
   "login",
   "admin-login",
   "account",
@@ -126,6 +127,7 @@ const state = {
   passwordRecoverySent: false,
   passwordRecoveryError: null,
   passwordResetMode: false,
+  signupConfirmationEmail: null,
   orderSubmitPending: false,
   applicationSubmitPending: false,
   siteSavePending: false,
@@ -1126,9 +1128,9 @@ function loginPageContent(route = state.route) {
   return {
     eyebrow: "Account Login",
     title: "Sign in to continue.",
-    copy: "Approved resellers use this entry for stock and order requests. Admin users can use the same account system.",
+    copy: "Use your email and password to continue. New buyers can create a reseller account without Google.",
     submitLabel: "Continue",
-    linkOne: ["Need reseller access?", "apply"],
+    linkOne: ["Create account", "signup"],
     linkTwo: ["Admin Login", "admin-login"],
   };
 }
@@ -1141,6 +1143,7 @@ function topNav() {
     ...(state.auth.isAuthenticated
       ? []
       : [
+          ["Create Account", "signup", ["signup"]],
           ["Apply as a Reseller", "apply", ["apply"]],
           ["Login", "login", ["login", "admin-login"]],
         ]),
@@ -1279,6 +1282,7 @@ function mobileDrawerItems() {
   return [
     ["Products", "store", ["store", "product"]],
     ["Find a Reseller", "find-reseller", ["find-reseller"]],
+    ["Create Account", "signup", ["signup"]],
     ["Apply as a Reseller", "apply", ["apply"]],
     ["Login", "login", ["login", "admin-login"]],
   ];
@@ -1561,6 +1565,9 @@ function filterGroup(title, options, selectedValues = [], actionPrefix = "") {
 function resellerApplication() {
   const existingApplication = latestOwnApplication();
   const needsPassword = !state.auth.isAuthenticated;
+  const confirmationNotice = state.signupConfirmationEmail
+    ? `<p class="notice success">Account created for ${escapeHtml(state.signupConfirmationEmail)}. Confirm your email, then sign in to finish the reseller application.</p>`
+    : "";
   const statusNotice = existingApplication
     ? `<p class="notice ${existingApplication.status === "approved" ? "success" : existingApplication.status === "rejected" ? "error" : ""}">Current application status: ${escapeHtml(existingApplication.status)}.</p>`
     : "";
@@ -1573,12 +1580,14 @@ function resellerApplication() {
       </section>
       <section class="form-grid">
         <form class="workflow-form" data-form="application">
+          ${confirmationNotice}
           ${statusNotice}
           ${state.applicationError ? `<p class="notice error">${escapeHtml(state.applicationError)}</p>` : ""}
           ${inputField("Company Name", "company_name", existingApplication?.company_name || state.auth.profile?.company_name || "")}
           ${inputField("Full Name", "full_name", existingApplication?.full_name || state.auth.profile?.full_name || "")}
           ${inputField("Email", "email", existingApplication?.email || state.auth.user?.email || "", "email")}
           ${needsPassword ? inputField("Password", "password", "Create a password", "password") : ""}
+          ${needsPassword ? inputField("Confirm Password", "password_confirm", "Repeat your password", "password") : ""}
           ${inputField("Phone", "phone", existingApplication?.phone || "")}
           ${inputField("Country", "country", existingApplication?.country || "")}
           <label><span>Notes</span><textarea name="message" placeholder="Tell us what you want to buy and where you resell.">${escapeHtml(existingApplication?.message || "")}</textarea></label>
@@ -1593,6 +1602,63 @@ function resellerApplication() {
         </aside>
       </section>
       ${footer(true)}
+    </main>
+  `;
+}
+
+function signupPage() {
+  if (state.auth.isAuthenticated) {
+    return `
+      <main class="form-page narrow">
+        <section class="form-hero">
+          <span class="eyebrow dark">Create Account</span>
+          <h1>Your account is active.</h1>
+          <p>Continue to your application or account page.</p>
+        </section>
+        <div class="workflow-form">
+          <button class="button primary full" data-route="apply">Continue Application</button>
+          <button class="button secondary full" data-route="account">Account Details</button>
+        </div>
+      </main>
+    `;
+  }
+  const confirmationNotice = state.signupConfirmationEmail
+    ? `<p class="notice success">Account created for ${escapeHtml(state.signupConfirmationEmail)}. Confirm your email, then sign in to finish the reseller application.</p>`
+    : "";
+  return `
+    <main class="form-page signup-page">
+      <section class="form-hero">
+        <span class="eyebrow dark">Create Account</span>
+        <h1>Create a reseller account.</h1>
+        <p>Use a normal email and password. Approval is required before prices, stock, and product requests unlock.</p>
+      </section>
+      <section class="form-grid auth-grid">
+        <form class="workflow-form" data-form="application">
+          ${confirmationNotice}
+          ${state.applicationError ? `<p class="notice error">${escapeHtml(state.applicationError)}</p>` : ""}
+          ${state.applicationSubmitted ? `<p class="notice success">Application submitted. You can sign in while the admin team reviews your account.</p>` : ""}
+          ${inputField("Company Name", "company_name", "")}
+          ${inputField("Full Name", "full_name", "")}
+          ${inputField("Email", "email", "name@example.com", "email")}
+          ${inputField("Password", "password", "Minimum 8 characters", "password")}
+          ${inputField("Confirm Password", "password_confirm", "Repeat your password", "password")}
+          ${inputField("Phone", "phone", "")}
+          ${inputField("Country", "country", "")}
+          <label><span>Notes</span><textarea name="message" placeholder="Tell us what you want to buy and where you resell."></textarea></label>
+          <button class="button primary full" ${state.applicationSubmitPending ? "disabled" : ""}>${state.applicationSubmitPending ? "Creating Account..." : "Create Account"}</button>
+          <button type="button" class="button secondary full" data-action="google-login">Continue with Google</button>
+          <div class="split-actions">
+            <button type="button" class="text-link" data-route="login">I already have an account</button>
+            <button type="button" class="text-link" data-route="store">Back to products</button>
+          </div>
+        </form>
+        <aside class="process-panel auth-process-panel">
+          <h2>Access flow</h2>
+          ${processStep("1", "Create account", "Register with email and password, or continue with Google.")}
+          ${processStep("2", "Submit details", "Send business and contact details for approval.")}
+          ${processStep("3", "Start buying", "Approved accounts can see stock and request products.")}
+        </aside>
+      </section>
     </main>
   `;
 }
@@ -3233,6 +3299,7 @@ function routeView() {
     product: productDetail,
     "find-reseller": findResellerPage,
     apply: resellerApplication,
+    signup: signupPage,
     login: loginPage,
     "admin-login": loginPage,
     account: accountPage,
@@ -3660,6 +3727,7 @@ async function handleLogin(form) {
   state.loginPending = true;
   state.loginSubmitted = false;
   state.authError = null;
+  state.signupConfirmationEmail = null;
   render();
 
   try {
@@ -3986,6 +4054,7 @@ async function handleLogout() {
   state.passwordRecoverySent = false;
   state.passwordRecoveryError = null;
   state.passwordResetMode = false;
+  state.signupConfirmationEmail = null;
   state.accountProfileSaved = false;
   state.accountProfileError = null;
   state.accountPasswordSaved = false;
@@ -4080,6 +4149,7 @@ async function handleApplicationSubmit(form) {
   state.applicationSubmitPending = true;
   state.applicationSubmitted = false;
   state.applicationError = null;
+  state.signupConfirmationEmail = null;
   render();
 
   try {
@@ -4089,6 +4159,9 @@ async function handleApplicationSubmit(form) {
     if (!authState.isAuthenticated) {
       const email = String(data.get("email") || "").trim();
       const password = String(data.get("password") || "");
+      const passwordConfirm = String(data.get("password_confirm") || "");
+      if (password.length < 8) throw new Error("Use at least 8 characters for your password.");
+      if (password !== passwordConfirm) throw new Error("The password confirmation does not match.");
       await SupabaseClient.signUpWithPassword({
         url: SUPABASE_URL,
         key: SUPABASE_KEY,
@@ -4097,12 +4170,23 @@ async function handleApplicationSubmit(form) {
         metadata: { full_name: String(data.get("full_name") || "").trim() },
       });
       if (!SupabaseClient.readStoredSession()?.access_token) {
-        await SupabaseClient.signInWithPassword({
-          url: SUPABASE_URL,
-          key: SUPABASE_KEY,
-          email,
-          password,
-        });
+        try {
+          await SupabaseClient.signInWithPassword({
+            url: SUPABASE_URL,
+            key: SUPABASE_KEY,
+            email,
+            password,
+          });
+        } catch (error) {
+          if (/confirm your email|email not confirmed/i.test(error instanceof Error ? error.message : "")) {
+            state.signupConfirmationEmail = email;
+            state.applicationSubmitPending = false;
+            state.applicationError = null;
+            render();
+            return;
+          }
+          throw error;
+        }
       }
       const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });
       authState = Auth.normalizeAuthState(restored);

@@ -5,6 +5,8 @@ const {
   oauthResultFromSearch,
   oauthSessionFromHash,
   requestPasswordReset,
+  signInWithPassword,
+  signUpWithPassword,
   updatePassword,
 } = require("../src/supabase-client.js");
 
@@ -53,6 +55,8 @@ assert.deepEqual(oauthResultFromSearch("?code=auth-code-123"), {
 });
 
 assert.equal(typeof requestPasswordReset, "function");
+assert.equal(typeof signInWithPassword, "function");
+assert.equal(typeof signUpWithPassword, "function");
 assert.equal(typeof updatePassword, "function");
 
 console.log("supabase-client tests passed");

@@ -949,6 +949,19 @@ h4 {
   grid-template-columns: minmax(0, 1fr) 360px;
 }
 
+.auth-grid {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.signup-page .workflow-form {
+  gap: 14px;
+}
+
+.auth-process-panel {
+  position: sticky;
+  top: 24px;
+}
+
 .admin-invite-page {
   max-width: 1040px;
   min-height: 100vh;
@@ -3207,6 +3220,10 @@ textarea {
 
   .reseller-product-grid {
     grid-template-columns: 1fr;
+  }
+
+  .auth-process-panel {
+    position: static;
   }
 
   .filters,

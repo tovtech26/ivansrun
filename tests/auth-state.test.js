@@ -34,6 +34,7 @@ assert.deepEqual(
 assert.equal(canAccessRoute("store", { role: "public" }), true);
 assert.equal(canAccessRoute("product", { role: "public" }), true);
 assert.equal(canAccessRoute("find-reseller", { role: "public" }), true);
+assert.equal(canAccessRoute("signup", { role: "public" }), true);
 assert.equal(canAccessRoute("admin-login", { role: "public" }), true);
 assert.equal(canAccessRoute("account", { role: "public" }), false);
 assert.equal(canAccessRoute("account", { user: { id: "user-1" }, profile: { id: "user-1", role: "pending_reseller" } }), true);

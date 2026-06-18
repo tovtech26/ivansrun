@@ -32,6 +32,12 @@ assert.equal(appSource.includes("Preview admin shell"), false, "Login page must 
 assert.equal(appSource.includes('data-action="google-login"'), true, "Login page must expose Google OAuth login.");
 assert.equal(appSource.includes("function handleGoogleLogin()"), true, "Google OAuth login must have a dedicated handler.");
 assert.equal(appSource.includes("SupabaseClient.signInWithOAuth({"), true, "Google login must use Supabase OAuth instead of bypass logic.");
+assert.equal(appSource.includes("signup: signupPage"), true, "Normal email account creation must have a dedicated signup route.");
+assert.equal(appSource.includes("function signupPage()"), true, "Signup page must render a first-class email account creation form.");
+assert.equal(appSource.includes('["Create account", "signup"]'), true, "Login must expose normal email account creation.");
+assert.equal(appSource.includes('["Create Account", "signup", ["signup"]]'), true, "Public navigation must expose normal email account creation.");
+assert.equal(appSource.includes('inputField("Confirm Password", "password_confirm"'), true, "Signup must require password confirmation.");
+assert.equal(appSource.includes("state.signupConfirmationEmail = email;"), true, "Signup must handle email confirmation before application submission.");
 assert.equal(appSource.includes('["Back to public site", "store"]'), true, "Admin login should point back to the public site instead of reseller application.");
 assert.equal(appSource.includes("SupabaseClient.consumeOAuthSessionFromUrl()"), true, "Startup must consume Supabase OAuth callback sessions.");
 assert.equal(appSource.includes("const hasOAuthError = Boolean(oauthResult.error || oauthError);"), true, "OAuth error handling must be explicit during startup.");
