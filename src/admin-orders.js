@@ -94,5 +94,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunAdminOrders = api;
+  root.IrunsvanAdminOrders = api;
 })(typeof window !== "undefined" ? window : globalThis);

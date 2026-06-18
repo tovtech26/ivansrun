@@ -104,5 +104,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunSiteControls = api;
+  root.IrunsvanSiteControls = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -931,6 +931,127 @@ h4 {
   grid-template-columns: minmax(0, 1fr) 360px;
 }
 
+.admin-invite-page {
+  max-width: 1040px;
+  min-height: 100vh;
+  padding-top: clamp(54px, 8vh, 92px);
+  width: 100%;
+}
+
+.admin-invite-page * {
+  min-width: 0;
+}
+
+.admin-invite-hero {
+  margin-bottom: 24px;
+  max-width: 720px;
+}
+
+.admin-invite-hero h1 {
+  font-size: clamp(38px, 5vw, 64px);
+  letter-spacing: 0;
+  line-height: 0.98;
+  margin-bottom: 20px;
+  max-width: 680px;
+  overflow-wrap: break-word;
+}
+
+.admin-invite-hero p {
+  font-size: 18px;
+  line-height: 1.65;
+  max-width: 760px;
+}
+
+.admin-invite-layout {
+  align-items: stretch;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  max-width: 100%;
+}
+
+.workflow-form.admin-invite-card,
+.process-panel.admin-invite-flow {
+  box-shadow: 0 2px 8px rgba(10, 10, 10, 0.08);
+  min-width: 0;
+  padding: 28px;
+}
+
+.admin-invite-card {
+  align-content: start;
+}
+
+.admin-invite-card .notice {
+  overflow-wrap: anywhere;
+}
+
+.admin-invite-card .notice.error {
+  background: #fffafa;
+  margin-bottom: 4px;
+}
+
+.admin-invite-help {
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0;
+  padding-top: 18px;
+}
+
+.admin-invite-actions {
+  display: grid;
+  gap: 12px;
+}
+
+.google-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 10px;
+  justify-content: center;
+  min-width: 0;
+  white-space: normal;
+}
+
+.google-mark {
+  align-items: center;
+  background: var(--white);
+  color: var(--black);
+  display: inline-flex;
+  flex: 0 0 24px;
+  font-weight: 900;
+  height: 24px;
+  justify-content: center;
+  line-height: 1;
+  width: 24px;
+}
+
+.admin-invite-flow {
+  align-content: start;
+}
+
+.admin-invite-flow .process-step {
+  grid-template-columns: 30px 1fr;
+}
+
+.admin-invite-flow .process-step > strong {
+  height: 30px;
+  width: 30px;
+}
+
+.admin-invite-flow .process-step h3 {
+  font-size: 16px;
+}
+
+.admin-invite-flow .process-step p {
+  overflow-wrap: break-word;
+}
+
+.admin-invite-page .reveal {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
+
 .workflow-form,
 .process-panel,
 .timeline-panel,
@@ -3059,6 +3180,7 @@ textarea {
   .lab-section,
   .detail-grid,
   .form-grid,
+  .admin-invite-layout,
   .email-grid,
   .site-control-grid {
     grid-template-columns: 1fr;
@@ -3634,6 +3756,37 @@ textarea {
     line-height: 1.55;
   }
 
+  .admin-invite-page {
+    max-width: 100%;
+    overflow-x: hidden;
+    padding-top: 30px;
+    width: 100%;
+  }
+
+  .admin-invite-hero h1 {
+    font-size: clamp(30px, 10vw, 40px);
+    line-height: 1.02;
+    max-width: calc(100vw - (var(--mobile-gutter) * 2));
+  }
+
+  .admin-invite-hero,
+  .admin-invite-layout,
+  .workflow-form.admin-invite-card,
+  .process-panel.admin-invite-flow {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .admin-invite-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .workflow-form.admin-invite-card,
+  .process-panel.admin-invite-flow {
+    padding: 20px;
+  }
+
   .admin-topbar {
     border-bottom: 1px solid var(--line);
     gap: 8px;
@@ -4068,6 +4221,15 @@ textarea {
   .info-page {
     padding-left: var(--mobile-gutter);
     padding-right: var(--mobile-gutter);
+  }
+
+  .workflow-form.admin-invite-card,
+  .process-panel.admin-invite-flow {
+    padding: 16px;
+  }
+
+  .google-button {
+    gap: 8px;
   }
 
   .size-grid {

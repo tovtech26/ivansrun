@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rebuild the Ivansrun Africa product/inventory import workflow so selected products from the SKU folders become real Supabase products, variants use manufacturer SKU as the permanent key, colours/images are reviewable, and future master inventory uploads update stock reliably.
+**Goal:** Rebuild the Irunsvan Africa product/inventory import workflow so selected products from the SKU folders become real Supabase products, variants use manufacturer SKU as the permanent key, colours/images are reviewable, and future master inventory uploads update stock reliably.
 
-**Architecture:** Manufacturer SKU (`商品编码`) becomes the source of truth for each sellable variant. Model code selects which products Ivansrun Africa sells, colour mapping controls the human-facing colour and image, and inventory uploads update stock by SKU first. The browser can parse XLSX/CSV for preview, but persistence must write products, colour mappings, variants, and inventory in a predictable order with clear review reports.
+**Architecture:** Manufacturer SKU (`商品编码`) becomes the source of truth for each sellable variant. Model code selects which products Irunsvan Africa sells, colour mapping controls the human-facing colour and image, and inventory uploads update stock by SKU first. The browser can parse XLSX/CSV for preview, but persistence must write products, colour mappings, variants, and inventory in a predictable order with clear review reports.
 
 **Tech Stack:** Browser JavaScript, `xlsx`, Supabase REST/RPC or Edge Function, Postgres SQL migrations, static Render frontend, Node test scripts.
 
@@ -45,7 +45,7 @@ as the primary stock match.
 
 ### Initial Catalog Setup
 
-Admin uploads the master inventory file and chooses the products Ivansrun Africa sells.
+Admin uploads the master inventory file and chooses the products Irunsvan Africa sells.
 
 The system reads:
 

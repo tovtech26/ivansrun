@@ -1,8 +1,8 @@
-# Ivansrun Africa Functionality Roadmap
+# Irunsvan Africa Functionality Roadmap
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:writing-plans` before implementing each phase. This roadmap is the master plan. Each phase should become its own task-level implementation plan before code changes.
 
-**Goal:** Turn the current Ivansrun Africa static frontend into a company-ready ecommerce/reseller operations site backed by Supabase.
+**Goal:** Turn the current Irunsvan Africa static frontend into a company-ready ecommerce/reseller operations site backed by Supabase.
 
 **Architecture:** Keep the public storefront, reseller portal, and admin operations as one static frontend deployed on Render, with Supabase providing Auth, Postgres, Storage, RLS, and Edge Functions. Move all business workflows away from local/sample state into authenticated Supabase reads/writes.
 
@@ -774,7 +774,7 @@ Preferred backend improvement:
 
 1. Clean the working tree intentionally.
 2. Commit functionality in logical commits.
-3. Fix GitHub auth for `tovtech26/ivansrun`.
+3. Fix GitHub auth for `tovtech26/irunsvan`.
 4. Push `main`.
 5. Render static site settings:
    - Build command: `npm run build`
@@ -1380,7 +1380,7 @@ const { test, expect } = require("@playwright/test");
 
 test("public storefront loads catalog without exact stock", async ({ page }) => {
   await page.goto("http://127.0.0.1:5175/");
-  await expect(page.getByRole("heading", { name: /Ivansrun Africa products/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Irunsvan Africa products/i })).toBeVisible();
   await expect(page.getByText(/Exact Stock/i)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /View details/i }).first()).toBeVisible();
 });
@@ -1412,7 +1412,7 @@ const { test, expect } = require("@playwright/test");
 test("admin can open site controls", async ({ page }) => {
   await page.goto("http://127.0.0.1:5175/");
   await page.getByRole("button", { name: "Admin" }).click();
-  await expect(page.getByRole("heading", { name: /Ivansrun Africa Operations/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Irunsvan Africa Operations/i })).toBeVisible();
   await page.getByRole("button", { name: "Site Controls" }).click();
   await expect(page.getByRole("heading", { name: "Site Controls" })).toBeVisible();
   await expect(page.getByLabel("Headline")).toBeVisible();

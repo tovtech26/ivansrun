@@ -256,5 +256,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunCatalogSeedBuilder = api;
+  root.IrunsvanCatalogSeedBuilder = api;
 })(typeof window !== "undefined" ? window : globalThis);

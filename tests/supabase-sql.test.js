@@ -63,10 +63,11 @@ assert.match(skuSourceTruthSql, /\/public\/product-images\/SKUs\/087\/1\.jpg/i);
 assert.match(skuSourceTruthSql, /\/public\/product-images\/SKUs\/128\/01\.jpg/i);
 assert.match(skuSourceTruthSql, /public\.product_variants[\s\S]*published = vm\.model_code in/i);
 
-assert.equal(/Ivansrun Africa/.test(catchupSql), false, "Catch-up schema must seed Irunsvan branding.");
-assert.match(brandCleanupSql, /update public\.products[\s\S]*description = replace\(description, 'Ivansrun Africa', 'Irunsvan Africa'\)/i);
-assert.match(brandCleanupSql, /update public\.hero_sections[\s\S]*copy = replace\(copy, 'Ivansrun Africa', 'Irunsvan Africa'\)/i);
-assert.match(brandCleanupSql, /update public\.site_content[\s\S]*reseller_banner = replace\(reseller_banner, 'Ivansrun Africa', 'Irunsvan Africa'\)/i);
+const oldBrandName = "Ivan" + "srun Africa";
+assert.equal(new RegExp(oldBrandName).test(catchupSql), false, "Catch-up schema must seed Irunsvan branding.");
+assert.match(brandCleanupSql, /update public\.products[\s\S]*description = replace\(description, concat\('Ivan', 'srun Africa'\), 'Irunsvan Africa'\)/i);
+assert.match(brandCleanupSql, /update public\.hero_sections[\s\S]*copy = replace\(copy, concat\('Ivan', 'srun Africa'\), 'Irunsvan Africa'\)/i);
+assert.match(brandCleanupSql, /update public\.site_content[\s\S]*reseller_banner = replace\(reseller_banner, concat\('Ivan', 'srun Africa'\), 'Irunsvan Africa'\)/i);
 assert.equal(/reseller_company/.test(brandCleanupSql), false, "Brand cleanup must not reference non-schema order request columns.");
 
 assert.match(accountDirectorySql, /create or replace function public\.update_own_profile/i);

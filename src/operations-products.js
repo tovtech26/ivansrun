@@ -108,5 +108,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunOperationsProducts = api;
+  root.IrunsvanOperationsProducts = api;
 })(typeof window !== "undefined" ? window : globalThis);

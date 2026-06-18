@@ -51,5 +51,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunStorefrontCatalog = api;
+  root.IrunsvanStorefrontCatalog = api;
 })(typeof window !== "undefined" ? window : globalThis);

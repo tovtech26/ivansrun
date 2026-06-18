@@ -272,5 +272,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunImportParser = api;
+  root.IrunsvanImportParser = api;
 })(typeof window !== "undefined" ? window : globalThis);

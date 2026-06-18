@@ -1,4 +1,4 @@
-﻿(function attachCatalogFallback(root) {
+(function attachCatalogFallback(root) {
   const products = [
     {
       id: 'local-005',
@@ -423,5 +423,5 @@
   const variants = [];
   const api = { products, variants };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunCatalogFallback = api;
+  root.IrunsvanCatalogFallback = api;
 })(typeof window !== "undefined" ? window : globalThis);

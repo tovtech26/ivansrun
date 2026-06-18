@@ -60,5 +60,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunAuth = api;
+  root.IrunsvanAuth = api;
 })(typeof window !== "undefined" ? window : globalThis);

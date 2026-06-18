@@ -40,5 +40,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunProductDetail = api;
+  root.IrunsvanProductDetail = api;
 })(typeof window !== "undefined" ? window : globalThis);

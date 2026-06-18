@@ -6,10 +6,10 @@ All testing must use the normal site login form. There is no dev auto-login endp
 
 | Email | Role |
 | --- | --- |
-| `admin.test@ivansrun.africa` | `admin` |
-| `ops.admin@ivansrun.africa` | `admin` |
-| `reseller.test@ivansrun.africa` | `reseller` |
-| `pending.test@ivansrun.africa` | `pending_reseller` |
+| `admin.test@irunsvan.africa` | `admin` |
+| `ops.admin@irunsvan.africa` | `admin` |
+| `reseller.test@irunsvan.africa` | `reseller` |
+| `pending.test@irunsvan.africa` | `pending_reseller` |
 
 Do not commit test account passwords. Set them through environment variables when creating or rotating the accounts.
 
@@ -19,10 +19,10 @@ Run this from the repo root with the project service-role key:
 
 ```powershell
 $env:SUPABASE_SERVICE_ROLE_KEY="paste-service-role-key-here"
-$env:IVANSRUN_TEST_ADMIN_PASSWORD="set-a-strong-password"
-$env:IVANSRUN_TEST_OPS_PASSWORD="set-a-strong-password"
-$env:IVANSRUN_TEST_RESELLER_PASSWORD="set-a-strong-password"
-$env:IVANSRUN_TEST_PENDING_PASSWORD="set-a-strong-password"
+$env:IRUNSVAN_TEST_ADMIN_PASSWORD="set-a-strong-password"
+$env:IRUNSVAN_TEST_OPS_PASSWORD="set-a-strong-password"
+$env:IRUNSVAN_TEST_RESELLER_PASSWORD="set-a-strong-password"
+$env:IRUNSVAN_TEST_PENDING_PASSWORD="set-a-strong-password"
 node scripts/create-test-admins.js
 ```
 
@@ -45,29 +45,29 @@ select
   users.id,
   users.email,
   case
-    when users.email = 'admin.test@ivansrun.africa' then 'Admin Test'
-    when users.email = 'ops.admin@ivansrun.africa' then 'Ops Admin'
-    when users.email = 'reseller.test@ivansrun.africa' then 'Reseller Test'
-    when users.email = 'pending.test@ivansrun.africa' then 'Pending Test'
+    when users.email = 'admin.test@irunsvan.africa' then 'Admin Test'
+    when users.email = 'ops.admin@irunsvan.africa' then 'Ops Admin'
+    when users.email = 'reseller.test@irunsvan.africa' then 'Reseller Test'
+    when users.email = 'pending.test@irunsvan.africa' then 'Pending Test'
     else users.email
   end,
   case
-    when users.email in ('admin.test@ivansrun.africa', 'ops.admin@ivansrun.africa') then 'Ivansrun Africa'
-    when users.email = 'reseller.test@ivansrun.africa' then 'Test Reseller Co'
-    when users.email = 'pending.test@ivansrun.africa' then 'Pending Reseller Co'
+    when users.email in ('admin.test@irunsvan.africa', 'ops.admin@irunsvan.africa') then 'Irunsvan Africa'
+    when users.email = 'reseller.test@irunsvan.africa' then 'Test Reseller Co'
+    when users.email = 'pending.test@irunsvan.africa' then 'Pending Reseller Co'
     else 'Test Account'
   end,
   case
-    when users.email in ('admin.test@ivansrun.africa', 'ops.admin@ivansrun.africa') then 'admin'::public.user_role
-    when users.email = 'reseller.test@ivansrun.africa' then 'reseller'::public.user_role
+    when users.email in ('admin.test@irunsvan.africa', 'ops.admin@irunsvan.africa') then 'admin'::public.user_role
+    when users.email = 'reseller.test@irunsvan.africa' then 'reseller'::public.user_role
     else 'pending_reseller'::public.user_role
   end
 from auth.users
 where users.email in (
-  'admin.test@ivansrun.africa',
-  'ops.admin@ivansrun.africa',
-  'reseller.test@ivansrun.africa',
-  'pending.test@ivansrun.africa'
+  'admin.test@irunsvan.africa',
+  'ops.admin@irunsvan.africa',
+  'reseller.test@irunsvan.africa',
+  'pending.test@irunsvan.africa'
 )
 on conflict (id) do update
 set

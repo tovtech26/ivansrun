@@ -62,5 +62,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunMobileNavigation = api;
+  root.IrunsvanMobileNavigation = api;
 })(typeof window !== "undefined" ? window : globalThis);

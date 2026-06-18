@@ -66,5 +66,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunProductImages = api;
+  root.IrunsvanProductImages = api;
 })(typeof window !== "undefined" ? window : globalThis);

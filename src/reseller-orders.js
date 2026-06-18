@@ -172,5 +172,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunResellerOrders = api;
+  root.IrunsvanResellerOrders = api;
 })(typeof window !== "undefined" ? window : globalThis);

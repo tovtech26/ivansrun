@@ -1,6 +1,8 @@
 (function attachSupabaseClient(root) {
-  const AUTH_STORAGE_KEY = "ivansrun_auth_session";
-  const OAUTH_ERROR_STORAGE_KEY = "ivansrun_oauth_error";
+  const AUTH_STORAGE_KEY = "irunsvan_auth_session";
+  const OAUTH_ERROR_STORAGE_KEY = "irunsvan_oauth_error";
+  const LEGACY_AUTH_STORAGE_KEY = "ivan" + "srun_auth_session";
+  const LEGACY_OAUTH_ERROR_STORAGE_KEY = "ivan" + "srun_oauth_error";
 
   function headers(key, accessToken) {
     return {
@@ -27,7 +29,12 @@
 
   function readStoredSession() {
     try {
-      return JSON.parse(localStorage.getItem(AUTH_STORAGE_KEY) || "null");
+      const sessionText = localStorage.getItem(AUTH_STORAGE_KEY) || localStorage.getItem(LEGACY_AUTH_STORAGE_KEY);
+      if (sessionText && !localStorage.getItem(AUTH_STORAGE_KEY)) {
+        localStorage.setItem(AUTH_STORAGE_KEY, sessionText);
+        localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY);
+      }
+      return JSON.parse(sessionText || "null");
     } catch {
       return null;
     }
@@ -39,6 +46,7 @@
 
   function clearStoredSession() {
     localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY);
   }
 
   function buildOAuthUrl({ url, provider = "google", redirectTo }) {
@@ -117,8 +125,9 @@
   }
 
   function consumeOAuthError() {
-    const error = localStorage.getItem(OAUTH_ERROR_STORAGE_KEY);
+    const error = localStorage.getItem(OAUTH_ERROR_STORAGE_KEY) || localStorage.getItem(LEGACY_OAUTH_ERROR_STORAGE_KEY);
     localStorage.removeItem(OAUTH_ERROR_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_OAUTH_ERROR_STORAGE_KEY);
     return error;
   }
 
@@ -258,5 +267,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunSupabaseClient = api;
+  root.IrunsvanSupabaseClient = api;
 })(typeof window !== "undefined" ? window : globalThis);

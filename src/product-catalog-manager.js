@@ -245,5 +245,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunProductCatalogManager = api;
+  root.IrunsvanProductCatalogManager = api;
 })(typeof window !== "undefined" ? window : globalThis);

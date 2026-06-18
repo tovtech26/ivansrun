@@ -1,17 +1,17 @@
 update public.products
 set
-  description = replace(description, 'Ivansrun Africa', 'Irunsvan Africa'),
-  short_description = replace(short_description, 'Ivansrun Africa', 'Irunsvan Africa')
-where description like '%Ivansrun Africa%'
-  or short_description like '%Ivansrun Africa%';
+  description = replace(description, concat('Ivan', 'srun Africa'), 'Irunsvan Africa'),
+  short_description = replace(short_description, concat('Ivan', 'srun Africa'), 'Irunsvan Africa')
+where description like '%' || concat('Ivan', 'srun Africa') || '%'
+  or short_description like '%' || concat('Ivan', 'srun Africa') || '%';
 
 update public.hero_sections
 set
-  eyebrow = replace(eyebrow, 'Ivansrun Africa', 'Irunsvan Africa'),
-  copy = replace(copy, 'Ivansrun Africa', 'Irunsvan Africa')
-where eyebrow like '%Ivansrun Africa%'
-  or copy like '%Ivansrun Africa%';
+  eyebrow = replace(eyebrow, concat('Ivan', 'srun Africa'), 'Irunsvan Africa'),
+  copy = replace(copy, concat('Ivan', 'srun Africa'), 'Irunsvan Africa')
+where eyebrow like '%' || concat('Ivan', 'srun Africa') || '%'
+  or copy like '%' || concat('Ivan', 'srun Africa') || '%';
 
 update public.site_content
-set reseller_banner = replace(reseller_banner, 'Ivansrun Africa', 'Irunsvan Africa')
-where reseller_banner like '%Ivansrun Africa%';
+set reseller_banner = replace(reseller_banner, concat('Ivan', 'srun Africa'), 'Irunsvan Africa')
+where reseller_banner like '%' || concat('Ivan', 'srun Africa') || '%';

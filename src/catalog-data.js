@@ -1,6 +1,6 @@
 (function attachCatalogData(root) {
   function fallbackCatalog() {
-    const fallback = root.IvansrunCatalogFallback || {};
+    const fallback = root.IrunsvanCatalogFallback || {};
     return {
       products: Array.isArray(fallback.products) ? fallback.products : [],
       variants: Array.isArray(fallback.variants) ? fallback.variants : [],
@@ -90,5 +90,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunCatalogData = api;
+  root.IrunsvanCatalogData = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -4,7 +4,7 @@ const { buildOrderEmailPayload, buildApplicationEmailPayload } = require("../src
 assert.deepEqual(
   buildOrderEmailPayload({
     eventType: "order_submitted",
-    adminEmails: ["ops@ivansrun.africa"],
+    adminEmails: ["ops@irunsvan.africa"],
     orderCode: "#RE-123456",
     resellerCompany: "TOV Sports Distribution",
     resellerEmail: "buyer@example.com",
@@ -14,7 +14,7 @@ assert.deepEqual(
     notes: "Urgent dispatch",
   }),
   {
-    to: ["ops@ivansrun.africa"],
+    to: ["ops@irunsvan.africa"],
     subject: "New order request #RE-123456 from TOV Sports Distribution",
     htmlIncludes: [
       "#RE-123456",
@@ -31,7 +31,7 @@ assert.deepEqual(
 assert.deepEqual(
   buildApplicationEmailPayload({
     eventType: "application_submitted",
-    adminEmails: ["ops@ivansrun.africa"],
+    adminEmails: ["ops@irunsvan.africa"],
     companyName: "TOV Sports Distribution",
     fullName: "Buyer Name",
     email: "buyer@example.com",
@@ -39,7 +39,7 @@ assert.deepEqual(
     message: "We resell across Southern Africa.",
   }),
   {
-    to: ["ops@ivansrun.africa"],
+    to: ["ops@irunsvan.africa"],
     subject: "New reseller application from TOV Sports Distribution",
     htmlIncludes: ["TOV Sports Distribution", "Buyer Name", "buyer@example.com", "Botswana", "We resell across Southern Africa."],
   },

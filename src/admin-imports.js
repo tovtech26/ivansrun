@@ -68,5 +68,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunAdminImports = api;
+  root.IrunsvanAdminImports = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the simple real workflow for Ivansrun Africa: admin reviews/creates products from media packs, defines colors/sizes/images, uploads inventory files, reviews matched stock changes, then publishes stock for the reseller shopping catalog.
+**Goal:** Build the simple real workflow for Irunsvan Africa: admin reviews/creates products from media packs, defines colors/sizes/images, uploads inventory files, reviews matched stock changes, then publishes stock for the reseller shopping catalog.
 
 **Architecture:** Keep Render as a static frontend and Supabase as the live backend. The browser handles normal CSV/XLSX inventory parsing and media-pack folder scanning; Supabase stores products, variants, inventory, orders, and later uploaded images. Product setup is the source of truth; inventory files only update stock for known model/color/size variants.
 

@@ -36,5 +36,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunEmailNotifications = api;
+  root.IrunsvanEmailNotifications = api;
 })(typeof window !== "undefined" ? window : globalThis);

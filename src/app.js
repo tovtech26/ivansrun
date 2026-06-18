@@ -27,28 +27,28 @@ const ROUTES = [
   "privacy",
 ];
 
-const SiteControls = window.IvansrunSiteControls;
-const Auth = window.IvansrunAuth;
-const SupabaseClient = window.IvansrunSupabaseClient;
-const Orders = window.IvansrunResellerOrders;
-const AdminOrders = window.IvansrunAdminOrders;
-const Applications = window.IvansrunResellerApplications;
-const SitePublish = window.IvansrunSitePublish;
-const ImportParser = window.IvansrunImportParser;
-const AdminImports = window.IvansrunAdminImports;
-const ProductEditor = window.IvansrunProductEditor;
-const ProductCatalogManager = window.IvansrunProductCatalogManager;
-const ProductPersistence = window.IvansrunProductPersistence;
-const CatalogSeedBuilder = window.IvansrunCatalogSeedBuilder;
-const ProductImages = window.IvansrunProductImages;
-const StorefrontCatalog = window.IvansrunStorefrontCatalog;
-const EmailNotifications = window.IvansrunEmailNotifications;
-const ProductDetailModel = window.IvansrunProductDetail;
-const MobileNavigation = window.IvansrunMobileNavigation;
-const InventoryWorkflow = window.IvansrunInventoryWorkflow;
-const CatalogData = window.IvansrunCatalogData;
-const OperationsProducts = window.IvansrunOperationsProducts;
-const SITE_CONTENT_STORAGE_KEY = "ivansrun_site_content";
+const SiteControls = window.IrunsvanSiteControls;
+const Auth = window.IrunsvanAuth;
+const SupabaseClient = window.IrunsvanSupabaseClient;
+const Orders = window.IrunsvanResellerOrders;
+const AdminOrders = window.IrunsvanAdminOrders;
+const Applications = window.IrunsvanResellerApplications;
+const SitePublish = window.IrunsvanSitePublish;
+const ImportParser = window.IrunsvanImportParser;
+const AdminImports = window.IrunsvanAdminImports;
+const ProductEditor = window.IrunsvanProductEditor;
+const ProductCatalogManager = window.IrunsvanProductCatalogManager;
+const ProductPersistence = window.IrunsvanProductPersistence;
+const CatalogSeedBuilder = window.IrunsvanCatalogSeedBuilder;
+const ProductImages = window.IrunsvanProductImages;
+const StorefrontCatalog = window.IrunsvanStorefrontCatalog;
+const EmailNotifications = window.IrunsvanEmailNotifications;
+const ProductDetailModel = window.IrunsvanProductDetail;
+const MobileNavigation = window.IrunsvanMobileNavigation;
+const InventoryWorkflow = window.IrunsvanInventoryWorkflow;
+const CatalogData = window.IrunsvanCatalogData;
+const OperationsProducts = window.IrunsvanOperationsProducts;
+const SITE_CONTENT_STORAGE_KEY = "irunsvan_site_content";
 const SERVER_MONITOR_ENABLED =
   typeof window !== "undefined" &&
   (["localhost", "127.0.0.1", ""].includes(window.location.hostname) ||
@@ -528,6 +528,26 @@ async function responseBodySnippet(response) {
 async function buildResponseError(prefix, response) {
   const snippet = await responseBodySnippet(response);
   return new Error(snippet ? `${prefix}: ${response.status} ${snippet}` : `${prefix}: ${response.status}`);
+}
+
+function readableAdminInviteError(error, fallback = "Unable to claim admin invite") {
+  const raw = error instanceof Error ? error.message : String(error || fallback);
+  const jsonStart = raw.indexOf("{");
+  const jsonEnd = raw.lastIndexOf("}");
+  if (jsonStart >= 0 && jsonEnd > jsonStart) {
+    try {
+      const parsed = JSON.parse(raw.slice(jsonStart, jsonEnd + 1));
+      if (parsed?.message) return String(parsed.message);
+    } catch {
+      // Fall back to targeted plain-language matches below.
+    }
+  }
+  if (/different email address/i.test(raw)) return "This invite was sent to a different email address.";
+  if (/already been used/i.test(raw)) return "This admin invite link has already been used.";
+  if (/has expired/i.test(raw)) return "This admin invite link has expired.";
+  if (/has been revoked/i.test(raw)) return "This admin invite link has been revoked.";
+  if (/invalid/i.test(raw) && /invite/i.test(raw)) return "This admin invite link is invalid or has already been used.";
+  return raw || fallback;
 }
 
 async function monitoredFetch(label, url, options = {}) {
@@ -3901,8 +3921,7 @@ async function claimAdminInvite(token) {
     setRoute("admin", {}, { replaceHistory: true, scroll: false });
     loadProtectedDataInBackground();
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to claim admin invite";
-    state.adminInviteError = message;
+    state.adminInviteError = readableAdminInviteError(error);
     state.adminInviteClaimPending = false;
     if (state.auth.isAuthenticated) {
       await SupabaseClient.signOut();
@@ -4727,22 +4746,24 @@ function adminInvitePage() {
         ? state.adminInviteError
         : "Open the invite link from your email to continue.";
   return `
-    <main class="form-page narrow">
-      <section class="form-hero">
+    <main class="form-page admin-invite-page">
+      <section class="form-hero admin-invite-hero">
         <span class="eyebrow dark">Admin Invite</span>
-        <h1>Sign in with Google to claim admin access.</h1>
+        <h1>Claim admin access</h1>
         <p>${escapeHtml(inviteCopy)}</p>
       </section>
-      <section class="form-grid">
-        <div class="workflow-form">
+      <section class="admin-invite-layout">
+        <div class="workflow-form admin-invite-card">
           ${inviteStatus ? `<p class="notice error">${escapeHtml(inviteStatus)}</p>` : ""}
           ${state.adminInviteError && !inviteStatus ? `<p class="notice error">${escapeHtml(state.adminInviteError)}</p>` : ""}
           ${invite?.note ? `<p class="notice">${escapeHtml(invite.note)}</p>` : ""}
-          <p class="form-note">Only the Google account that matches the invite email can claim this admin invite. If you sign in with the wrong account, the request will be rejected.</p>
-          <button class="button primary full" data-action="google-login" ${state.loginPending || state.adminInviteClaimPending || Boolean(inviteStatus) ? "disabled" : ""}>${state.adminInviteClaimPending ? "Claiming..." : "Continue with Google"}</button>
-          <button type="button" class="button secondary full" data-route="store">Back to Public Site</button>
+          <p class="form-note admin-invite-help">Only the Google account that matches the invite email can claim this admin invite.</p>
+          <div class="admin-invite-actions">
+            <button class="button primary full google-button" data-action="google-login" ${state.loginPending || state.adminInviteClaimPending || Boolean(inviteStatus) ? "disabled" : ""}><span class="google-mark">G</span>${state.adminInviteClaimPending ? "Claiming access..." : "Continue with Google"}</button>
+            <button type="button" class="button secondary full" data-route="store">Back to Public Site</button>
+          </div>
         </div>
-        <aside class="process-panel">
+        <aside class="process-panel admin-invite-flow">
           <h2>Invite flow</h2>
           ${processStep("1", "Open invite link", "Use the private link sent by the admin.")}
           ${processStep("2", "Sign in with Google", "Use the exact email address that received the invite.")}

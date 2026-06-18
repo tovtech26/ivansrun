@@ -157,5 +157,5 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
-  root.IvansrunMediaPackScanner = api;
+  root.IrunsvanMediaPackScanner = api;
 })(typeof window !== "undefined" ? window : globalThis);
