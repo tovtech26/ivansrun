@@ -1555,6 +1555,10 @@ td {
   padding: 6px 10px;
 }
 
+.product-facts .stock-exact {
+  color: var(--blue-dark);
+}
+
 .variant-picker {
   display: grid;
   gap: 10px;
@@ -1787,6 +1791,14 @@ td {
 
 .availability.sold-out {
   color: var(--muted);
+}
+
+.exact-stock {
+  color: var(--ink);
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 800;
+  margin-top: 2px;
 }
 
 .order-sidebar {

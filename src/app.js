@@ -2011,6 +2011,7 @@ function resellerProductCard(group) {
           <span>${visibleColourCount} ${visibleColourCount === 1 ? "color" : "colors"}</span>
           <span>${group.optionCount} SKU rows</span>
           <span>${sizes || "Sizes vary by color"}</span>
+          <span>${group.totalStock} units exact stock</span>
         </div>
         <div class="colour-strip" aria-label="${escapeHtml(group.productName)} colors">
           ${colourGroups.slice(0, 6).map((colour) => resellerColourButton(group.productId, colour, selectedColour)).join("")}
@@ -2100,6 +2101,7 @@ function resellerProductOrderPage() {
   const price = OperationsProducts.priceState(group.price, group.currency || "USD");
   const canOrder = Boolean(group.priceKnown);
   const selectedSummary = selectedRows.length ? `${selectedRows.length} sizes in ${selectedGroup?.label || "this color"}` : "Choose a color to continue";
+  const exactColorStock = selectedRows.reduce((total, row) => total + Number(row.stockQuantity || 0), 0);
   return `
     <main class="portal-page reseller-detail-page">
       <button class="text-link" data-route="reseller">Back to shop</button>
@@ -2122,6 +2124,7 @@ function resellerProductOrderPage() {
             <span>${colourGroups.length} ${colourGroups.length === 1 ? "color" : "colors"}</span>
             <span>${resellerAvailableSizes(group.rows) || "Check availability"}</span>
             <span>${selectedSummary}</span>
+            <span>${exactColorStock} units exact stock</span>
           </div>
           <p class="reseller-product-note">Select one color, then enter quantities for the available sizes below.</p>
           ${canOrder ? "" : `<p class="notice warning">Admin needs to set this product price before it can be added to a request.</p>`}
@@ -2206,6 +2209,7 @@ function resellerSizeQuantityCell(row, productCanOrder = true) {
         <input class="qty-input" aria-label="Quantity for ${escapeHtml(row.colour)} size ${escapeHtml(row.size)}" type="number" min="0" max="${row.stockQuantity}" value="${state.resellerDraft[row.variantId] || ""}" data-bulk-qty-input="${escapeHtml(row.variantId)}" ${disabled ? "disabled" : ""} />
       </label>
       <small class="availability ${availability.className}">${availability.label}</small>
+      <small class="exact-stock">${escapeHtml(`${row.stockQuantity} in stock`)}</small>
     </div>
   `;
 }

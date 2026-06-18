@@ -110,6 +110,8 @@ assert.equal(appSource.includes("data-action=\"add-bulk-order\""), true, "Resell
 assert.equal(appSource.includes("data-bulk-qty-input"), true, "Reseller shop must use size quantity inputs in the bulk matrix.");
 assert.equal(appSource.includes("colour-dot"), true, "Reseller colour chips must use simple swatches instead of image tiles.");
 assert.equal(appSource.includes("product-facts"), true, "Reseller cards must show compact product facts.");
+assert.equal(appSource.includes("units exact stock"), true, "Reseller cards must show the exact stock total.");
+assert.equal(appSource.includes("in stock"), true, "Reseller size rows must show exact stock counts.");
 assert.equal(appSource.includes("Approve and deduct stock"), true, "Admin approval action must make the stock change explicit.");
 assert.equal(appSource.includes('<p class="mono">SKU:'), false, "Reseller order summary must not expose backend SKU labels.");
 assert.equal(appSource.includes("Available Options"), false, "Reseller metrics must use buyer-friendly language instead of backend option labels.");
