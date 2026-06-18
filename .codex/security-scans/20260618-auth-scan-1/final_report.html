@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Final Security Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 32px; line-height: 1.5; color: #111; }
+      h1, h2, h3 { line-height: 1.2; }
+      code { background: #f4f4f4; padding: 0 4px; border-radius: 4px; }
+      .item { margin-bottom: 20px; }
+    </style>
+  </head>
+  <body>
+    <h1>Final Security Report</h1>
+    <p>Scan target: repository-wide</p>
+    <h2>Summary</h2>
+    <ul>
+      <li><code>CF-001</code> - admin invite token remains in the URL and browser history after load</li>
+      <li><code>CAND-IMP-001</code> - CSV parser mis-splits multiline quoted rows</li>
+      <li><code>CAND-MAIL-ORDER-001</code> - public order-mail edge function lacks caller authentication</li>
+      <li><code>CAND-MAIL-APP-001</code> - public application-mail edge function lacks caller authentication</li>
+      <li><code>CAND-INV-001</code> - inventory publish-plan helper, suppressed because the call sites are internal</li>
+    </ul>
+  </body>
+ </html>

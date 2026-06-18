@@ -1,0 +1,73 @@
+{"evidence":"full file read; static planning mockup only.","disposition":"not_applicable","file":".superpowers/inbetweens-map.html"}
+{"evidence":"full file read; static app shell and script loader only.","disposition":"not_applicable","file":"index.html"}
+{"evidence":"full file read; manifest and scripts only.","disposition":"not_applicable","file":"package.json"}
+{"evidence":"full file read; deployment config only.","disposition":"not_applicable","file":"render.yaml"}
+{"evidence":"full file read; static file copy/build helper only.","disposition":"not_applicable","file":"scripts/build-static.js"}
+{"evidence":"full file read; admin bootstrap script only, gated by service-role env var.","disposition":"not_applicable","file":"scripts/create-test-admins.js"}
+{"evidence":"full file read; static server with path containment check.","disposition":"not_applicable","file":"scripts/serve-static.js"}
+{"evidence":"full file read; skill metadata cache only.","disposition":"not_applicable","file":"skills-lock.json"}
+{"evidence":"full file read; import preview/job payload builders only.","disposition":"not_applicable","file":"src/admin-imports.js"}
+{"evidence":"full file read; order-status and inventory-adjustment calculators only.","disposition":"not_applicable","file":"src/admin-orders.js"}
+{"evidence":"full file read; admin invite token remains in URL history after load and other auth bootstrap flows were reviewed.","disposition":"reportable","file":"src/app.js"}
+{"evidence":"full file read; pure client-side route/role classifier with no persistence or backend call.","disposition":"not_applicable","file":"src/auth.js"}
+{"evidence":"full file read; catalog query-string helper constants only.","disposition":"not_applicable","file":"src/catalog-data.js"}
+{"evidence":"full file read; static fallback catalog data only.","disposition":"not_applicable","file":"src/catalog-fallback.js"}
+{"evidence":"full file read; seed-building helper only.","disposition":"not_applicable","file":"src/catalog-seed-builder.js"}
+{"evidence":"full file read; email subject/html shaping only.","disposition":"not_applicable","file":"src/email-notifications.js"}
+{"evidence":"full file read; CSV parser splits on raw newlines before quote-aware record handling.","disposition":"reportable","file":"src/import-parser.js"}
+{"evidence":"full file read; variant-id keyed inventory merge was reviewed and suppressed as an internal helper boundary.","disposition":"suppressed","file":"src/inventory-workflow.js"}
+{"evidence":"full file read; media classification helper only.","disposition":"not_applicable","file":"src/media-pack-scanner.js"}
+{"evidence":"full file read; client route mapping helpers only.","disposition":"not_applicable","file":"src/mobile-navigation.js"}
+{"evidence":"full file read; admin summary and stock-matrix shaping only.","disposition":"not_applicable","file":"src/operations-products.js"}
+{"evidence":"full file read; in-memory draft and variant helpers only.","disposition":"not_applicable","file":"src/product-catalog-manager.js"}
+{"evidence":"full file read; detail view-model assembly only.","disposition":"not_applicable","file":"src/product-detail.js"}
+{"evidence":"full file read; editor form normalization only.","disposition":"not_applicable","file":"src/product-editor.js"}
+{"evidence":"full file read; URL shaping only.","disposition":"not_applicable","file":"src/product-images.js"}
+{"evidence":"full file read; payload and storage-path constructors only.","disposition":"not_applicable","file":"src/product-persistence.js"}
+{"evidence":"full file read; application payload builders only.","disposition":"not_applicable","file":"src/reseller-applications.js"}
+{"evidence":"full file read; reseller order payload and display helpers only.","disposition":"not_applicable","file":"src/reseller-orders.js"}
+{"evidence":"full file read; site content/theme sanitization only.","disposition":"not_applicable","file":"src/site-controls.js"}
+{"evidence":"full file read; publish payload shaping only.","disposition":"not_applicable","file":"src/site-publish.js"}
+{"evidence":"full file read; catalog filter/sort helper only.","disposition":"not_applicable","file":"src/storefront-catalog.js"}
+{"evidence":"full file read; helper-only or generated artifact with no direct security boundary in this file.","disposition":"not_applicable","file":"src/styles.css"}
+{"evidence":"full file read; session restore, callback scrubbing, and local storage cleanup are internally consistent.","disposition":"not_applicable","file":"src/supabase-client.js"}
+{"evidence":"full file read; unauthenticated mail edge function reaches Resend directly.","disposition":"reportable","file":"supabase/functions/send-application-email/index.ts"}
+{"evidence":"full file read; unauthenticated mail edge function reaches Resend directly.","disposition":"reportable","file":"supabase/functions/send-order-email/index.ts"}
+{"evidence":"full file read; import batch generator and SQL serializer only.","disposition":"not_applicable","file":"supabase/imports/generate_import_sql.py"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/001_catalog_products.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/002_catalog_variants_01.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/002_catalog_variants_02.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/002_catalog_variants_03.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/002_catalog_variants_04.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/002_catalog_variants_05.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/002_catalog_variants_06.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/002_catalog_variants_07.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/002_catalog_variants_08.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/003_inventory_01.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/003_inventory_02.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/003_inventory_03.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/003_inventory_04.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/003_inventory_05.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/003_inventory_06.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/003_inventory_07.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/003_inventory_08.sql"}
+{"evidence":"full file read; generated insert batch only.","disposition":"not_applicable","file":"supabase/imports/generated_sql/004_import_jobs.sql"}
+{"evidence":"full file read; helper-only or generated artifact with no direct security boundary in this file.","disposition":"not_applicable","file":"supabase/imports/generated_sql/import_report.json"}
+{"evidence":"full file read; import runner only; privileged by environment keys, not by attacker input in repo code.","disposition":"not_applicable","file":"supabase/imports/import_to_supabase_rest.py"}
+{"evidence":"full file read; helper-only or generated artifact with no direct security boundary in this file.","disposition":"not_applicable","file":"supabase/imports/rest_import_report.json"}
+{"evidence":"full file read; core RLS and SECURITY DEFINER helpers are pinned with search_path = \u0027\u0027\u0027 and role-bound policies.","disposition":"suppressed","file":"supabase/sql/001_backend_schema.sql"}
+{"evidence":"full file read; seed-admin setup only.","disposition":"not_applicable","file":"supabase/sql/002_backend_seed_admin.sql"}
+{"evidence":"full file read; smoke-test SQL only.","disposition":"not_applicable","file":"supabase/sql/003_backend_smoke_tests.sql"}
+{"evidence":"full file read; policy fix SQL only.","disposition":"not_applicable","file":"supabase/sql/004_backend_policy_advisor_fixes.sql"}
+{"evidence":"full file read; policy merge SQL only.","disposition":"not_applicable","file":"supabase/sql/005_backend_order_item_insert_policy_merge.sql"}
+{"evidence":"full file read; public catalog policy SQL only.","disposition":"not_applicable","file":"supabase/sql/006_public_catalog_policy_fix.sql"}
+{"evidence":"full file read; public-read and admin-write policies were verified for site content/theme tables.","disposition":"suppressed","file":"supabase/sql/007_site_controls.sql"}
+{"evidence":"full file read; only catalog metadata and admin-only storage policy changes appear here.","disposition":"suppressed","file":"supabase/sql/008_product_catalog_workflow.sql"}
+{"evidence":"full file read; price privacy grants SQL only.","disposition":"not_applicable","file":"supabase/sql/009_reseller_price_privacy_and_grants.sql"}
+{"evidence":"full file read; RLS, reseller views, and storage policies were reasserted with no bypass found.","disposition":"suppressed","file":"supabase/sql/010_schema_catchup_repair.sql"}
+{"evidence":"full file read; catalog import SQL only.","disposition":"not_applicable","file":"supabase/sql/011_sku_first_catalog_import.sql"}
+{"evidence":"full file read; authenticated-only price views still gate access on admin or approved reseller state.","disposition":"suppressed","file":"supabase/sql/012_authorized_price_feeds.sql"}
+{"evidence":"full file read; source-truth image metadata SQL only.","disposition":"not_applicable","file":"supabase/sql/013_sku_zip_source_truth_images.sql"}
+{"evidence":"full file read; branding cleanup SQL only.","disposition":"not_applicable","file":"supabase/sql/014_irunsvan_brand_text_cleanup.sql"}
+{"evidence":"full file read; own-profile update remains bound to auth.uid() and reseller directory is security_invoker-only.","disposition":"not_applicable","file":"supabase/sql/015_account_and_directory.sql"}
+{"evidence":"full file read; invite lookup/claim use token hash plus exact email binding.","disposition":"not_applicable","file":"supabase/sql/016_admin_invites.sql"}

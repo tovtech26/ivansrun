@@ -1,0 +1,11 @@
+# Repository Coverage Ledger
+
+| row_id | seed_or_root_control | boundary | shard | files_checked | family | source_or_boundary | sink_or_control | candidate_ids | disposition | evidence_summary | prune_reason_or_add_back | deferred_reason |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| ROW-AUTH-001 | src/app.js:884 | auth bootstrap / invite flow | invite URL handling | src/app.js | auth / secret-bearing URL | public invite link | URL cleanup / browser history control | CF-001 | reportable | invite token is read from `?invite=` but never scrubbed | n/a | n/a |
+| ROW-AUTH-002 | supabase/sql/016_admin_invites.sql:47 | invite RPC | invite lookup/claim | supabase/sql/016_admin_invites.sql, src/app.js | auth / invite redemption | bearer token invite link | lookup + claim functions | CF-001 | suppressed | lookup/claim are intentionally gated by token hash and email match | intended bearer-token model | n/a |
+| ROW-IMPORT-001 | src/import-parser.js:56 | import parser | CSV row parsing | src/import-parser.js, src/app.js | parser / import integrity | uploaded CSV text | newline split before row construction | CAND-IMP-001 | reportable | multiline quoted row reproduces into extra records | n/a | n/a |
+| ROW-MAIL-001 | supabase/functions/send-order-email/index.ts:13 | edge function | order notification mail | supabase/functions/send-order-email/index.ts, src/app.js | public function / email abuse | request JSON | Resend API call | CAND-MAIL-ORDER-001 | reportable | no auth check before outbound mail send | n/a | n/a |
+| ROW-MAIL-002 | supabase/functions/send-application-email/index.ts:13 | edge function | application notification mail | supabase/functions/send-application-email/index.ts, src/app.js | public function / email abuse | request JSON | Resend API call | CAND-MAIL-APP-001 | reportable | no auth check before outbound mail send | n/a | n/a |
+| ROW-INVENTORY-001 | src/inventory-workflow.js:11 | inventory publish helper | inventory plan merge | src/inventory-workflow.js, src/app.js | object binding | caller-supplied plan rows | variant-id keyed merge | CAND-INV-001 | suppressed | callers already derive rows from matched inventory or saved variants | internal-only helper boundary | n/a |
+

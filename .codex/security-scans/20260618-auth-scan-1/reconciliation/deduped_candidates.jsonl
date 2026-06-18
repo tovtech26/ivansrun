@@ -1,0 +1,6 @@
+{"candidate_id":"CF-001","title":"Admin invite token is left in the URL and browser history after load","file":"src/app.js","line":884,"disposition":"reportable"}
+{"candidate_id":"CAND-IMP-001","title":"CSV parser mis-splits multiline quoted rows","file":"src/import-parser.js","line":56,"disposition":"reportable"}
+{"candidate_id":"CAND-MAIL-ORDER-001","title":"Public order-mail edge function lacks caller authentication","file":"supabase/functions/send-order-email/index.ts","line":13,"disposition":"reportable"}
+{"candidate_id":"CAND-MAIL-APP-001","title":"Public application-mail edge function lacks caller authentication","file":"supabase/functions/send-application-email/index.ts","line":13,"disposition":"reportable"}
+{"candidate_id":"CAND-INV-001","title":"Inventory publish-plan helper trusts variant id as sole binding key","file":"src/inventory-workflow.js","line":11,"disposition":"suppressed"}
+
