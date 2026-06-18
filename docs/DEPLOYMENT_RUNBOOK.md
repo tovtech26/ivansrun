@@ -38,7 +38,13 @@ supabase/sql/006_public_catalog_policy_fix.sql
 supabase/sql/007_site_controls.sql
 supabase/sql/008_product_catalog_workflow.sql
 supabase/sql/009_reseller_price_privacy_and_grants.sql
+supabase/sql/010_schema_catchup_repair.sql
 supabase/sql/011_sku_first_catalog_import.sql
+supabase/sql/012_authorized_price_feeds.sql
+supabase/sql/013_sku_zip_source_truth_images.sql
+supabase/sql/014_irunsvan_brand_text_cleanup.sql
+supabase/sql/015_account_and_directory.sql
+supabase/sql/016_admin_invites.sql
 ```
 
 If your Supabase project already exists and the app is showing errors like:
@@ -53,10 +59,15 @@ run this catch-up repair file once:
 supabase/sql/010_schema_catchup_repair.sql
 ```
 
-After `010_schema_catchup_repair.sql`, run:
+After `010_schema_catchup_repair.sql`, run the later schema files too:
 
 ```text
 supabase/sql/011_sku_first_catalog_import.sql
+supabase/sql/012_authorized_price_feeds.sql
+supabase/sql/013_sku_zip_source_truth_images.sql
+supabase/sql/014_irunsvan_brand_text_cleanup.sql
+supabase/sql/015_account_and_directory.sql
+supabase/sql/016_admin_invites.sql
 ```
 
 This repair file is idempotent. It creates the missing site-control tables, adds the later catalog columns, recreates the reseller pricing views, restores public-safe grants, and ensures the product image bucket policy exists.
@@ -77,10 +88,13 @@ site_themes
 site_content
 reseller_products
 reseller_product_variants
+admin_invites
 ```
 
 Public users should only receive product and variant information without `base_price` or `base_currency`.
 Approved resellers and admins should receive pricing from `reseller_products` and `reseller_product_variants`.
+
+If invite creation fails with `PGRST205` or `Could not find the table 'public.admin_invites' in the schema cache`, run `supabase/sql/016_admin_invites.sql` in the Supabase SQL editor for project `llicocwonbokahpbireg`, then retry the invite from `Admin -> Team`.
 
 ## Render Setup
 

@@ -80,10 +80,14 @@ assert.match(accountDirectorySql, /grant select on public\.reseller_directory to
 assert.match(adminInvitesSql, /create type public\.admin_invite_status as enum \('pending', 'used', 'revoked', 'expired'\)/i);
 assert.match(adminInvitesSql, /create table if not exists public\.admin_invites/i);
 assert.match(adminInvitesSql, /token_hash text not null unique/i);
+assert.match(adminInvitesSql, /extensions\.digest\(lower\(btrim\(coalesce\(p_token, ''\)\)\), 'sha256'\)/i);
+assert.match(adminInvitesSql, /grant select, insert, update, delete on public\.admin_invites to authenticated/i);
 assert.match(adminInvitesSql, /create policy "admin_invites_admin_all"/i);
 assert.match(adminInvitesSql, /create or replace function public\.lookup_admin_invite/i);
 assert.match(adminInvitesSql, /create or replace function public\.claim_admin_invite/i);
+assert.match(adminInvitesSql, /revoke all on function public\.claim_admin_invite\(text\) from public, anon, authenticated, service_role/i);
 assert.match(adminInvitesSql, /grant execute on function public\.lookup_admin_invite\(text\) to anon, authenticated/i);
 assert.match(adminInvitesSql, /grant execute on function public\.claim_admin_invite\(text\) to authenticated/i);
+assert.match(adminInvitesSql, /notify pgrst, 'reload schema'/i);
 
 console.log("supabase-sql tests passed");

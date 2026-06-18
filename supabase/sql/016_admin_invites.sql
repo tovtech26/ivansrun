@@ -25,6 +25,8 @@ create index if not exists admin_invites_created_at_idx on public.admin_invites 
 
 alter table public.admin_invites enable row level security;
 
+grant select, insert, update, delete on public.admin_invites to authenticated;
+
 drop policy if exists "admin_invites_admin_all" on public.admin_invites;
 create policy "admin_invites_admin_all"
 on public.admin_invites
@@ -39,7 +41,7 @@ language sql
 immutable
 set search_path = ''
 as $$
-  select encode(digest(lower(btrim(coalesce(p_token, ''))), 'sha256'), 'hex');
+  select encode(extensions.digest(lower(btrim(coalesce(p_token, ''))), 'sha256'), 'hex');
 $$;
 
 create or replace function public.lookup_admin_invite(p_token text)
@@ -74,7 +76,7 @@ as $$
   limit 1;
 $$;
 
-revoke all on function public.lookup_admin_invite(text) from public;
+revoke all on function public.lookup_admin_invite(text) from public, anon, authenticated, service_role;
 grant execute on function public.lookup_admin_invite(text) to anon, authenticated;
 
 create or replace function public.claim_admin_invite(p_token text)
@@ -148,5 +150,7 @@ begin
 end;
 $$;
 
-revoke all on function public.claim_admin_invite(text) from public;
+revoke all on function public.claim_admin_invite(text) from public, anon, authenticated, service_role;
 grant execute on function public.claim_admin_invite(text) to authenticated;
+
+notify pgrst, 'reload schema';
