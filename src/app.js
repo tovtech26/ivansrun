@@ -2215,7 +2215,6 @@ function adminDashboard() {
           <div class="panel-toolbar"><h2>Product / Inventory Overview</h2><span>${state.variants.length} SKUs</span></div>
           <div class="overview-list">
             ${activeProducts
-              .slice(0, 6)
               .map((product) => `<div class="overview-row"><strong>${escapeHtml(product.sku)}</strong><span>${escapeHtml(product.name)}</span><span>${money(product.base_price)}</span></div>`)
               .join("")}
           </div>

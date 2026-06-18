@@ -115,6 +115,7 @@ assert.equal(appSource.includes("const sizes = matrix.sizes.slice(0, 6);"), fals
 assert.equal(appSource.includes(".slice(0, 4)\n          .map(\n            (row) => `\n              <div class=\"stock-matrix-row\">"), false, "Admin stock matrix must not hide colour stock rows after the first four.");
 assert.equal(appSource.includes("Showing top stock rows"), false, "Admin stock matrix must not claim it is hiding stock rows.");
 assert.equal(appSource.includes("--stock-size-count"), true, "Admin stock matrix must size columns dynamically for all size options.");
+assert.equal(appSource.includes("activeProducts\n              .slice(0, 6)"), false, "Admin product overview must not hide active products after the first six.");
 assert.equal(appSource.includes("async function updateAuthedSupabase("), true, "Admin price edits must use authenticated Supabase updates.");
 assert.equal(appSource.includes("async function handleProductPriceUpdate("), true, "Admin price edits must have a dedicated handler.");
 assert.equal(appSource.includes("Reset All Stock"), true, "Admin inventory page must expose a clear stock reset control.");
