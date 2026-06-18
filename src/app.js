@@ -179,6 +179,7 @@ const state = {
   resellerDraft: {},
   resellerQuickOrderProductId: null,
   resellerColourSelection: {},
+  catalogImageSelection: {},
   catalogSearch: "",
   catalogCategories: [],
   catalogSizes: [],
@@ -327,6 +328,43 @@ function productVisual(label, imageName = "") {
     <div class="product-visual" aria-label="${safeLabel} product image">
       ${visualBody}
       ${safeImageName ? `<em>${safeImageName}</em>` : ""}
+    </div>
+  `;
+}
+
+function uniqueImageNames(values = []) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
+function selectedCarouselImage(key, imageNames = []) {
+  if (!imageNames.length) return "";
+  const index = Number(state.catalogImageSelection[key] || 0);
+  return imageNames[((index % imageNames.length) + imageNames.length) % imageNames.length] || imageNames[0];
+}
+
+function productCardImages(product) {
+  return uniqueImageNames([
+    ...(Array.isArray(product.image_names) ? product.image_names : []),
+    ...variantsFor(product.id).map((variant) => variant.image_name),
+  ]);
+}
+
+function productVisualCarousel({ key, label, imageNames = [] }) {
+  const selectedImage = selectedCarouselImage(key, imageNames);
+  const selectedIndex = Math.max(0, imageNames.indexOf(selectedImage));
+  const hasMultiple = imageNames.length > 1;
+  return `
+    <div class="product-card-gallery" data-gallery-key="${escapeHtml(key)}">
+      ${productVisual(label, selectedImage)}
+      ${
+        hasMultiple
+          ? `
+            <button class="gallery-arrow previous" type="button" data-action="catalog-image-step" data-gallery-key="${escapeHtml(key)}" data-direction="-1" aria-label="Previous image for ${escapeHtml(label)}">&lsaquo;</button>
+            <button class="gallery-arrow next" type="button" data-action="catalog-image-step" data-gallery-key="${escapeHtml(key)}" data-direction="1" aria-label="Next image for ${escapeHtml(label)}">&rsaquo;</button>
+            <span class="gallery-count">${escapeHtml(`${selectedIndex + 1}/${imageNames.length}`)}</span>
+          `
+          : ""
+      }
     </div>
   `;
 }
@@ -1460,12 +1498,12 @@ function catalogFilters(mode = "desktop") {
 function productCard(product, variantCount) {
   const productName = escapeHtml(product.name || "Product");
   const category = escapeHtml(product.category || "Uncategorized");
-  const imageName = Array.isArray(product.image_names) ? product.image_names[0] : "";
+  const imageNames = productCardImages(product);
   const variantLabel = variantCount ? `${variantCount} variants` : "Variants available";
   const colours = [...new Set(variantsFor(product.id).map((variant) => String(variant.colour || "").trim()).filter(Boolean))].slice(0, 4);
   return `
     <article class="product-card">
-      ${productVisual(product.name, imageName)}
+      ${productVisualCarousel({ key: `public:${product.id}`, label: product.name, imageNames })}
       <div class="product-card-body">
         <div>
           <h3>${productName}</h3>
@@ -2019,14 +2057,13 @@ function resellerProductCard(group) {
   const price = OperationsProducts.priceState(group.price, group.currency || "USD");
   const colourGroups = resellerColourGroups(group.rows);
   const selectedColour = selectedResellerColour(group.productId, colourGroups);
-  const selectedRows = colourGroups.find((entry) => entry.key === selectedColour)?.rows || colourGroups[0]?.rows || [];
-  const imageName = selectedRows[0]?.imageName || group.imageName;
+  const imageNames = uniqueImageNames([...colourGroups.map((colour) => colour.imageName), group.imageName]);
   const visibleColourCount = colourGroups.length;
   const sizes = resellerAvailableSizes(group.rows);
   const selectedPairCount = group.rows.reduce((total, row) => total + Number(state.resellerDraft[row.variantId] || 0), 0);
   return `
     <article class="reseller-product-card clickable-product-card" data-action="open-reseller-product" data-product-id="${escapeHtml(group.productId)}">
-      ${productVisual(group.productName, imageName)}
+      ${productVisualCarousel({ key: `reseller:${group.productId}`, label: group.productName, imageNames })}
       <div class="reseller-product-copy">
         <div class="reseller-product-head">
           <div>
@@ -3489,6 +3526,21 @@ function bindEvents() {
       document.querySelectorAll("[data-action='select-gallery-image']").forEach((thumb) => {
         thumb.classList.toggle("selected", thumb === button);
       });
+    });
+  });
+
+  document.querySelectorAll("[data-action='catalog-image-step']").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const key = button.getAttribute("data-gallery-key");
+      const direction = Number(button.getAttribute("data-direction") || 1);
+      if (!key || !Number.isFinite(direction)) return;
+      state.catalogImageSelection = {
+        ...state.catalogImageSelection,
+        [key]: Number(state.catalogImageSelection[key] || 0) + direction,
+      };
+      render();
     });
   });
 
