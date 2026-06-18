@@ -2704,14 +2704,15 @@ textarea {
 .stock-matrix-preview {
   border-top: 1px solid var(--line);
   overflow-x: auto;
+  --stock-size-count: 1;
 }
 
 .stock-matrix-head,
 .stock-matrix-row {
   display: grid;
   gap: 1px;
-  grid-template-columns: minmax(160px, 1.4fr) repeat(7, minmax(54px, 0.5fr));
-  min-width: 620px;
+  grid-template-columns: minmax(160px, 1.4fr) repeat(var(--stock-size-count), minmax(54px, 0.5fr)) minmax(64px, 0.5fr);
+  min-width: max(620px, calc(224px + (var(--stock-size-count) * 58px)));
 }
 
 .stock-matrix-head span,

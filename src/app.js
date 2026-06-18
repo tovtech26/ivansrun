@@ -2535,19 +2535,18 @@ function adminProductCard(model) {
 
 function stockMatrixPreview(matrix) {
   if (!matrix.rows.length) return `<p class="import-note">No stock rows are linked to this product yet.</p>`;
-  const sizes = matrix.sizes.slice(0, 6);
+  const sizes = matrix.sizes;
   const totalStock = matrix.rows.reduce((total, row) => total + row.totalStock, 0);
   return `
     <details class="admin-stock-details">
       <summary><span>Sizes and stock</span><strong>${escapeHtml(String(totalStock))} units</strong></summary>
-      <div class="stock-matrix-preview">
+      <div class="stock-matrix-preview" style="--stock-size-count: ${escapeHtml(String(Math.max(1, sizes.length)))}">
         <div class="stock-matrix-head">
           <span>Color / Size</span>
           ${sizes.map((size) => `<span>${escapeHtml(size)}</span>`).join("")}
           <span>Total</span>
         </div>
         ${matrix.rows
-          .slice(0, 4)
           .map(
             (row) => `
               <div class="stock-matrix-row">
@@ -2558,7 +2557,6 @@ function stockMatrixPreview(matrix) {
             `,
           )
           .join("")}
-        ${matrix.rows.length > 4 || matrix.sizes.length > 6 ? `<p class="import-note">Showing top stock rows. Use inventory upload history for full SKU-level updates.</p>` : ""}
       </div>
     </details>
   `;

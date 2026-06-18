@@ -111,6 +111,10 @@ assert.equal(appSource.includes("const activeProductModels = productModels.filte
 assert.equal(appSource.includes("archived products are hidden from this view"), true, "Admin products page must explain that archived products are intentionally hidden.");
 assert.equal(appSource.includes("data-action=\"save-product-price\""), true, "Admin products page must let admins save prices on existing products.");
 assert.equal(appSource.includes('class="admin-stock-details"'), true, "Admin product size and stock details must be collapsible.");
+assert.equal(appSource.includes("const sizes = matrix.sizes.slice(0, 6);"), false, "Admin stock matrix must not hide sizes after the first six.");
+assert.equal(appSource.includes(".slice(0, 4)\n          .map(\n            (row) => `\n              <div class=\"stock-matrix-row\">"), false, "Admin stock matrix must not hide colour stock rows after the first four.");
+assert.equal(appSource.includes("Showing top stock rows"), false, "Admin stock matrix must not claim it is hiding stock rows.");
+assert.equal(appSource.includes("--stock-size-count"), true, "Admin stock matrix must size columns dynamically for all size options.");
 assert.equal(appSource.includes("async function updateAuthedSupabase("), true, "Admin price edits must use authenticated Supabase updates.");
 assert.equal(appSource.includes("async function handleProductPriceUpdate("), true, "Admin price edits must have a dedicated handler.");
 assert.equal(appSource.includes("Reset All Stock"), true, "Admin inventory page must expose a clear stock reset control.");
