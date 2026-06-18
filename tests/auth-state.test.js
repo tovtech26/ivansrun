@@ -41,6 +41,7 @@ assert.equal(canAccessRoute("account", { user: { id: "user-1" }, profile: { id: 
 assert.equal(canAccessRoute("reseller", { role: "public" }), false);
 assert.equal(canAccessRoute("reseller", { role: "pending_reseller" }), false);
 assert.equal(canAccessRoute("reseller", { role: "reseller" }), true);
+assert.equal(canAccessRoute("request-confirmation", { role: "reseller" }), true);
 assert.equal(canAccessRoute("history", { role: "reseller" }), true);
 assert.equal(canAccessRoute("site", { role: "reseller" }), false);
 assert.equal(canAccessRoute("site", { role: "admin" }), true);

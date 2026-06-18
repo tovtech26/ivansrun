@@ -10,6 +10,7 @@
     "account",
     "reseller",
     "reseller-product",
+    "request-confirmation",
     "history",
     "admin",
     "team",
@@ -33,6 +34,7 @@
     if (route === "store") return null;
     if (route === "product") return { route: "store" };
     if (route === "reseller-product") return { route: "reseller" };
+    if (route === "request-confirmation") return { route: "history" };
     if (route === "history") return { route: "reseller" };
     if (ADMIN_CHILDREN.has(route)) return { route: "admin" };
     if (route === "admin" || route === "reseller" || INFO_ROUTES.has(route)) return { route: "store" };

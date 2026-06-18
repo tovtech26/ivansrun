@@ -12,6 +12,7 @@ const ROUTES = [
   "account",
   "reseller",
   "reseller-product",
+  "request-confirmation",
   "history",
   "admin",
   "team",
@@ -120,6 +121,7 @@ const state = {
   routeNotice: null,
   applicationSubmitted: false,
   orderSubmitted: false,
+  orderConfirmation: null,
   loginSubmitted: false,
   loginPending: false,
   passwordRecoveryOpen: false,
@@ -902,6 +904,31 @@ function requestHistoryRecords() {
   }));
 }
 
+function latestRequestForCurrentUser() {
+  const requests = state.auth.isAdmin
+    ? state.orderRequests
+    : state.orderRequests.filter((request) => request.reseller_id === state.auth.user?.id);
+  return [...requests].sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0))[0] || null;
+}
+
+function requestConfirmationData() {
+  if (state.orderConfirmation) return state.orderConfirmation;
+  const request = latestRequestForCurrentUser();
+  if (!request) return null;
+  const record = requestHistoryRecords().find((entry) => entry.id === request.id);
+  const items = state.orderRequestItems.filter((item) => item.order_request_id === request.id);
+  return {
+    id: request.id,
+    code: formatRequestCode(request.id),
+    status: request.status || "submitted",
+    totalItems: record?.totalItems || items.length,
+    totalUnits: record?.totalUnits || items.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    subtotal: record?.subtotal || items.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.base_price || 0), 0),
+    notes: request.notes || "",
+    items,
+  };
+}
+
 async function loadCatalog() {
   try {
     const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows] = await Promise.all([
@@ -948,6 +975,7 @@ async function loadProtectedData() {
     state.staffProfiles = [];
     state.adminInvites = [];
     state.resellerDraft = {};
+    state.orderConfirmation = null;
     state.inventoryError = null;
     state.historyError = null;
     state.applicationError = null;
@@ -1155,8 +1183,8 @@ function topNav() {
         ["Public Catalog", "store", ["store", "product"]],
       ]
     : [
-        ["Request Products", "reseller", ["reseller"]],
-        ["My Requests", "history", ["history"]],
+        ["Request Products", "reseller", ["reseller", "reseller-product"]],
+        ["My Requests", "history", ["history", "request-confirmation"]],
         ["Account", "account", ["account"]],
         ["Public Catalog", "store", ["store", "product"]],
       ];
@@ -1214,7 +1242,7 @@ function isAdminRoute(route = state.route) {
 }
 
 function isResellerRoute(route = state.route) {
-  return ["reseller", "reseller-product", "history"].includes(route);
+  return ["reseller", "reseller-product", "request-confirmation", "history"].includes(route);
 }
 
 function mobileDrawerLabel() {
@@ -1246,9 +1274,9 @@ function mobileDrawerItems() {
       ];
     }
     return [
-      ["Request Products", "reseller", ["reseller"]],
+      ["Request Products", "reseller", ["reseller", "reseller-product"]],
       ["Product", "reseller-product", ["reseller-product"]],
-      ["My Requests", "history", ["history"]],
+      ["My Requests", "history", ["history", "request-confirmation"]],
       ["Account", "account", ["account"]],
       ["Public Catalog", "store", ["store", "product"]],
       ["Become a Reseller", "apply", ["apply"]],
@@ -1275,7 +1303,7 @@ function mobileDrawerItems() {
       ["Products", "store", ["store", "product"]],
       ["Find a Reseller", "find-reseller", ["find-reseller"]],
       ["Request Products", "reseller", ["reseller"]],
-      ["My Requests", "history", ["history"]],
+      ["My Requests", "history", ["history", "request-confirmation"]],
       ["Account", "account", ["account"]],
     ];
   }
@@ -2072,6 +2100,22 @@ function resellerColourButton(productId, colour, selectedColour) {
   `;
 }
 
+function resellerColourCard(productId, colour, selectedColour) {
+  const isSelected = colour.key === selectedColour;
+  const sizes = resellerAvailableSizes(colour.rows);
+  return `
+    <button class="builder-colour-card ${isSelected ? "selected" : ""}" data-action="select-reseller-colour" data-product-id="${escapeHtml(productId)}" data-colour="${escapeHtml(colour.key)}" aria-pressed="${isSelected ? "true" : "false"}">
+      <span class="builder-colour-image">${productVisual(colour.label, colour.imageName)}</span>
+      <span class="builder-colour-copy">
+        <strong>${escapeHtml(colour.label)}</strong>
+        <span>${escapeHtml(`${colour.totalStock} units in stock`)}</span>
+        <span>${escapeHtml(`Sizes ${sizes || "available"}`)}</span>
+      </span>
+      <span class="builder-colour-state">${isSelected ? "Selected" : "Select"}</span>
+    </button>
+  `;
+}
+
 function selectedResellerProductGroup() {
   const rows = Orders.availableInventoryRows(inventoryRows()).filter((row) => row.productId === state.selectedProductId);
   return Orders.visibleShopProductGroups(rows, { productLimit: 1, optionLimit: 500 })[0] || null;
@@ -2101,18 +2145,12 @@ function resellerProductOrderPage() {
   const price = OperationsProducts.priceState(group.price, group.currency || "USD");
   const canOrder = Boolean(group.priceKnown);
   const selectedSummary = selectedRows.length ? `${selectedRows.length} sizes in ${selectedGroup?.label || "this color"}` : "Choose a color to continue";
-  const exactColorStock = selectedRows.reduce((total, row) => total + Number(row.stockQuantity || 0), 0);
   return `
-    <main class="portal-page reseller-detail-page">
+    <main class="portal-page reseller-detail-page reseller-builder-page">
       <button class="text-link" data-route="reseller">Back to shop</button>
-      <section class="reseller-detail-grid">
-        <div class="reseller-detail-media">
+      <section class="reseller-builder-grid">
+        <aside class="builder-product-panel">
           ${productVisual(group.productName, imageName)}
-          <div class="colour-strip detail-colour-strip" aria-label="${escapeHtml(group.productName)} colours">
-            ${colourGroups.map((colour) => resellerColourButton(group.productId, colour, selectedColour)).join("")}
-          </div>
-        </div>
-        <div class="reseller-detail-order">
           <div class="reseller-product-head">
             <div>
               <p>${escapeHtml(group.category || "Wholesale product")}</p>
@@ -2123,10 +2161,17 @@ function resellerProductOrderPage() {
           <div class="product-facts detail-facts">
             <span>${colourGroups.length} ${colourGroups.length === 1 ? "color" : "colors"}</span>
             <span>${resellerAvailableSizes(group.rows) || "Check availability"}</span>
-            <span>${selectedSummary}</span>
-            <span>${exactColorStock} units exact stock</span>
+            <span>${group.totalStock} units exact stock</span>
           </div>
-          <p class="reseller-product-note">Select one color, then enter quantities for the available sizes below.</p>
+        </aside>
+        <section class="builder-form-panel">
+          <div class="builder-section-head">
+            <h2>Choose color</h2>
+            <span>${escapeHtml(selectedSummary)}</span>
+          </div>
+          <div class="builder-colour-list" aria-label="${escapeHtml(group.productName)} colors">
+            ${colourGroups.map((colour) => resellerColourCard(group.productId, colour, selectedColour)).join("")}
+          </div>
           ${canOrder ? "" : `<p class="notice warning">Admin needs to set this product price before it can be added to a request.</p>`}
           ${resellerBulkOrderMatrix({
             group,
@@ -2135,8 +2180,8 @@ function resellerProductOrderPage() {
             selectedRows,
             canOrder,
           })}
-        </div>
-        <aside class="order-sidebar reseller-detail-sidebar" id="portal-order">
+        </section>
+        <aside class="order-sidebar reseller-detail-sidebar builder-summary-panel" id="portal-order">
           <div class="sidebar-head"><h2>Request cart</h2><p>${summary.totalUnits} ${summary.totalUnits === 1 ? "pair" : "pairs"} selected</p></div>
           <div class="order-items">
             ${
@@ -2175,24 +2220,21 @@ function resellerProductOrderPage() {
 function resellerBulkOrderMatrix({ group, colourGroups, selectedColour, selectedRows, canOrder }) {
   const selectedGroup = colourGroups.find((entry) => entry.key === selectedColour) || colourGroups[0];
   const selectedTotal = selectedRows.reduce((total, row) => total + Number(state.resellerDraft[row.variantId] || 0), 0);
+  const exactColorStock = selectedRows.reduce((total, row) => total + Number(row.stockQuantity || 0), 0);
   return `
     <div class="bulk-order-panel" data-bulk-order-product="${escapeHtml(group.productId)}">
       <div class="bulk-order-head">
         <div>
           <strong>${escapeHtml(selectedGroup?.label || "Choose colour")}</strong>
-          <span>${selectedRows.length} sizes ready for entry</span>
+          <span>${escapeHtml(`${exactColorStock} units exact stock`)}</span>
         </div>
         <span>${selectedTotal ? `${selectedTotal} ${selectedTotal === 1 ? "pair" : "pairs"} selected` : "Enter quantities"}</span>
       </div>
-      <div class="bulk-order-sizes">
-        <span>Color</span>
-        <strong>${escapeHtml(selectedGroup?.label || "Choose a color")}</strong>
-      </div>
-      <div class="size-matrix" aria-label="${escapeHtml(group.productName)} ${escapeHtml(selectedGroup?.label || "")} size quantities">
+      <div class="builder-size-list" aria-label="${escapeHtml(group.productName)} ${escapeHtml(selectedGroup?.label || "")} size quantities">
         ${selectedRows.map((row) => resellerSizeQuantityCell(row, canOrder)).join("")}
       </div>
       <div class="bulk-order-actions">
-        <button class="button primary full" data-action="add-bulk-order" data-product-id="${escapeHtml(group.productId)}" ${canOrder ? "" : "disabled"}>Add selected pairs</button>
+        <button class="button primary full" data-action="add-bulk-order" data-product-id="${escapeHtml(group.productId)}" ${canOrder ? "" : "disabled"}>Update request totals</button>
         <button class="button secondary full" data-action="clear-bulk-order" data-product-id="${escapeHtml(group.productId)}">Clear this colour</button>
       </div>
     </div>
@@ -2202,14 +2244,17 @@ function resellerBulkOrderMatrix({ group, colourGroups, selectedColour, selected
 function resellerSizeQuantityCell(row, productCanOrder = true) {
   const availability = availabilityLabel(row.stockQuantity);
   const disabled = row.stockQuantity <= 0 || !productCanOrder || !row.priceKnown;
+  const quantity = Number(state.resellerDraft[row.variantId] || 0);
+  const lineTotal = quantity * Number(row.price || 0);
   return `
-    <div class="size-cell" data-inventory-line>
+    <div class="builder-size-row" data-inventory-line>
       <label>
         <span>Size ${escapeHtml(row.size || "-")}</span>
         <input class="qty-input" aria-label="Quantity for ${escapeHtml(row.colour)} size ${escapeHtml(row.size)}" type="number" min="0" max="${row.stockQuantity}" value="${state.resellerDraft[row.variantId] || ""}" data-bulk-qty-input="${escapeHtml(row.variantId)}" ${disabled ? "disabled" : ""} />
       </label>
-      <small class="availability ${availability.className}">${availability.label}</small>
-      <small class="exact-stock">${escapeHtml(`${row.stockQuantity} in stock`)}</small>
+      <span class="exact-stock">${escapeHtml(`${row.stockQuantity} in stock`)}</span>
+      <span class="availability ${availability.className}">${availability.label}</span>
+      <strong>${money(lineTotal)}</strong>
     </div>
   `;
 }
@@ -2253,6 +2298,67 @@ function requestHistory() {
               }
             </tbody>
           </table>
+        </div>
+      </section>
+      ${footer(true)}
+    </main>
+  `;
+}
+
+function requestConfirmationPage() {
+  const confirmation = requestConfirmationData();
+  if (!confirmation) {
+    return `
+      <main class="portal-page">
+        <section class="request-confirmation">
+          <h1>No recent request found</h1>
+          <p>Your submitted requests will appear in request history.</p>
+          <div class="confirmation-actions">
+            <button class="button primary" data-route="reseller">Back to shop</button>
+            <button class="button secondary" data-route="history">View request history</button>
+          </div>
+        </section>
+        ${footer(true)}
+      </main>
+    `;
+  }
+  const items = confirmation.items || [];
+  return `
+    <main class="portal-page">
+      <section class="request-confirmation">
+        <div class="confirmation-head">
+          <div>
+            <h1>Request submitted</h1>
+            <p>${escapeHtml(confirmation.code)} is waiting for admin review.</p>
+          </div>
+          ${statusPill(confirmation.status || "submitted")}
+        </div>
+        <div class="confirmation-summary">
+          <div><span>Pairs</span><strong>${escapeHtml(String(confirmation.totalUnits || 0))}</strong></div>
+          <div><span>SKU lines</span><strong>${escapeHtml(String(confirmation.totalItems || items.length || 0))}</strong></div>
+          <div><span>Total</span><strong>${money(confirmation.subtotal || 0)}</strong></div>
+        </div>
+        <div class="confirmation-lines">
+          ${items.length
+            ? items
+                .map((item) => {
+                  const quantity = Number(item.quantity || item.requestedQuantity || 0);
+                  const price = Number(item.base_price || item.price || 0);
+                  return `
+                    <div class="confirmation-line">
+                      <strong>${escapeHtml(item.product_name || item.productName || "Product")}</strong>
+                      <span>${escapeHtml([item.colour, item.size ? `Size ${item.size}` : ""].filter(Boolean).join(" / ") || "Option")}</span>
+                      <span>${escapeHtml(`${quantity} pairs`)}</span>
+                      <strong>${money(quantity * price)}</strong>
+                    </div>
+                  `;
+                })
+                .join("")
+            : `<p class="notice">Request items will appear after history refreshes.</p>`}
+        </div>
+        <div class="confirmation-actions">
+          <button class="button primary" data-route="history">View request history</button>
+          <button class="button secondary" data-route="reseller">Continue shopping</button>
         </div>
       </section>
       ${footer(true)}
@@ -3345,6 +3451,7 @@ function routeView() {
     account: accountPage,
     reseller: resellerPortal,
     "reseller-product": resellerProductOrderPage,
+    "request-confirmation": requestConfirmationPage,
     history: requestHistory,
     admin: adminDashboard,
     team: adminTeam,
@@ -3584,6 +3691,13 @@ function bindEvents() {
   document.querySelectorAll("[data-action='clear-bulk-order']").forEach((button) => {
     button.addEventListener("click", () => {
       clearBulkOrderQuantities(button.closest("[data-bulk-order-product]"));
+    });
+  });
+
+  document.querySelectorAll("[data-bulk-qty-input]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const variantId = input.getAttribute("data-bulk-qty-input");
+      syncDraftQuantity(variantId, input.value);
     });
   });
 
@@ -4111,6 +4225,7 @@ async function handleLogout() {
   state.resellerDraft = {};
   state.resellerNotes = "";
   state.orderSubmitted = false;
+  state.orderConfirmation = null;
   setRouteNotice(null, "");
   setRoute("store");
 }
@@ -4150,6 +4265,16 @@ async function handleOrderSubmit(form) {
     const [createdRequest] = await insertAuthedSupabase("order_requests", payload.orderRequest);
     const itemsPayload = payload.orderItems.map((item) => ({ ...item, order_request_id: createdRequest.id }));
     await insertAuthedSupabase("order_request_items", itemsPayload);
+    state.orderConfirmation = {
+      id: createdRequest.id,
+      code: formatRequestCode(createdRequest.id),
+      status: createdRequest.status || "submitted",
+      totalItems: payload.orderItems.length,
+      totalUnits: payload.orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+      subtotal: payload.orderItems.reduce((sum, item) => sum + Number(item.base_price || 0) * Number(item.quantity || 0), 0),
+      notes: payload.orderRequest.notes || "",
+      items: payload.orderItems,
+    };
     state.resellerDraft = {};
     state.resellerNotes = "";
     state.orderSubmitted = true;
@@ -4165,6 +4290,7 @@ async function handleOrderSubmit(form) {
       subtotal: payload.orderItems.reduce((sum, item) => sum + Number(item.base_price || 0) * item.quantity, 0),
       notes: payload.orderRequest.notes || "",
     }).catch(() => {});
+    setRoute("request-confirmation");
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to submit order request";
     state.inventoryError = message;

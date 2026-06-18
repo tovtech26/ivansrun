@@ -1,7 +1,7 @@
 (function attachAuth(root) {
   const PUBLIC_ROUTES = new Set(["store", "product", "find-reseller", "apply", "signup", "login", "admin-login", "about", "contact", "terms", "privacy"]);
   const AUTHED_ROUTES = new Set(["account"]);
-  const RESELLER_ROUTES = new Set(["reseller", "reseller-product", "history"]);
+  const RESELLER_ROUTES = new Set(["reseller", "reseller-product", "request-confirmation", "history"]);
   const ADMIN_ROUTES = new Set(["admin", "products", "site", "requests", "applications", "approvals", "imports", "email", "team"]);
 
   function normalizeRole(role) {

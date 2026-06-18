@@ -99,6 +99,7 @@ assert.equal(appSource.includes("<th>Exact Stock</th>"), false, "Reseller portal
 assert.equal(appSource.includes("Add live inventory lines"), false, "Reseller draft copy must describe products, not inventory lines.");
 assert.equal(appSource.includes("reseller-product-card"), true, "Reseller portal must render ecommerce-style product cards.");
 assert.equal(appSource.includes('"reseller-product": resellerProductOrderPage'), true, "Reseller products must open a dedicated ordering page.");
+assert.equal(appSource.includes('"request-confirmation": requestConfirmationPage'), true, "Submitted reseller requests must open a dedicated confirmation page.");
 assert.equal(appSource.includes('data-action="open-reseller-product"'), true, "Reseller product cards must be clickable.");
 assert.equal(resellerProductCardSource.includes("canOrder"), false, "Reseller browse cards must not reference detail-only ordering state.");
 assert.equal(appSource.includes("Orders.availableInventoryRows(inventoryRows())"), true, "Reseller shop must only show rows that are actually available to order.");
@@ -112,6 +113,9 @@ assert.equal(appSource.includes("colour-dot"), true, "Reseller colour chips must
 assert.equal(appSource.includes("product-facts"), true, "Reseller cards must show compact product facts.");
 assert.equal(appSource.includes("units exact stock"), true, "Reseller cards must show the exact stock total.");
 assert.equal(appSource.includes("in stock"), true, "Reseller size rows must show exact stock counts.");
+assert.equal(appSource.includes("builder-colour-card"), true, "Reseller product ordering must use row-style color selectors.");
+assert.equal(appSource.includes("builder-size-row"), true, "Reseller product ordering must use form-style size quantity rows.");
+assert.equal(appSource.includes("setRoute(\"request-confirmation\")"), true, "Order submission must navigate to the confirmation page.");
 assert.equal(appSource.includes("Approve and deduct stock"), true, "Admin approval action must make the stock change explicit.");
 assert.equal(appSource.includes('<p class="mono">SKU:'), false, "Reseller order summary must not expose backend SKU labels.");
 assert.equal(appSource.includes("Available Options"), false, "Reseller metrics must use buyer-friendly language instead of backend option labels.");
