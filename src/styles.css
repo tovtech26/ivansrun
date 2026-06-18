@@ -812,7 +812,25 @@ h4 {
 .gallery-thumb {
   background: var(--white);
   border: 1px solid var(--line);
+  cursor: pointer;
   padding: 0;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.gallery-thumb:hover,
+.gallery-thumb:focus-visible {
+  border-color: var(--ink);
+  box-shadow: 0 8px 20px rgba(10, 10, 10, 0.12);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.gallery-thumb.selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(0, 112, 234, 0.18);
 }
 
 .gallery-thumb img {

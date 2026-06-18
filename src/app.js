@@ -1477,13 +1477,15 @@ function productDetail() {
       <button class="text-link" data-route="store">Back to catalog</button>
       <section class="detail-grid">
         <div>
-          ${productVisual(product.name, imageName)}
+          <div data-product-detail-main>
+            ${productVisual(product.name, imageName)}
+          </div>
           ${
             detail.gallery.length
               ? `<div class="detail-gallery-strip">${detail.gallery
                   .map(
-                    (image) => `
-                      <button class="gallery-thumb">
+                    (image, index) => `
+                      <button class="gallery-thumb ${index === 0 ? "selected" : ""}" data-action="select-gallery-image" data-image-name="${escapeHtml(image.imageName)}" data-image-url="${escapeHtml(image.imageUrl)}" aria-label="View ${escapeHtml(product.name)} image ${index + 1}">
                         <img src="${escapeHtml(image.imageUrl)}" alt="${escapeHtml(product.name)}" loading="lazy" />
                       </button>`,
                   )
@@ -3260,6 +3262,22 @@ function routeView() {
 function bindEvents() {
   document.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", () => setRoute(button.getAttribute("data-route"), { productId: button.getAttribute("data-product-id") }));
+  });
+
+  document.querySelectorAll("[data-action='select-gallery-image']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const imageUrl = button.getAttribute("data-image-url") || "";
+      const imageName = button.getAttribute("data-image-name") || "";
+      const main = document.querySelector("[data-product-detail-main] .product-visual");
+      const photo = main?.querySelector(".product-photo");
+      const caption = main?.querySelector("em");
+      if (!photo || !imageUrl) return;
+      photo.setAttribute("src", imageUrl);
+      if (caption) caption.textContent = imageName;
+      document.querySelectorAll("[data-action='select-gallery-image']").forEach((thumb) => {
+        thumb.classList.toggle("selected", thumb === button);
+      });
+    });
   });
 
   document.querySelectorAll("[data-action='logout']").forEach((button) => {

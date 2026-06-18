@@ -125,6 +125,9 @@ assert.equal(appSource.includes("AdminOrders.buildApprovalInventoryAdjustments")
 assert.equal(appSource.includes("Price pending"), true, "Reseller shop must show pending price instead of a false zero price.");
 assert.equal(appSource.includes('<div><button disabled>Prev</button><button class="active">1</button><button>2</button><button>3</button><button>Next</button></div>'), false, "Catalog pager must not be static fake controls.");
 assert.equal(appSource.includes("data-action=\"catalog-page\""), true, "Catalog pager buttons must have real page actions.");
+assert.equal(appSource.includes("data-action=\"select-gallery-image\""), true, "Product detail thumbnails must be wired as selectable gallery buttons.");
+assert.equal(appSource.includes("[data-product-detail-main] .product-visual"), true, "Product detail thumbnail clicks must target the main product visual.");
+assert.equal(appSource.includes("photo.setAttribute(\"src\", imageUrl);"), true, "Product detail thumbnail clicks must update the main product photo.");
 assert.equal(appSource.includes("Colour Review"), true, "Admin products page must include the Colour Review section.");
 assert.equal(appSource.includes("product_colour_mappings"), true, "Colour Review must save against product_colour_mappings.");
 assert.equal(appSource.includes("original_colour"), true, "Colour Review wiring must preserve original_colour keys.");
