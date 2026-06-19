@@ -10,6 +10,7 @@ const skuSourceTruthSql = readFileSync(join(__dirname, "..", "supabase", "sql", 
 const brandCleanupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "014_irunsvan_brand_text_cleanup.sql"), "utf8");
 const accountDirectorySql = readFileSync(join(__dirname, "..", "supabase", "sql", "015_account_and_directory.sql"), "utf8");
 const adminInvitesSql = readFileSync(join(__dirname, "..", "supabase", "sql", "016_admin_invites.sql"), "utf8");
+const publicHomeContentSql = readFileSync(join(__dirname, "..", "supabase", "sql", "018_public_home_content.sql"), "utf8");
 
 assert.match(pricePrivacySql, /create or replace view public\.reseller_products\s+with \(security_invoker = true\)/i);
 assert.match(pricePrivacySql, /create or replace view public\.reseller_product_variants\s+with \(security_invoker = true\)/i);
@@ -90,5 +91,16 @@ assert.match(adminInvitesSql, /revoke all on function public\.claim_admin_invite
 assert.match(adminInvitesSql, /grant execute on function public\.lookup_admin_invite\(text\) to anon, authenticated/i);
 assert.match(adminInvitesSql, /grant execute on function public\.claim_admin_invite\(text\) to authenticated/i);
 assert.match(adminInvitesSql, /notify pgrst, 'reload schema'/i);
+
+assert.match(publicHomeContentSql, /create table if not exists public\.homepage_flyers/i);
+assert.match(publicHomeContentSql, /create table if not exists public\.blog_posts/i);
+assert.match(publicHomeContentSql, /alter table public\.homepage_flyers enable row level security/i);
+assert.match(publicHomeContentSql, /alter table public\.blog_posts enable row level security/i);
+assert.match(publicHomeContentSql, /using \(published = true\)/i);
+assert.match(publicHomeContentSql, /private\.is_admin\(\)/i);
+assert.match(publicHomeContentSql, /alter table public\.site_content[\s\S]*add column if not exists about_heading text/i);
+assert.match(publicHomeContentSql, /alter table public\.site_content[\s\S]*add column if not exists about_body text/i);
+assert.match(publicHomeContentSql, /storage\.buckets[\s\S]*'product-images'/i);
+assert.match(publicHomeContentSql, /content\/%/i);
 
 console.log("supabase-sql tests passed");
