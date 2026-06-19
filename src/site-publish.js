@@ -1,5 +1,7 @@
 (function attachSitePublish(root) {
   function buildSitePublishPayloads(siteContent, adminUserId) {
+    const about = siteContent.about || {};
+
     return {
       heroRow: {
         eyebrow: siteContent.hero.eyebrow,
@@ -27,8 +29,8 @@
         created_by: adminUserId,
       },
       contentRow: {
-        about_heading: siteContent.about.heading,
-        about_body: siteContent.about.body,
+        about_heading: about.heading || "",
+        about_body: about.body || "",
         reseller_banner: siteContent.banner,
         active: true,
         created_by: adminUserId,
