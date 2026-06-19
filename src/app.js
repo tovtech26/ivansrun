@@ -102,6 +102,7 @@ const state = {
   products: [],
   variants: [],
   homepageFlyers: WebsiteContent.normalizeFlyers([]),
+  homeFlyerIndex: 0,
   blogPosts: [],
   resellerDirectory: [],
   colourMappings: [],
@@ -307,6 +308,13 @@ function cssUrl(value) {
   return `--hero-image: url(${safe})`;
 }
 
+function resolveContentImageUrl(path) {
+  const value = String(path || "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value) || value.startsWith("/")) return value;
+  return `${SUPABASE_URL}/storage/v1/object/public/${WebsiteContent.CONTENT_IMAGE_BUCKET}/${value.split("/").map((part) => encodeURIComponent(part)).join("/")}`;
+}
+
 function ctaMarkup(label, route, classes) {
   const safeLabel = escapeHtml(label);
   const safeRoute = String(route || "").trim();
@@ -490,6 +498,25 @@ async function uploadProductImage(record) {
     body: record.file,
   });
   if (!response.ok) throw await buildResponseError("image upload failed", response);
+  return response.json().catch(() => ({ path: record.storagePath }));
+}
+
+async function uploadContentImage(record) {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(
+    `storage:${WebsiteContent.CONTENT_IMAGE_BUCKET}`,
+    `${SUPABASE_URL}/storage/v1/object/${WebsiteContent.CONTENT_IMAGE_BUCKET}/${record.storagePath}`,
+    {
+      method: "POST",
+      headers: {
+        ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
+        "Content-Type": record.contentType,
+        "Cache-Control": "3600",
+      },
+      body: record.file,
+    },
+  );
+  if (!response.ok) throw await buildResponseError("content image upload failed", response);
   return response.json().catch(() => ({ path: record.storagePath }));
 }
 
@@ -1134,8 +1161,10 @@ async function loadProtectedData() {
     state.staffProfiles = data.profiles || [];
     state.adminInvites = data.adminInvites || [];
     if (state.auth.isAdmin) {
-      state.homepageFlyers = WebsiteContent.normalizeFlyers(data.homepageFlyers || [], { includeUnpublished: true });
-      state.blogPosts = WebsiteContent.normalizeStories(data.blogPosts || [], { includeUnpublished: true });
+      const adminFlyerRows = Array.isArray(data.homepageFlyers) ? data.homepageFlyers : [];
+      const adminBlogRows = Array.isArray(data.blogPosts) ? data.blogPosts : [];
+      state.homepageFlyers = adminFlyerRows.length ? WebsiteContent.normalizeFlyers(adminFlyerRows, { includeUnpublished: true }) : [];
+      state.blogPosts = WebsiteContent.normalizeStories(adminBlogRows, { includeUnpublished: true });
     }
     if (failures.length) {
       const message = `Some protected data could not load: ${failures.join("; ")}`;
@@ -1390,6 +1419,7 @@ function mobileContextBar() {
   const target = MobileNavigation.backTargetForRoute(state.route);
   if (!target) return "";
   const labels = {
+    story: "Home",
     product: "Catalog",
     "reseller-product": "Shop",
     history: "Inventory",
@@ -1414,7 +1444,139 @@ function mobileContextBar() {
   return `<div class="mobile-context-bar"><button data-action="go-back">&larr; Back to ${escapeHtml(labels[state.route] || "previous")}</button></div>`;
 }
 
-function storefront() {
+function publicHomePage() {
+  return `
+    <main class="public-home">
+      ${flyerCarousel(state.homepageFlyers)}
+      ${storyCarousel(state.blogPosts)}
+      ${aboutSection(state.siteContent.about)}
+      ${footer()}
+    </main>
+  `;
+}
+
+function flyerCarousel(flyers) {
+  const items = WebsiteContent.normalizeFlyers(flyers);
+  const selectedIndex = ((Number(state.homeFlyerIndex || 0) % items.length) + items.length) % items.length;
+  const selected = items[selectedIndex];
+  return `
+    <section class="home-flyer-carousel" aria-label="Irunsvan Africa flyers">
+      <div class="home-flyer-frame">
+        <img src="${escapeHtml(resolveContentImageUrl(selected.imagePath))}" alt="${escapeHtml(selected.title)}" loading="eager" />
+      </div>
+      ${
+        state.homepageContentError
+          ? `<p class="notice error home-content-notice">${escapeHtml(state.homepageContentError)}</p>`
+          : state.homepageContentLoading
+            ? `<p class="notice home-content-notice">Loading homepage content...</p>`
+            : ""
+      }
+      ${
+        items.length > 1
+          ? `<div class="home-carousel-controls"><button type="button" data-action="home-flyer-step" data-direction="-1">Previous</button><span>${escapeHtml(`${selectedIndex + 1}/${items.length}`)}</span><button type="button" data-action="home-flyer-step" data-direction="1">Next</button></div>`
+          : ""
+      }
+    </section>
+  `;
+}
+
+function storyCard(story) {
+  const coverImage = resolveContentImageUrl(story.coverImagePath || "");
+  const publishedLabel = story.publishedAt ? new Date(story.publishedAt).toLocaleDateString() : "Latest";
+  return `
+    <article class="story-card">
+      ${
+        coverImage
+          ? `<img src="${escapeHtml(coverImage)}" alt="${escapeHtml(story.title)}" loading="lazy" />`
+          : `<div class="story-card-image story-card-image-placeholder">${logo("blue")}</div>`
+      }
+      <div class="story-card-body">
+        <p class="story-meta">${escapeHtml(publishedLabel)}</p>
+        <h3>${escapeHtml(story.title)}</h3>
+        <p>${escapeHtml(story.summary || "Read the latest Irunsvan Africa update.")}</p>
+        <button type="button" class="button secondary" data-route="story" data-story-slug="${escapeHtml(story.slug)}">Open story</button>
+      </div>
+    </article>
+  `;
+}
+
+function storyCarousel(stories) {
+  const items = WebsiteContent.normalizeStories(stories).slice(0, 6);
+  return `
+    <section class="home-stories">
+      <div class="home-section-heading">
+        <h2>Latest Stories</h2>
+        <p>News, launches, and field updates from Irunsvan Africa.</p>
+      </div>
+      ${
+        items.length
+          ? `<div class="story-strip">${items.map(storyCard).join("")}</div>`
+          : `<div class="content-empty-state"><p>No stories are published yet.</p></div>`
+      }
+    </section>
+  `;
+}
+
+function aboutSection(about = WebsiteContent.DEFAULT_ABOUT_CONTENT) {
+  return `
+    <section class="home-about">
+      <div class="home-section-heading">
+        <h2>${escapeHtml(about?.heading || WebsiteContent.DEFAULT_ABOUT_CONTENT.heading)}</h2>
+      </div>
+      <div class="home-about-copy">
+        <p>${escapeHtml(about?.body || WebsiteContent.DEFAULT_ABOUT_CONTENT.body)}</p>
+        <p>${escapeHtml(state.siteContent.banner || "")}</p>
+      </div>
+    </section>
+  `;
+}
+
+function selectedStory() {
+  const items = WebsiteContent.normalizeStories(state.blogPosts);
+  if (!items.length) return null;
+  if (state.selectedStorySlug) {
+    return items.find((story) => story.slug === state.selectedStorySlug) || null;
+  }
+  return items[0];
+}
+
+function storyDetailPage() {
+  const story = selectedStory();
+  if (!story) {
+    return `
+      <main class="story-page">
+        <button class="text-link" data-route="store">Back to home</button>
+        <section class="content-empty-state">
+          <h1>Story not found</h1>
+          <p>The requested story is not available yet.</p>
+        </section>
+        ${footer(true)}
+      </main>
+    `;
+  }
+  const coverImage = resolveContentImageUrl(story.coverImagePath || "");
+  const body = String(story.body || "")
+    .split(/\n{2,}/)
+    .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
+    .join("");
+  return `
+    <main class="story-page">
+      <button class="text-link" data-route="store">Back to home</button>
+      <article class="story-article">
+        <header class="story-header">
+          <p class="story-meta">${escapeHtml(story.publishedAt ? new Date(story.publishedAt).toLocaleDateString() : "Latest story")}</p>
+          <h1>${escapeHtml(story.title)}</h1>
+          ${story.summary ? `<p class="story-summary">${escapeHtml(story.summary)}</p>` : ""}
+        </header>
+        ${coverImage ? `<img class="story-hero-image" src="${escapeHtml(coverImage)}" alt="${escapeHtml(story.title)}" loading="eager" />` : ""}
+        <div class="story-body">${body}</div>
+      </article>
+      ${footer(true)}
+    </main>
+  `;
+}
+
+function catalogPage() {
   const pageData = pagedStorefrontProducts();
   const products = storefrontProducts();
   const visibleProducts = pageData.products;
@@ -1449,7 +1611,7 @@ function storefront() {
           </div>
         </div>
       </section>
-      <section class="catalog-section" id="catalog">
+      <section class="product-catalog-shell">
         ${catalogFilters("desktop")}
         <div class="catalog-content">
           <div class="section-header">
@@ -2601,6 +2763,35 @@ function adminTeam() {
   `;
 }
 
+function contentAdminItem({ title, imagePath, meta, published }) {
+  const imageUrl = resolveContentImageUrl(imagePath || "");
+  return `
+    <article class="content-admin-item">
+      ${
+        imageUrl
+          ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title || "Content image")}" loading="lazy" />`
+          : `<div class="content-admin-thumb content-admin-thumb-placeholder">${logo("blue")}</div>`
+      }
+      <div class="content-admin-copy">
+        <strong>${escapeHtml(title || "Untitled")}</strong>
+        <span>${escapeHtml(meta || (published ? "Published" : "Draft"))}</span>
+      </div>
+    </article>
+  `;
+}
+
+function flyerAdminList() {
+  const items = Array.isArray(state.homepageFlyers) ? state.homepageFlyers : [];
+  if (!items.length) return `<div class="content-empty-state"><p>No flyer images uploaded yet.</p></div>`;
+  return `<div class="content-admin-list">${items.map((flyer) => contentAdminItem({ title: flyer.title, imagePath: flyer.imagePath, meta: `${flyer.sortOrder} order • ${flyer.published ? "Published" : "Draft"}`, published: flyer.published })).join("")}</div>`;
+}
+
+function storyAdminList() {
+  const items = Array.isArray(state.blogPosts) ? state.blogPosts : [];
+  if (!items.length) return `<div class="content-empty-state"><p>No stories saved yet.</p></div>`;
+  return `<div class="content-admin-list">${items.map((story) => contentAdminItem({ title: story.title, imagePath: story.coverImagePath, meta: `${story.published ? "Published" : "Draft"}${story.publishedAt ? ` • ${new Date(story.publishedAt).toLocaleDateString()}` : ""}`, published: story.published })).join("")}</div>`;
+}
+
 function adminSiteControls() {
   const site = state.siteContent;
   const hero = site.hero;
@@ -2610,11 +2801,47 @@ function adminSiteControls() {
       ${adminSidebar("site")}
       <section class="admin-main">
         <header class="admin-topbar">
-          <div><h1>Site Controls</h1><p>Edit the public hero, reseller banner, and seasonal colors from one place.</p></div>
+          <div><h1>Website Content</h1><p>Manage homepage flyers, stories, about copy, and the public site presentation.</p></div>
           <button class="icon-button" data-route="store">View Site</button>
         </header>
         ${state.siteSaved ? `<p class="notice success">Site controls published to Supabase. The public site now reads the active hero, theme, and banner from the database.</p>` : ""}
         ${state.siteSaveError ? `<p class="notice error">${escapeHtml(state.siteSaveError)}</p>` : ""}
+        ${state.adminContentError ? `<p class="notice error">${escapeHtml(state.adminContentError)}</p>` : ""}
+        <section class="website-content-grid">
+          <div class="admin-card">
+            <div class="panel-toolbar"><h2>Homepage Flyers</h2><span>${state.homepageFlyers.length} items</span></div>
+            <form class="workflow-form" data-form="homepage-flyer">
+              ${controlInput("Flyer Title", "flyer_title", "")}
+              ${controlInput("Display Order", "flyer_sort_order", "0", "number")}
+              <label><span>Flyer Image</span><input name="flyer_image" type="file" accept="image/*" /></label>
+              <label class="toggle-row"><input name="flyer_published" type="checkbox" checked /><span>Publish now</span></label>
+              <button class="button primary full" type="submit" ${state.flyerSavePending ? "disabled" : ""}>${state.flyerSavePending ? "Saving..." : "Save Flyer"}</button>
+            </form>
+            ${flyerAdminList()}
+          </div>
+          <div class="admin-card">
+            <div class="panel-toolbar"><h2>Stories</h2><span>${state.blogPosts.length} items</span></div>
+            <form class="workflow-form" data-form="blog-post">
+              ${controlInput("Story Title", "story_title", "")}
+              <label><span>Cover Image</span><input name="story_cover_image" type="file" accept="image/*" /></label>
+              ${controlTextarea("Summary", "story_summary", "")}
+              ${controlTextarea("Story Body", "story_body", "")}
+              <label class="toggle-row"><input name="story_published" type="checkbox" /><span>Publish now</span></label>
+              <button class="button primary full" type="submit" ${state.storySavePending ? "disabled" : ""}>${state.storySavePending ? "Saving..." : "Save Story"}</button>
+            </form>
+            ${storyAdminList()}
+          </div>
+        </section>
+        <section class="admin-panels">
+          <div class="admin-card">
+            <div class="panel-toolbar"><h2>About Section</h2><span>Public homepage copy</span></div>
+            <form class="workflow-form" data-form="about-content">
+              ${controlInput("Heading", "about_heading", site.about?.heading || "")}
+              ${controlTextarea("Body", "about_body", site.about?.body || "")}
+              <button class="button primary full" type="submit" ${state.aboutSavePending ? "disabled" : ""}>${state.aboutSavePending ? "Saving..." : "Save About Copy"}</button>
+            </form>
+          </div>
+        </section>
         <section class="site-control-grid">
           <form class="site-control-form" data-form="site-controls">
             <div class="control-section">
@@ -3511,8 +3738,9 @@ function routeView() {
     state.route = activeRoute;
   }
   const views = {
-    store: storefront,
-    product: productDetail,
+    "store": publicHomePage,
+    "story": storyDetailPage,
+    "product": productDetail,
     "find-reseller": findResellerPage,
     apply: resellerApplication,
     signup: signupPage,
@@ -3537,12 +3765,17 @@ function routeView() {
     terms: () => infoPage("terms"),
     privacy: () => infoPage("privacy"),
   };
-  return (views[state.route] || storefront)();
+  return (views[state.route] || publicHomePage)();
 }
 
 function bindEvents() {
   document.querySelectorAll("[data-route]").forEach((button) => {
-    button.addEventListener("click", () => setRoute(button.getAttribute("data-route"), { productId: button.getAttribute("data-product-id") }));
+    button.addEventListener("click", () =>
+      setRoute(button.getAttribute("data-route"), {
+        productId: button.getAttribute("data-product-id"),
+        storySlug: button.getAttribute("data-story-slug"),
+      }),
+    );
   });
 
   document.querySelectorAll("[data-action='select-gallery-image']").forEach((button) => {
@@ -3572,6 +3805,15 @@ function bindEvents() {
         ...state.catalogImageSelection,
         [key]: Number(state.catalogImageSelection[key] || 0) + direction,
       };
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='home-flyer-step']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const direction = Number(button.getAttribute("data-direction") || 1);
+      if (!Number.isFinite(direction)) return;
+      state.homeFlyerIndex = Number(state.homeFlyerIndex || 0) + direction;
       render();
     });
   });
@@ -3691,6 +3933,9 @@ function bindEvents() {
       if (formName === "account-profile") await handleAccountProfileSave(form);
       if (formName === "account-password") await handleAccountPasswordSave(form);
       if (formName === "team-role") await handleTeamRoleSave(form);
+      if (formName === "homepage-flyer") await saveHomepageFlyer(form);
+      if (formName === "blog-post") await saveBlogPost(form);
+      if (formName === "about-content") await saveAboutContent(form);
       if (formName === "site-controls") await saveSiteControls(form);
       if (formName === "product") await handleProductSubmit(form);
       if (formName === "colour-review") await saveColourReview(form);
@@ -4629,6 +4874,99 @@ async function saveSiteControls(form) {
     state.siteSaveError = error instanceof Error ? error.message : "Unable to publish site controls";
   } finally {
     state.siteSavePending = false;
+  }
+}
+
+async function saveHomepageFlyer(form) {
+  const data = new FormData(form);
+  state.flyerSavePending = true;
+  state.adminContentError = null;
+  render();
+  try {
+    const file = form.elements.namedItem("flyer_image")?.files?.[0];
+    if (!file) throw new Error("Choose a flyer image before saving.");
+    const record = WebsiteContent.buildContentImageRecord({ folder: "flyers", file, uniquePrefix: new Date().toISOString().replace(/\D/g, "") });
+    await uploadContentImage(record);
+    const [saved] = await insertAuthedSupabase(
+      "homepage_flyers",
+      WebsiteContent.buildFlyerPayload(
+        {
+          title: data.get("flyer_title"),
+          imagePath: record.storagePath,
+          sortOrder: data.get("flyer_sort_order"),
+          published: data.get("flyer_published") === "on",
+        },
+        state.auth.user?.id || null,
+      ),
+    );
+    const currentFlyers = Array.isArray(state.homepageFlyers)
+      ? state.homepageFlyers.filter((flyer) => flyer.id !== WebsiteContent.DEFAULT_HOME_FLYERS[0]?.id)
+      : [];
+    state.homepageFlyers = WebsiteContent.normalizeFlyers([...currentFlyers, saved], { includeUnpublished: true });
+  } catch (error) {
+    state.adminContentError = error instanceof Error ? error.message : "Unable to save flyer";
+  } finally {
+    state.flyerSavePending = false;
+    render();
+  }
+}
+
+async function saveBlogPost(form) {
+  const data = new FormData(form);
+  state.storySavePending = true;
+  state.adminContentError = null;
+  render();
+  try {
+    const file = form.elements.namedItem("story_cover_image")?.files?.[0];
+    let coverImagePath = "";
+    if (file) {
+      const record = WebsiteContent.buildContentImageRecord({ folder: "stories", file, uniquePrefix: new Date().toISOString().replace(/\D/g, "") });
+      await uploadContentImage(record);
+      coverImagePath = record.storagePath;
+    }
+    const [saved] = await insertAuthedSupabase(
+      "blog_posts",
+      WebsiteContent.buildStoryPayload(
+        {
+          title: data.get("story_title"),
+          coverImagePath,
+          summary: data.get("story_summary"),
+          body: data.get("story_body"),
+          published: data.get("story_published") === "on",
+        },
+        state.auth.user?.id || null,
+      ),
+    );
+    state.blogPosts = WebsiteContent.normalizeStories([saved, ...state.blogPosts], { includeUnpublished: true });
+  } catch (error) {
+    state.adminContentError = error instanceof Error ? error.message : "Unable to save story";
+  } finally {
+    state.storySavePending = false;
+    render();
+  }
+}
+
+async function saveAboutContent(form) {
+  const data = new FormData(form);
+  state.aboutSavePending = true;
+  state.adminContentError = null;
+  render();
+  try {
+    state.siteContent = SiteControls.sanitizeSiteContent({
+      ...state.siteContent,
+      about: {
+        heading: data.get("about_heading"),
+        body: data.get("about_body"),
+      },
+    });
+    localStorage.setItem(SITE_CONTENT_STORAGE_KEY, JSON.stringify(state.siteContent));
+    await publishActiveSiteContent(state.siteContent);
+    state.siteSaved = true;
+  } catch (error) {
+    state.adminContentError = error instanceof Error ? error.message : "Unable to save about content";
+  } finally {
+    state.aboutSavePending = false;
+    render();
   }
 }
 
