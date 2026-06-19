@@ -11,6 +11,8 @@ const {
 } = require("../src/website-content.js");
 
 assert.equal(buildStorySlug("Summer Drop: Botswana Launch!"), "summer-drop-botswana-launch");
+assert.equal(buildStorySlug("Summer 2.0"), "summer-2-0");
+assert.equal(buildStorySlug("drop-v1.2"), "drop-v1-2");
 assert.equal(buildStorySlug(""), "story");
 
 assert.deepEqual(
@@ -62,6 +64,30 @@ assert.equal(storyPayload.body, "Body");
 assert.equal(storyPayload.published, true);
 assert.match(storyPayload.published_at, /^\d{4}-\d{2}-\d{2}T/);
 assert.equal(storyPayload.created_by, "admin-1");
+
+const preservedPublishTimestamp = buildStoryPayload(
+  {
+    title: "Launch Day",
+    coverImagePath: "content/stories/launch.jpg",
+    summary: "Short",
+    body: "Body",
+    published: true,
+    published_at: "2026-06-01T00:00:00Z",
+  },
+  "admin-1",
+);
+assert.equal(preservedPublishTimestamp.published_at, "2026-06-01T00:00:00Z");
+
+const unpublishedStoryPayload = buildStoryPayload(
+  {
+    title: "Launch Day",
+    body: "Body",
+    published: false,
+    published_at: "2026-06-01T00:00:00Z",
+  },
+  "admin-1",
+);
+assert.equal(unpublishedStoryPayload.published_at, null);
 
 assert.equal(DEFAULT_ABOUT_CONTENT.heading, "About Irunsvan Africa");
 

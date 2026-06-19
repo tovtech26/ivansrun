@@ -27,7 +27,14 @@
     return Number.isFinite(parsed) ? parsed : fallback;
   }
 
-  function slugPart(value) {
+  function titleSlugPart(value) {
+    return safeText(value)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  function fileSlugPart(value) {
     return safeText(value)
       .toLowerCase()
       .replace(/\.[a-z0-9]+$/i, "")
@@ -41,7 +48,7 @@
   }
 
   function buildStorySlug(title) {
-    return slugPart(title) || "story";
+    return titleSlugPart(title) || "story";
   }
 
   function normalizeFlyers(rows = []) {
@@ -75,9 +82,9 @@
   }
 
   function buildContentImageRecord({ folder, file, uniquePrefix = "" } = {}) {
-    const safeFolder = slugPart(folder) || "content";
-    const name = slugPart(file?.name) || "image";
-    const prefix = slugPart(uniquePrefix);
+    const safeFolder = fileSlugPart(folder) || "content";
+    const name = fileSlugPart(file?.name) || "image";
+    const prefix = fileSlugPart(uniquePrefix);
     return {
       originalName: file.name,
       storagePath: `content/${safeFolder}/${[prefix, name].filter(Boolean).join("-")}${extension(file.name)}`,
@@ -98,6 +105,7 @@
 
   function buildStoryPayload(input = {}, adminUserId = null) {
     const published = safeBool(input.published);
+    const existingPublishedAt = safeText(input.published_at || input.publishedAt);
     return {
       title: safeText(input.title) || "Story",
       slug: buildStorySlug(input.slug || input.title),
@@ -105,7 +113,7 @@
       summary: safeText(input.summary) || null,
       body: safeText(input.body),
       published,
-      published_at: published ? new Date().toISOString() : null,
+      published_at: published ? existingPublishedAt || new Date().toISOString() : null,
       created_by: adminUserId,
     };
   }
