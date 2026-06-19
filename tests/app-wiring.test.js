@@ -50,6 +50,15 @@ assert.equal(supabaseClientSource.includes("function oauthSessionFromHash("), tr
 assert.equal(supabaseClientSource.includes("error_code"), true, "OAuth error_code must be treated as a callback parameter.");
 assert.equal(appSource.includes('searchParams.delete("error_code")'), true, "OAuth redirect URLs must not keep stale error_code query parameters.");
 assert.equal(authSource.includes("buildDevAdminAuthState"), false, "Auth module must not export fake dev admin state.");
+assert.equal(appSource.includes("const WebsiteContent = window.IrunsvanWebsiteContent;"), true, "App must load website content helpers.");
+assert.equal(appSource.includes("homepageFlyers:"), true, "App state must track homepage flyers.");
+assert.equal(appSource.includes("blogPosts:"), true, "App state must track blog posts.");
+assert.equal(appSource.includes("selectedStorySlug:"), true, "App state must track selected story slug.");
+assert.equal(appSource.includes('fetchOptionalSupabase("homepage_flyers"'), true, "Public bootstrap must fetch published homepage flyers.");
+assert.equal(appSource.includes('fetchOptionalSupabase("blog_posts"'), true, "Public bootstrap must fetch published blog posts.");
+assert.equal(appSource.includes('fetchAuthedSupabase("homepage_flyers"'), true, "Admin bootstrap must fetch all homepage flyers.");
+assert.equal(appSource.includes('fetchAuthedSupabase("blog_posts"'), true, "Admin bootstrap must fetch all blog posts.");
+assert.equal(appSource.includes('"story"'), true, "Story route must be registered.");
 assert.equal(appSource.includes("loadCatalog();\ninitAuth();"), false, "Startup must not fire catalog and auth without explicit orchestration.");
 assert.equal(appSource.includes("await loadCatalog();\n  await initAuth();"), false, "OAuth callback routing must not wait for the public catalog before auth restore.");
 assert.equal(appSource.includes("const catalogLoad = loadCatalog();"), true, "Startup must begin catalog loading without blocking auth restore.");
@@ -60,7 +69,7 @@ assert.equal(appSource.includes('const desktopItems = portalMode === "public" ? 
 assert.equal(appSource.includes("const resellerNavItems ="), true, "Reseller workspace should use a smaller dedicated top navigation.");
 assert.equal(appSource.includes('if (state.auth.isPending) {'), true, "Pending users need a distinct workspace menu.");
 assert.equal(appSource.includes('const url = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, historyState)}`;'), true, "Route writes must clear stale search params when changing pages.");
-assert.equal(appSource.includes('const cleanUrl = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, { productId: state.selectedProductId })}`;'), true, "Route sync must clear stale search params when restoring hashes.");
+assert.equal(appSource.includes('const cleanUrl = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, { productId: state.selectedProductId, storySlug: state.selectedStorySlug })}`;'), true, "Route sync must clear stale search params when restoring hashes.");
 assert.equal(appSource.includes("const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });"), true, "Startup must restore real Supabase sessions before protected data loading.");
 assert.equal(supabaseClientSource.includes("if (!session?.access_token) return { session: null, user: null, profile: null };"), true, "Auth restore must not create protected access without a real Supabase session.");
 assert.equal(appSource.includes("Sign in as a test reseller"), false, "Reseller portal must not mention test-session login paths.");

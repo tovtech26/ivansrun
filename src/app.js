@@ -3,6 +3,7 @@ const SUPABASE_KEY = "sb_publishable_6V8LkQ_EwGCeYqtdqxcpqg_RcaqSINj";
 
 const ROUTES = [
   "store",
+  "story",
   "product",
   "find-reseller",
   "apply",
@@ -50,6 +51,7 @@ const MobileNavigation = window.IrunsvanMobileNavigation;
 const InventoryWorkflow = window.IrunsvanInventoryWorkflow;
 const CatalogData = window.IrunsvanCatalogData;
 const OperationsProducts = window.IrunsvanOperationsProducts;
+const WebsiteContent = window.IrunsvanWebsiteContent;
 const SITE_CONTENT_STORAGE_KEY = "irunsvan_site_content";
 const SERVER_MONITOR_ENABLED =
   typeof window !== "undefined" &&
@@ -70,7 +72,7 @@ function readStoredSiteContent() {
 }
 
 function readInitialRouteState() {
-  return MobileNavigation.parseRouteUrl(window.location.hash) || { route: "store", productId: null };
+  return MobileNavigation.parseRouteUrl(window.location.hash) || { route: "store", productId: null, storySlug: null };
 }
 
 function hasPendingOAuthCallback() {
@@ -96,8 +98,11 @@ const initialRouteState = readInitialRouteState();
 const state = {
   route: initialRouteState.route,
   selectedProductId: initialRouteState.productId,
+  selectedStorySlug: initialRouteState.storySlug || null,
   products: [],
   variants: [],
+  homepageFlyers: WebsiteContent.normalizeFlyers([]),
+  blogPosts: [],
   resellerDirectory: [],
   colourMappings: [],
   inventory: [],
@@ -113,11 +118,13 @@ const state = {
   inventoryLoading: false,
   historyLoading: false,
   applicationsLoading: false,
+  homepageContentLoading: false,
   error: null,
   authError: null,
   inventoryError: null,
   historyError: null,
   applicationError: null,
+  homepageContentError: null,
   routeNotice: null,
   applicationSubmitted: false,
   orderSubmitted: false,
@@ -133,6 +140,9 @@ const state = {
   orderSubmitPending: false,
   applicationSubmitPending: false,
   siteSavePending: false,
+  flyerSavePending: false,
+  storySavePending: false,
+  aboutSavePending: false,
   importPending: false,
   stockResetPending: false,
   accountProfileSavePending: false,
@@ -167,6 +177,7 @@ const state = {
   adminInviteCreatedEmail: null,
   teamInviteCreatePending: false,
   teamInviteError: null,
+  adminContentError: null,
   mobileNavOpen: false,
   catalogFiltersOpen: false,
   navigationDepth: 0,
@@ -846,6 +857,10 @@ function remoteSiteContent(heroRows, themeRows, contentRows) {
       deep: theme.deep_color,
     },
     banner: content.reseller_banner,
+    about: {
+      heading: content.about_heading,
+      body: content.about_body,
+    },
   });
 }
 
@@ -969,7 +984,9 @@ function requestConfirmationData() {
 
 async function loadCatalog() {
   try {
-    const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows] = await Promise.all([
+    state.homepageContentLoading = true;
+    state.homepageContentError = null;
+    const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows, flyerRows, blogRows] = await Promise.all([
       fetchOptionalSupabase("products", CatalogData.productSelectQuery()),
       fetchOptionalSupabase("product_variants", CatalogData.variantSelectQuery()),
       fetchOptionalSupabase(
@@ -980,8 +997,10 @@ async function loadCatalog() {
         "site_themes",
         "select=name,primary_color,primary_dark_color,background_color,surface_color,accent_color,text_color,deep_color&active=eq.true&order=updated_at.desc&limit=1",
       ),
-      fetchOptionalSupabase("site_content", "select=reseller_banner&active=eq.true&order=updated_at.desc&limit=1"),
+      fetchOptionalSupabase("site_content", "select=reseller_banner,about_heading,about_body&active=eq.true&order=updated_at.desc&limit=1"),
       fetchOptionalSupabase("reseller_directory", "select=id,company_name,country,phone,email,full_name&order=country.asc,company_name.asc&limit=200"),
+      fetchOptionalSupabase("homepage_flyers", "select=id,title,image_path,sort_order,published,created_at&published=eq.true&order=sort_order.asc,created_at.desc&limit=20"),
+      fetchOptionalSupabase("blog_posts", "select=id,title,slug,cover_image_path,summary,body,published,published_at,created_at&published=eq.true&order=published_at.desc,created_at.desc&limit=20"),
     ]);
     const fallback = CatalogData.fallbackCatalog();
     const catalogRows =
@@ -992,19 +1011,25 @@ async function loadCatalog() {
     state.variants = catalogRows.variants;
     state.inventory = [];
     state.resellerDirectory = Array.isArray(directoryRows) ? directoryRows : [];
+    state.homepageFlyers = WebsiteContent.normalizeFlyers(flyerRows);
+    state.blogPosts = WebsiteContent.normalizeStories(blogRows);
     if (heroRows.length || themeRows.length || contentRows.length) {
       state.siteContent = remoteSiteContent(heroRows, themeRows, contentRows);
     }
   } catch (error) {
     state.error = error instanceof Error ? error.message : "Unable to load catalog";
+    state.homepageContentError = error instanceof Error ? error.message : "Unable to load homepage content";
   } finally {
     state.loading = false;
+    state.homepageContentLoading = false;
     render();
   }
 }
 
 async function loadProtectedData() {
   if (!state.auth.isAuthenticated) {
+    state.homepageFlyers = WebsiteContent.normalizeFlyers(state.homepageFlyers);
+    state.blogPosts = WebsiteContent.normalizeStories(state.blogPosts);
     state.inventory = [];
     state.orderRequests = [];
     state.orderRequestItems = [];
@@ -1066,6 +1091,8 @@ async function loadProtectedData() {
       tasks.push(
         ["profiles", fetchAuthedSupabase("profiles", "select=id,email,full_name,company_name,phone,role&order=role.asc,email.asc&limit=200")],
         ["adminInvites", fetchAuthedSupabase("admin_invites", "select=id,email,status,note,created_by,claimed_by,created_at,expires_at,used_at,revoked_at&order=created_at.desc&limit=200")],
+        ["homepageFlyers", fetchAuthedSupabase("homepage_flyers", "select=id,title,image_path,sort_order,published,created_at,updated_at&order=sort_order.asc,created_at.desc&limit=200")],
+        ["blogPosts", fetchAuthedSupabase("blog_posts", "select=id,title,slug,cover_image_path,summary,body,published,published_at,created_at,updated_at&order=created_at.desc&limit=200")],
         [
           "importJobs",
           fetchAuthedSupabase(
@@ -1106,6 +1133,10 @@ async function loadProtectedData() {
     state.importJobs = data.importJobs || [];
     state.staffProfiles = data.profiles || [];
     state.adminInvites = data.adminInvites || [];
+    if (state.auth.isAdmin) {
+      state.homepageFlyers = WebsiteContent.normalizeFlyers(data.homepageFlyers || [], { includeUnpublished: true });
+      state.blogPosts = WebsiteContent.normalizeStories(data.blogPosts || [], { includeUnpublished: true });
+    }
     if (failures.length) {
       const message = `Some protected data could not load: ${failures.join("; ")}`;
       state.inventoryError = message;
@@ -1130,10 +1161,11 @@ function setRoute(route, params = {}, options = {}) {
   const nextRoute = routeForAccess(route);
   state.route = nextRoute;
   if (params.productId) state.selectedProductId = params.productId;
+  state.selectedStorySlug = params.storySlug || null;
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;
   if (options.writeHistory !== false) {
-    const historyState = { route: nextRoute, productId: state.selectedProductId || null };
+    const historyState = { route: nextRoute, productId: state.selectedProductId || null, storySlug: state.selectedStorySlug || null };
     const url = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, historyState)}`;
     if (options.replaceHistory) {
       window.history.replaceState(historyState, "", url);
@@ -3883,11 +3915,12 @@ function syncRouteFromLocation(options = {}) {
   const nextRoute = routeForAccess(parsed.route);
   state.route = nextRoute;
   if (parsed.productId) state.selectedProductId = parsed.productId;
+  state.selectedStorySlug = parsed.storySlug || null;
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;
   if (options.replaceHistory !== false) {
-    const cleanUrl = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, { productId: state.selectedProductId })}`;
-    window.history.replaceState({ route: nextRoute, productId: state.selectedProductId || null }, "", cleanUrl);
+    const cleanUrl = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, { productId: state.selectedProductId, storySlug: state.selectedStorySlug })}`;
+    window.history.replaceState({ route: nextRoute, productId: state.selectedProductId || null, storySlug: state.selectedStorySlug || null }, "", cleanUrl);
   }
 }
 
@@ -5156,6 +5189,7 @@ window.addEventListener("popstate", (event) => {
   state.navigationDepth = Math.max(0, state.navigationDepth - 1);
   state.route = routeForAccess(routeState.route);
   if (routeState.productId) state.selectedProductId = routeState.productId;
+  state.selectedStorySlug = routeState.storySlug || null;
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;
   render();

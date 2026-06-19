@@ -51,7 +51,7 @@
     return titleSlugPart(title) || "story";
   }
 
-  function normalizeFlyers(rows = []) {
+  function normalizeFlyers(rows = [], options = {}) {
     const normalized = (Array.isArray(rows) ? rows : [])
       .map((row) => ({
         id: safeText(row.id),
@@ -60,12 +60,12 @@
         sortOrder: safeInteger(row.sort_order ?? row.sortOrder, 0),
         published: row.published !== false,
       }))
-      .filter((row) => row.id && row.title && row.imagePath)
+      .filter((row) => row.id && row.title && row.imagePath && (options.includeUnpublished === true || row.published))
       .sort((left, right) => left.sortOrder - right.sortOrder || left.title.localeCompare(right.title));
     return normalized.length ? normalized : DEFAULT_HOME_FLYERS;
   }
 
-  function normalizeStories(rows = []) {
+  function normalizeStories(rows = [], options = {}) {
     return (Array.isArray(rows) ? rows : [])
       .map((row) => ({
         id: safeText(row.id),
@@ -77,7 +77,7 @@
         published: row.published !== false,
         publishedAt: safeText(row.published_at || row.publishedAt || row.created_at || row.createdAt),
       }))
-      .filter((row) => row.id && row.title && row.slug && row.body)
+      .filter((row) => row.id && row.title && row.slug && row.body && (options.includeUnpublished === true || row.published))
       .sort((left, right) => String(right.publishedAt).localeCompare(String(left.publishedAt)));
   }
 

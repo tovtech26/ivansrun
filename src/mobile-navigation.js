@@ -1,6 +1,7 @@
 (function attachMobileNavigation(root) {
   const ROUTES = new Set([
     "store",
+    "story",
     "product",
     "find-reseller",
     "apply",
@@ -32,6 +33,7 @@
 
   function backTargetForRoute(route) {
     if (route === "store") return null;
+    if (route === "story") return { route: "store" };
     if (route === "product") return { route: "store" };
     if (route === "reseller-product") return { route: "reseller" };
     if (route === "request-confirmation") return { route: "history" };
@@ -44,6 +46,8 @@
   function buildRouteUrl(route, params = {}) {
     const safeRoute = ROUTES.has(route) ? route : "store";
     const productId = String(params.productId || "").trim();
+    const storySlug = String(params.storySlug || "").trim();
+    if (safeRoute === "story" && storySlug) return `#/${safeRoute}/${encodeURIComponent(storySlug)}`;
     if ((safeRoute === "product" || safeRoute === "reseller-product") && productId) return `#/${safeRoute}/${encodeURIComponent(productId)}`;
     return `#/${safeRoute}`;
   }
@@ -55,6 +59,7 @@
     return {
       route,
       productId: (route === "product" || route === "reseller-product") && parts[1] ? decodeURIComponent(parts[1]) : null,
+      storySlug: route === "story" && parts[1] ? decodeURIComponent(parts[1]) : null,
     };
   }
 

@@ -35,6 +35,8 @@ assert.deepEqual(
 );
 
 assert.equal(normalizeStories([{ id: "bad", title: "", slug: "", body: "" }]).length, 0);
+assert.equal(normalizeStories([{ id: "draft", title: "Draft", slug: "draft", body: "Draft", published: false }], { includeUnpublished: true }).length, 1);
+assert.equal(normalizeStories([{ id: "draft", title: "Draft", slug: "draft", body: "Draft", published: false }]).length, 0);
 
 const file = { name: "My Flyer.JPG", type: "image/jpeg" };
 assert.deepEqual(buildContentImageRecord({ folder: "flyers", file, uniquePrefix: "20260619" }), {
