@@ -22,15 +22,23 @@ const edited = sanitizeSiteContent({
     accent: "#38bdf8",
     deep: "#082f49",
   },
+  about: {
+    heading: "Why resellers choose us",
+    body: "Irunsvan Africa keeps public discovery simple and approved wholesale ordering private.",
+  },
 });
 
 assert.equal(edited.hero.title, "Christmas running deals for Africa.");
 assert.equal(edited.hero.electricity, false);
 assert.equal(edited.theme.primary, "#0ea5e9");
+assert.equal(edited.about.heading, "Why resellers choose us");
+assert.equal(edited.about.body, "Irunsvan Africa keeps public discovery simple and approved wholesale ordering private.");
 
 const empty = sanitizeSiteContent(null);
 assert.equal(empty.hero.title, DEFAULT_SITE_CONTENT.hero.title);
 assert.equal(empty.theme.primary, DEFAULT_SITE_CONTENT.theme.primary);
+assert.equal(empty.about.heading, DEFAULT_SITE_CONTENT.about.heading);
+assert.equal(empty.about.body, DEFAULT_SITE_CONTENT.about.body);
 
 const blank = sanitizeSiteContent({
   hero: {
@@ -41,12 +49,18 @@ const blank = sanitizeSiteContent({
     primary: "blue",
     background: "",
   },
+  about: {
+    heading: "   ",
+    body: "",
+  },
 });
 
 assert.equal(blank.hero.title, DEFAULT_SITE_CONTENT.hero.title);
 assert.equal(blank.hero.primaryCta, DEFAULT_SITE_CONTENT.hero.primaryCta);
 assert.equal(blank.theme.primary, DEFAULT_SITE_CONTENT.theme.primary);
 assert.equal(blank.theme.background, DEFAULT_SITE_CONTENT.theme.background);
+assert.equal(blank.about.heading, DEFAULT_SITE_CONTENT.about.heading);
+assert.equal(blank.about.body, DEFAULT_SITE_CONTENT.about.body);
 
 const vars = themeToCssVars(edited.theme);
 assert.equal(vars["--blue"], "#0ea5e9");

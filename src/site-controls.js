@@ -21,6 +21,10 @@
       text: "#171717",
       deep: "#001a41",
     },
+    about: {
+      heading: "About Irunsvan Africa",
+      body: "Irunsvan Africa supplies performance footwear through approved reseller channels across Africa.",
+    },
     banner: "Approved Irunsvan Africa resellers can view live stock and submit order requests.",
   };
 
@@ -48,6 +52,7 @@
     input = input && typeof input === "object" ? input : {};
     const hero = input.hero || {};
     const theme = input.theme || {};
+    const about = input.about || {};
 
     return {
       hero: {
@@ -70,6 +75,10 @@
         accent: colorOrDefault(theme.accent, DEFAULT_SITE_CONTENT.theme.accent),
         text: colorOrDefault(theme.text, DEFAULT_SITE_CONTENT.theme.text),
         deep: colorOrDefault(theme.deep, DEFAULT_SITE_CONTENT.theme.deep),
+      },
+      about: {
+        heading: textOrDefault(about.heading, DEFAULT_SITE_CONTENT.about.heading),
+        body: textOrDefault(about.body, DEFAULT_SITE_CONTENT.about.body),
       },
       banner: textOrDefault(input.banner, DEFAULT_SITE_CONTENT.banner),
     };

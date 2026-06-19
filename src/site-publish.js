@@ -27,6 +27,8 @@
         created_by: adminUserId,
       },
       contentRow: {
+        about_heading: siteContent.about.heading,
+        about_body: siteContent.about.body,
         reseller_banner: siteContent.banner,
         active: true,
         created_by: adminUserId,

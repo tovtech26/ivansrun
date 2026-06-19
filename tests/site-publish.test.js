@@ -24,6 +24,10 @@ assert.deepEqual(
       text: "#111111",
       deep: "#001122",
     },
+    about: {
+      heading: "About the reseller model",
+      body: "Approved partners can browse public products and then unlock private wholesale workflows.",
+    },
     banner: "Approved resellers can view live stock.",
   }, "admin-1"),
   {
@@ -53,6 +57,8 @@ assert.deepEqual(
       created_by: "admin-1",
     },
     contentRow: {
+      about_heading: "About the reseller model",
+      about_body: "Approved partners can browse public products and then unlock private wholesale workflows.",
       reseller_banner: "Approved resellers can view live stock.",
       active: true,
       created_by: "admin-1",
