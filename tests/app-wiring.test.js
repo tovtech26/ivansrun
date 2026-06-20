@@ -98,6 +98,9 @@ assert.equal(appSource.includes("<h2>Field Records</h2>"), true, "Homepage stori
 assert.equal(appSource.includes('class="home-flyer-stage"'), true, "Homepage flyer hero should render a dedicated campaign stage.");
 assert.equal(appSource.includes('class="campaign-eyebrow"'), true, "Homepage flyer hero should render campaign metadata labels.");
 assert.equal(appSource.includes("ENGINEERED FOR THE CONTINENT"), true, "Homepage about section should use the manifesto heading fallback.");
+assert.equal(appSource.includes("Lead Flyer"), false, "Homepage copy should not expose development-sounding flyer labels.");
+assert.equal(appSource.includes("Previous Signal"), false, "Homepage controls should use clean public-facing wording.");
+assert.equal(appSource.includes("Open record"), false, "Story cards should use standard public-facing action text.");
 assert.equal(styleSource.includes(".home-flyer-stage"), true, "Styles should define the flyer-led campaign stage.");
 assert.equal(styleSource.includes(".story-card-tag"), true, "Styles should define campaign story tags.");
 assert.equal(appSource.includes('class="catalog-section" id="catalog"'), false, "Public home must no longer render the catalogue section.");

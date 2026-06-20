@@ -1473,11 +1473,11 @@ function flyerCarousel(flyers) {
     <section class="home-flyer-carousel" aria-label="Irunsvan Africa flyers">
       <div class="home-flyer-stage">
         <div class="home-flyer-copy">
-          <span class="campaign-eyebrow">IRUNSVAN AFRICA // ACTIVE CAMPAIGN</span>
+          <span class="campaign-eyebrow">IRUNSVAN AFRICA</span>
           <div class="campaign-meta" aria-label="Campaign metadata">
-            <span>STATUS: LIVE</span>
-            <span>FLYER ${escapeHtml(`${selectedIndex + 1}/${items.length}`)}</span>
-            <span>PALETTE: IRUNSVAN BLUE</span>
+            <span>NEW SEASON</span>
+            <span>${escapeHtml(`EDITION ${selectedIndex + 1}/${items.length}`)}</span>
+            <span>PERFORMANCE FOOTWEAR</span>
           </div>
           <h1>${escapeHtml(heroTitle || "BLUE MOTION PROTOCOL")}</h1>
           <p>
@@ -1492,7 +1492,7 @@ function flyerCarousel(flyers) {
         <div class="home-flyer-frame">
           <img src="${escapeHtml(resolveContentImageUrl(selected.imagePath))}" alt="${escapeHtml(selected.title)}" loading="eager" />
           <div class="home-flyer-overlay">
-            <span>Lead Flyer</span>
+            <span>Featured</span>
             <strong>${escapeHtml(selected.title || "Irunsvan Campaign")}</strong>
           </div>
         </div>
@@ -1506,7 +1506,7 @@ function flyerCarousel(flyers) {
       }
       ${
         items.length > 1
-          ? `<div class="home-carousel-controls"><button type="button" data-action="home-flyer-step" data-direction="-1">Previous Signal</button><span>${escapeHtml(`${selectedIndex + 1}/${items.length}`)}</span><button type="button" data-action="home-flyer-step" data-direction="1">Next Signal</button></div>`
+          ? `<div class="home-carousel-controls"><button type="button" data-action="home-flyer-step" data-direction="-1">Previous</button><span>${escapeHtml(`${selectedIndex + 1}/${items.length}`)}</span><button type="button" data-action="home-flyer-step" data-direction="1">Next</button></div>`
           : ""
       }
     </section>
@@ -1524,11 +1524,11 @@ function storyCard(story, index) {
           : `<div class="story-card-image story-card-image-placeholder">${logo("blue")}</div>`
       }
       <div class="story-card-body">
-        <span class="story-card-tag">${index === 0 ? "Live Record" : "Archive"}</span>
+        <span class="story-card-tag">${index === 0 ? "Featured Story" : "Story"}</span>
         <p class="story-meta">${escapeHtml(publishedLabel)}</p>
         <h3>${escapeHtml(story.title)}</h3>
         <p>${escapeHtml(story.summary || "Read the latest Irunsvan Africa campaign dispatch.")}</p>
-        <button type="button" class="button secondary story-card-action" data-route="story" data-story-slug="${escapeHtml(story.slug)}">Open record</button>
+        <button type="button" class="button secondary story-card-action" data-route="story" data-story-slug="${escapeHtml(story.slug)}">Read story</button>
       </div>
     </article>
   `;
@@ -1539,7 +1539,7 @@ function storyCarousel(stories) {
   return `
     <section class="home-stories">
       <div class="home-section-heading">
-        <span class="campaign-eyebrow">DATA LOG // FIELD RECORDS</span>
+        <span class="campaign-eyebrow">LATEST FROM IRUNSVAN</span>
         <h2>Field Records</h2>
         <p>Editorial notes, product signals, and performance updates from Irunsvan Africa.</p>
       </div>
@@ -1558,7 +1558,7 @@ function aboutSection(about = WebsiteContent.DEFAULT_ABOUT_CONTENT) {
   return `
     <section class="home-about">
       <div class="home-section-heading">
-        <span class="campaign-eyebrow">MANIFESTO // BLUE SYSTEM</span>
+        <span class="campaign-eyebrow">ABOUT IRUNSVAN</span>
         <h2>${escapeHtml(heading)}</h2>
       </div>
       <div class="home-about-layout">
@@ -1577,7 +1577,7 @@ function aboutSection(about = WebsiteContent.DEFAULT_ABOUT_CONTENT) {
         </div>
         <aside class="home-about-aside">
           <div class="telemetry-card">
-            <span class="campaign-eyebrow">SYSTEM TELEMETRY</span>
+            <span class="campaign-eyebrow">BRAND FOCUS</span>
             <div class="telemetry-grid">
               <span>CHANNEL</span>
               <strong>RESELLER NETWORK</strong>
@@ -1623,10 +1623,10 @@ function storyDetailPage() {
     .join("");
   return `
     <main class="story-page campaign-story-page">
-      <button class="text-link story-back-link" data-route="store">Back to protocol</button>
+      <button class="text-link story-back-link" data-route="store">Back to home</button>
       <article class="story-article">
         <header class="story-header">
-          <span class="campaign-eyebrow">FIELD RECORD // STORY MODE</span>
+          <span class="campaign-eyebrow">IRUNSVAN STORY</span>
           <p class="story-meta">${escapeHtml(story.publishedAt ? new Date(story.publishedAt).toLocaleDateString() : "Latest story")}</p>
           <h1>${escapeHtml(story.title)}</h1>
           ${story.summary ? `<p class="story-summary">${escapeHtml(story.summary)}</p>` : ""}
