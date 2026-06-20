@@ -3,6 +3,7 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
 const appSource = readFileSync(join(__dirname, "..", "src", "app.js"), "utf8");
+const styleSource = readFileSync(join(__dirname, "..", "src", "styles.css"), "utf8");
 const indexSource = readFileSync(join(__dirname, "..", "index.html"), "utf8");
 const staticServerSource = readFileSync(join(__dirname, "..", "scripts", "serve-static.js"), "utf8");
 const authSource = readFileSync(join(__dirname, "..", "src", "auth.js"), "utf8");
@@ -35,7 +36,7 @@ assert.equal(appSource.includes("SupabaseClient.signInWithOAuth({"), true, "Goog
 assert.equal(appSource.includes("signup: signupPage"), true, "Normal email account creation must have a dedicated signup route.");
 assert.equal(appSource.includes("function signupPage()"), true, "Signup page must render a first-class email account creation form.");
 assert.equal(appSource.includes('["Create account", "signup"]'), true, "Login must expose normal email account creation.");
-assert.equal(appSource.includes('["Create Account", "signup", ["signup"]]'), true, "Public navigation must expose normal email account creation.");
+assert.equal(appSource.includes('["Access", "signup", ["signup"]]'), true, "Public navigation should use campaign-style labels for account access.");
 assert.equal(appSource.includes('inputField("Confirm Password", "password_confirm"'), true, "Signup must require password confirmation.");
 assert.equal(appSource.includes("state.signupConfirmationEmail = email;"), true, "Signup must handle email confirmation before application submission.");
 assert.equal(appSource.includes('["Back to public site", "store"]'), true, "Admin login should point back to the public site instead of reseller application.");
@@ -92,6 +93,13 @@ assert.equal(appSource.includes("function storyCarousel("), true, "Home must ren
 assert.equal(appSource.includes("function storyDetailPage("), true, "Story detail route must render a story page.");
 assert.equal(appSource.includes('"store": publicHomePage'), true, "Store route must render the public content home.");
 assert.equal(appSource.includes('"story": storyDetailPage'), true, "Story route must render story details.");
+assert.equal(appSource.includes('["Protocol", "store", ["store", "product", "story"]]'), true, "Public navigation should use campaign-style labels for the home route.");
+assert.equal(appSource.includes("<h2>Field Records</h2>"), true, "Homepage stories section should use the new editorial heading.");
+assert.equal(appSource.includes('class="home-flyer-stage"'), true, "Homepage flyer hero should render a dedicated campaign stage.");
+assert.equal(appSource.includes('class="campaign-eyebrow"'), true, "Homepage flyer hero should render campaign metadata labels.");
+assert.equal(appSource.includes("ENGINEERED FOR THE CONTINENT"), true, "Homepage about section should use the manifesto heading fallback.");
+assert.equal(styleSource.includes(".home-flyer-stage"), true, "Styles should define the flyer-led campaign stage.");
+assert.equal(styleSource.includes(".story-card-tag"), true, "Styles should define campaign story tags.");
 assert.equal(appSource.includes('class="catalog-section" id="catalog"'), false, "Public home must no longer render the catalogue section.");
 assert.equal(appSource.includes("cart-like"), false, "Public home copy must not use shopping/cart language.");
 assert.equal(appSource.includes("function adminRequests()"), true, "Admin request review must have its own focused view.");
@@ -184,7 +192,8 @@ assert.equal(appSource.includes("Colour Review"), true, "Admin products page mus
 assert.equal(appSource.includes("product_colour_mappings"), true, "Colour Review must save against product_colour_mappings.");
 assert.equal(appSource.includes("original_colour"), true, "Colour Review wiring must preserve original_colour keys.");
 assert.equal(indexSource.includes('rel="icon"'), true, "Document head must declare a favicon to avoid localhost favicon 404s.");
-assert.equal(indexSource.includes("irunsvan-admin-images-v2"), true, "Index must bump static asset cache keys after the image containment pass.");
+assert.equal(indexSource.includes("Oswald"), true, "Homepage redesign should load the condensed display font.");
+assert.equal(indexSource.includes("irunsvan-home-terra-light-v1"), true, "Index should bump public asset cache keys for the homepage redesign.");
 assert.equal(appSource.includes("object-fit: contain"), false, "Image sizing changes must live in CSS, not inline styles.");
 const oldBrandSlug = "ivan" + "srun";
 const oldBrandName = "Ivan" + "srun";

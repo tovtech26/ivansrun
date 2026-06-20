@@ -1265,14 +1265,14 @@ function loginPageContent(route = state.route) {
 function topNav() {
   const active = (routes) => (routes.includes(state.route) ? "active" : "");
   const publicNavItems = [
-    ["Products", "store", ["store", "product"]],
-    ["Find a Reseller", "find-reseller", ["find-reseller"]],
+    ["Protocol", "store", ["store", "product", "story"]],
+    ["Stockists", "find-reseller", ["find-reseller"]],
     ...(state.auth.isAuthenticated
       ? []
       : [
-          ["Create Account", "signup", ["signup"]],
-          ["Apply as a Reseller", "apply", ["apply"]],
-          ["Login", "login", ["login", "admin-login"]],
+          ["Access", "signup", ["signup"]],
+          ["Join", "apply", ["apply"]],
+          ["Enter", "login", ["login", "admin-login"]],
         ]),
   ];
   const resellerNavItems = state.auth.isPending
@@ -1301,9 +1301,14 @@ function topNav() {
       <button data-route="account">Account</button>
       <button data-action="logout">Logout</button>
     `
-    : `<button data-route="login">Login</button>`;
+    : portalMode === "public"
+      ? `
+        <button class="nav-utility" data-route="login">Enter</button>
+        <button class="nav-cta" data-route="apply">Join Network</button>
+      `
+      : `<button data-route="login">Login</button>`;
   return `
-    <header class="${portalMode !== "public" ? "top-nav portal-top-nav" : "top-nav"}">
+    <header class="${portalMode !== "public" ? "top-nav portal-top-nav" : "top-nav public-top-nav"}">
       <button class="logo-link bare-button" data-route="${homeRoute}" aria-label="${escapeHtml(mobileAreaLabel())} home">${logo("blue")}</button>
       <span class="mobile-area-label">${escapeHtml(mobileAreaLabel())}</span>
       <nav class="main-nav" aria-label="Primary navigation">
@@ -1384,34 +1389,34 @@ function mobileDrawerItems() {
   if (state.auth.isAuthenticated) {
     if (state.auth.isAdmin) {
       return [
-        ["Products", "store", ["store", "product"]],
-        ["Find a Reseller", "find-reseller", ["find-reseller"]],
+        ["Protocol", "store", ["store", "product", "story"]],
+        ["Stockists", "find-reseller", ["find-reseller"]],
         ["Account", "account", ["account"]],
         ["Back to Admin", "admin", ["admin"]],
       ];
     }
     if (state.auth.isPending) {
       return [
-        ["Products", "store", ["store", "product"]],
-        ["Find a Reseller", "find-reseller", ["find-reseller"]],
+        ["Protocol", "store", ["store", "product", "story"]],
+        ["Stockists", "find-reseller", ["find-reseller"]],
         ["Application", "apply", ["apply"]],
         ["Account", "account", ["account"]],
       ];
     }
     return [
-      ["Products", "store", ["store", "product"]],
-      ["Find a Reseller", "find-reseller", ["find-reseller"]],
+      ["Protocol", "store", ["store", "product", "story"]],
+      ["Stockists", "find-reseller", ["find-reseller"]],
       ["Request Products", "reseller", ["reseller"]],
       ["My Requests", "history", ["history", "request-confirmation"]],
       ["Account", "account", ["account"]],
     ];
   }
   return [
-    ["Products", "store", ["store", "product"]],
-    ["Find a Reseller", "find-reseller", ["find-reseller"]],
-    ["Create Account", "signup", ["signup"]],
-    ["Apply as a Reseller", "apply", ["apply"]],
-    ["Login", "login", ["login", "admin-login"]],
+    ["Protocol", "store", ["store", "product", "story"]],
+    ["Stockists", "find-reseller", ["find-reseller"]],
+    ["Access", "signup", ["signup"]],
+    ["Join", "apply", ["apply"]],
+    ["Enter", "login", ["login", "admin-login"]],
   ];
 }
 
@@ -1459,10 +1464,38 @@ function flyerCarousel(flyers) {
   const items = WebsiteContent.normalizeFlyers(flyers);
   const selectedIndex = ((Number(state.homeFlyerIndex || 0) % items.length) + items.length) % items.length;
   const selected = items[selectedIndex];
+  const heroTitle = String(selected.title || "Blue Motion Protocol")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .trim()
+    .toUpperCase();
   return `
     <section class="home-flyer-carousel" aria-label="Irunsvan Africa flyers">
-      <div class="home-flyer-frame">
-        <img src="${escapeHtml(resolveContentImageUrl(selected.imagePath))}" alt="${escapeHtml(selected.title)}" loading="eager" />
+      <div class="home-flyer-stage">
+        <div class="home-flyer-copy">
+          <span class="campaign-eyebrow">IRUNSVAN AFRICA // ACTIVE CAMPAIGN</span>
+          <div class="campaign-meta" aria-label="Campaign metadata">
+            <span>STATUS: LIVE</span>
+            <span>FLYER ${escapeHtml(`${selectedIndex + 1}/${items.length}`)}</span>
+            <span>PALETTE: IRUNSVAN BLUE</span>
+          </div>
+          <h1>${escapeHtml(heroTitle || "BLUE MOTION PROTOCOL")}</h1>
+          <p>
+            Technical footwear stories, campaign drops, and reseller-ready movement built for the
+            continent.
+          </p>
+          <div class="campaign-actions">
+            <button class="button primary" data-route="find-reseller">Find Stockists <span class="button-mark" aria-hidden="true">&rarr;</span></button>
+            <button class="button ghost home-ghost-button" data-route="apply">Join Network <span class="button-mark" aria-hidden="true">&nearr;</span></button>
+          </div>
+        </div>
+        <div class="home-flyer-frame">
+          <img src="${escapeHtml(resolveContentImageUrl(selected.imagePath))}" alt="${escapeHtml(selected.title)}" loading="eager" />
+          <div class="home-flyer-overlay">
+            <span>Lead Flyer</span>
+            <strong>${escapeHtml(selected.title || "Irunsvan Campaign")}</strong>
+          </div>
+        </div>
       </div>
       ${
         state.homepageContentError
@@ -1473,28 +1506,29 @@ function flyerCarousel(flyers) {
       }
       ${
         items.length > 1
-          ? `<div class="home-carousel-controls"><button type="button" data-action="home-flyer-step" data-direction="-1">Previous</button><span>${escapeHtml(`${selectedIndex + 1}/${items.length}`)}</span><button type="button" data-action="home-flyer-step" data-direction="1">Next</button></div>`
+          ? `<div class="home-carousel-controls"><button type="button" data-action="home-flyer-step" data-direction="-1">Previous Signal</button><span>${escapeHtml(`${selectedIndex + 1}/${items.length}`)}</span><button type="button" data-action="home-flyer-step" data-direction="1">Next Signal</button></div>`
           : ""
       }
     </section>
   `;
 }
 
-function storyCard(story) {
+function storyCard(story, index) {
   const coverImage = resolveContentImageUrl(story.coverImagePath || "");
   const publishedLabel = story.publishedAt ? new Date(story.publishedAt).toLocaleDateString() : "Latest";
   return `
-    <article class="story-card">
+    <article class="story-card${index === 0 ? " story-card-featured" : ""}">
       ${
         coverImage
           ? `<img src="${escapeHtml(coverImage)}" alt="${escapeHtml(story.title)}" loading="lazy" />`
           : `<div class="story-card-image story-card-image-placeholder">${logo("blue")}</div>`
       }
       <div class="story-card-body">
+        <span class="story-card-tag">${index === 0 ? "Live Record" : "Archive"}</span>
         <p class="story-meta">${escapeHtml(publishedLabel)}</p>
         <h3>${escapeHtml(story.title)}</h3>
-        <p>${escapeHtml(story.summary || "Read the latest Irunsvan Africa update.")}</p>
-        <button type="button" class="button secondary" data-route="story" data-story-slug="${escapeHtml(story.slug)}">Open story</button>
+        <p>${escapeHtml(story.summary || "Read the latest Irunsvan Africa campaign dispatch.")}</p>
+        <button type="button" class="button secondary story-card-action" data-route="story" data-story-slug="${escapeHtml(story.slug)}">Open record</button>
       </div>
     </article>
   `;
@@ -1505,12 +1539,13 @@ function storyCarousel(stories) {
   return `
     <section class="home-stories">
       <div class="home-section-heading">
-        <h2>Latest Stories</h2>
-        <p>News, launches, and field updates from Irunsvan Africa.</p>
+        <span class="campaign-eyebrow">DATA LOG // FIELD RECORDS</span>
+        <h2>Field Records</h2>
+        <p>Editorial notes, product signals, and performance updates from Irunsvan Africa.</p>
       </div>
       ${
         items.length
-          ? `<div class="story-strip">${items.map(storyCard).join("")}</div>`
+          ? `<div class="story-strip">${items.map((story, index) => storyCard(story, index)).join("")}</div>`
           : `<div class="content-empty-state"><p>No stories are published yet.</p></div>`
       }
     </section>
@@ -1518,14 +1553,41 @@ function storyCarousel(stories) {
 }
 
 function aboutSection(about = WebsiteContent.DEFAULT_ABOUT_CONTENT) {
+  const heading = String(about?.heading || "ENGINEERED FOR THE CONTINENT").toUpperCase();
+  const body = about?.body || WebsiteContent.DEFAULT_ABOUT_CONTENT.body;
   return `
     <section class="home-about">
       <div class="home-section-heading">
-        <h2>${escapeHtml(about?.heading || WebsiteContent.DEFAULT_ABOUT_CONTENT.heading)}</h2>
+        <span class="campaign-eyebrow">MANIFESTO // BLUE SYSTEM</span>
+        <h2>${escapeHtml(heading)}</h2>
       </div>
-      <div class="home-about-copy">
-        <p>${escapeHtml(about?.body || WebsiteContent.DEFAULT_ABOUT_CONTENT.body)}</p>
-        <p>${escapeHtml(state.siteContent.banner || "")}</p>
+      <div class="home-about-layout">
+        <div class="home-about-copy">
+          <p>${escapeHtml(body)}</p>
+          ${
+            state.siteContent.banner
+              ? `<p class="home-about-banner">${escapeHtml(state.siteContent.banner)}</p>`
+              : ""
+          }
+          <div class="home-about-points" aria-label="Irunsvan core pillars">
+            <span>01 // SURFACE ADAPTABILITY</span>
+            <span>02 // RHYTHM ENGINEERING</span>
+            <span>03 // CONTINENTAL TESTING</span>
+          </div>
+        </div>
+        <aside class="home-about-aside">
+          <div class="telemetry-card">
+            <span class="campaign-eyebrow">SYSTEM TELEMETRY</span>
+            <div class="telemetry-grid">
+              <span>CHANNEL</span>
+              <strong>RESELLER NETWORK</strong>
+              <span>OUTPUT</span>
+              <strong>TECHNICAL FOOTWEAR</strong>
+              <span>FIELD</span>
+              <strong>AFRICA</strong>
+            </div>
+          </div>
+        </aside>
       </div>
     </section>
   `;
@@ -1544,7 +1606,7 @@ function storyDetailPage() {
   const story = selectedStory();
   if (!story) {
     return `
-      <main class="story-page">
+      <main class="story-page campaign-story-page">
         <button class="text-link" data-route="store">Back to home</button>
         <section class="content-empty-state">
           <h1>Story not found</h1>
@@ -1560,10 +1622,11 @@ function storyDetailPage() {
     .map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`)
     .join("");
   return `
-    <main class="story-page">
-      <button class="text-link" data-route="store">Back to home</button>
+    <main class="story-page campaign-story-page">
+      <button class="text-link story-back-link" data-route="store">Back to protocol</button>
       <article class="story-article">
         <header class="story-header">
+          <span class="campaign-eyebrow">FIELD RECORD // STORY MODE</span>
           <p class="story-meta">${escapeHtml(story.publishedAt ? new Date(story.publishedAt).toLocaleDateString() : "Latest story")}</p>
           <h1>${escapeHtml(story.title)}</h1>
           ${story.summary ? `<p class="story-summary">${escapeHtml(story.summary)}</p>` : ""}
@@ -3706,28 +3769,47 @@ function catalogPager({ startIndex, endIndex, totalProducts, currentPage, totalP
 }
 
 function footer(compact = false) {
-  const resourceButtons = `
-    <button data-route="store">Products</button>
-    <button data-route="find-reseller">Find a Reseller</button>
-    <button data-route="contact">Support</button>
-  `;
+  const publicMode = currentPortalMode() === "public";
+  const resourceButtons = publicMode
+    ? `
+      <button data-route="store">Protocol</button>
+      <button data-route="find-reseller">Stockists</button>
+      <button data-route="contact">Support</button>
+    `
+    : `
+      <button data-route="store">Products</button>
+      <button data-route="find-reseller">Find a Reseller</button>
+      <button data-route="contact">Support</button>
+    `;
   const operationButtons = state.auth.isAuthenticated
     ? `
       <button data-route="account">Account</button>
       <button data-action="logout">Logout</button>
     `
-    : `
-      <button data-route="apply">Apply as a Reseller</button>
-      <button data-route="login">Login</button>
-      <button data-route="admin-login">Admin Login</button>
-      <button data-route="privacy">Privacy Policy</button>
-    `;
+    : publicMode
+      ? `
+        <button data-route="apply">Join Network</button>
+        <button data-route="login">Enter</button>
+        <button data-route="admin-login">Admin</button>
+        <button data-route="privacy">Privacy</button>
+      `
+      : `
+        <button data-route="apply">Apply as a Reseller</button>
+        <button data-route="login">Login</button>
+        <button data-route="admin-login">Admin Login</button>
+        <button data-route="privacy">Privacy Policy</button>
+      `;
   return `
-    <footer class="${compact ? "footer compact" : "footer"}">
-      <div>${logo("blue")}<p>High-performance athletic footwear for Africa's reseller-ready inventory workflows.</p></div>
-      <div><strong>Resources</strong>${resourceButtons}</div>
-      <div><strong>Operations</strong>${operationButtons}</div>
-      <p class="copyright">Copyright 2026 Irunsvan Africa High-Performance Footwear.</p>
+    <footer class="${compact ? "footer compact" : "footer"}${publicMode ? " campaign-footer" : ""}">
+      <div class="campaign-footer-grid">
+        <div>
+          ${logo("blue")}
+          <p>${escapeHtml(publicMode ? "Technical footwear stories, reseller channels, and campaign records from Irunsvan Africa." : "High-performance athletic footwear for Africa's reseller-ready inventory workflows.")}</p>
+        </div>
+        <div><strong>${publicMode ? "Channels" : "Resources"}</strong>${resourceButtons}</div>
+        <div><strong>${publicMode ? "Access" : "Operations"}</strong>${operationButtons}</div>
+      </div>
+      <p class="copyright">${escapeHtml(publicMode ? "IRUNSVAN AFRICA // 2026 CAMPAIGN SYSTEM" : "Copyright 2026 Irunsvan Africa High-Performance Footwear.")}</p>
     </footer>
   `;
 }
