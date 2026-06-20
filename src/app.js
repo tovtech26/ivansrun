@@ -1452,9 +1452,13 @@ function mobileContextBar() {
 function publicHomePage() {
   return `
     <main class="public-home">
-      ${flyerCarousel(state.homepageFlyers)}
-      ${storyCarousel(state.blogPosts)}
-      ${aboutSection(state.siteContent.about)}
+      <div class="public-home-shell">
+        <div class="public-home-stack">
+          ${flyerCarousel(state.homepageFlyers)}
+          ${storyCarousel(state.blogPosts)}
+          ${aboutSection(state.siteContent.about)}
+        </div>
+      </div>
       ${footer()}
     </main>
   `;
@@ -1472,7 +1476,7 @@ function flyerCarousel(flyers) {
   return `
     <section class="home-flyer-carousel" aria-label="Irunsvan Africa flyers">
       <div class="home-flyer-stage">
-        <div class="home-flyer-copy">
+        <div class="home-flyer-copy campaign-surface-shadow">
           <span class="campaign-eyebrow">IRUNSVAN AFRICA</span>
           <div class="campaign-meta" aria-label="Campaign metadata">
             <span>NEW SEASON</span>
@@ -1489,7 +1493,7 @@ function flyerCarousel(flyers) {
             <button class="button ghost home-ghost-button" data-route="apply">Join Network <span class="button-mark" aria-hidden="true">&nearr;</span></button>
           </div>
         </div>
-        <div class="home-flyer-frame">
+        <div class="home-flyer-frame campaign-surface-shadow">
           <img src="${escapeHtml(resolveContentImageUrl(selected.imagePath))}" alt="${escapeHtml(selected.title)}" loading="eager" />
           <div class="home-flyer-overlay">
             <span>Featured</span>
@@ -1517,7 +1521,7 @@ function storyCard(story, index) {
   const coverImage = resolveContentImageUrl(story.coverImagePath || "");
   const publishedLabel = story.publishedAt ? new Date(story.publishedAt).toLocaleDateString() : "Latest";
   return `
-    <article class="story-card${index === 0 ? " story-card-featured" : ""}">
+    <article class="story-card campaign-surface-shadow${index === 0 ? " story-card-featured" : ""}">
       ${
         coverImage
           ? `<img src="${escapeHtml(coverImage)}" alt="${escapeHtml(story.title)}" loading="lazy" />`
@@ -1562,7 +1566,7 @@ function aboutSection(about = WebsiteContent.DEFAULT_ABOUT_CONTENT) {
         <h2>${escapeHtml(heading)}</h2>
       </div>
       <div class="home-about-layout">
-        <div class="home-about-copy">
+        <div class="home-about-copy campaign-surface-shadow">
           <p>${escapeHtml(body)}</p>
           ${
             state.siteContent.banner
@@ -1576,7 +1580,7 @@ function aboutSection(about = WebsiteContent.DEFAULT_ABOUT_CONTENT) {
           </div>
         </div>
         <aside class="home-about-aside">
-          <div class="telemetry-card">
+          <div class="telemetry-card campaign-surface-shadow">
             <span class="campaign-eyebrow">BRAND FOCUS</span>
             <div class="telemetry-grid">
               <span>CHANNEL</span>

@@ -20,6 +20,8 @@
   --home-line: #bad0e8;
   --home-muted: #4b617c;
   --home-accent: #0070ea;
+  --home-shadow-soft: 0 14px 32px rgba(16, 35, 63, 0.06), 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  --home-shadow-hover: 0 18px 40px rgba(16, 35, 63, 0.08), 0 1px 0 rgba(255, 255, 255, 0.84) inset;
   --shadow: 0 2px 8px rgba(10, 10, 10, 0.08);
   --motion: cubic-bezier(0.32, 0.72, 0, 1);
   color: var(--black);
@@ -43,17 +45,34 @@ body {
     var(--home-shell);
 }
 
+.public-home-shell {
+  margin: 0 auto;
+  max-width: 1140px;
+  padding: 26px clamp(20px, 3.2vw, 34px) 42px;
+}
+
+.public-home-stack {
+  display: grid;
+  gap: 6px;
+}
+
 .home-flyer-carousel {
-  padding: 24px clamp(16px, 4vw, 48px) 28px;
+  padding: 0 0 18px;
 }
 
 .home-flyer-stage {
-  max-width: 1180px;
-  margin: 0 auto;
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
-  gap: 24px;
+  grid-template-columns: minmax(360px, 0.98fr) minmax(0, 1.02fr);
+  gap: 18px;
   align-items: stretch;
+}
+
+.campaign-surface-shadow {
+  box-shadow: var(--home-shadow-soft);
+  transition:
+    box-shadow 320ms var(--motion),
+    transform 320ms var(--motion),
+    border-color 320ms var(--motion);
 }
 
 .home-flyer-copy,
@@ -73,8 +92,8 @@ body {
   display: grid;
   align-content: end;
   gap: 18px;
-  min-height: 560px;
-  padding: clamp(24px, 4vw, 44px);
+  min-height: 520px;
+  padding: clamp(28px, 3.5vw, 40px);
   position: relative;
 }
 
@@ -114,9 +133,9 @@ body {
 }
 
 .home-flyer-copy h1 {
-  font-size: clamp(58px, 7.2vw, 120px);
+  font-size: clamp(54px, 6.6vw, 102px);
   margin: 0;
-  max-width: 8ch;
+  max-width: 7ch;
 }
 
 .home-flyer-copy p {
@@ -133,6 +152,22 @@ body {
   gap: 14px;
 }
 
+.campaign-actions .button {
+  border-color: rgba(16, 35, 63, 0.08);
+  box-shadow: 0 10px 22px rgba(16, 35, 63, 0.06);
+}
+
+.campaign-actions .button.primary,
+.public-top-nav .nav-actions .nav-cta {
+  box-shadow: 0 12px 28px rgba(0, 112, 234, 0.18);
+}
+
+.campaign-actions .button:hover,
+.public-top-nav .nav-actions .nav-cta:hover {
+  box-shadow: 0 16px 30px rgba(16, 35, 63, 0.1);
+  transform: translateY(-2px);
+}
+
 .home-ghost-button {
   background: transparent;
   border-color: var(--home-line);
@@ -144,7 +179,7 @@ body {
 }
 
 .home-flyer-frame {
-  aspect-ratio: 16 / 7;
+  aspect-ratio: 10 / 7;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(16, 35, 63, 0.08)),
     linear-gradient(135deg, rgba(0, 112, 234, 0.08), rgba(255, 255, 255, 0.5)),
@@ -194,8 +229,7 @@ body {
 }
 
 .home-carousel-controls {
-  max-width: 1180px;
-  margin: 12px auto 0;
+  margin: 14px 4px 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -215,19 +249,16 @@ body {
 }
 
 .home-content-notice {
-  max-width: 1180px;
-  margin: 12px auto 0;
+  margin: 12px 4px 0;
 }
 
 .home-stories,
 .home-about {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 0 clamp(16px, 4vw, 48px) 40px;
+  padding: 0 4px 28px;
 }
 
 .home-section-heading {
-  margin-bottom: 20px;
+  margin-bottom: 18px;
 }
 
 .home-section-heading h2 {
@@ -247,7 +278,7 @@ body {
 .story-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 16px;
 }
 
 .story-card {
@@ -257,6 +288,13 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 100%;
+}
+
+.story-card:hover,
+.home-about-copy:hover,
+.telemetry-card:hover {
+  box-shadow: var(--home-shadow-hover);
+  transform: translateY(-1px);
 }
 
 .story-card-featured {
@@ -337,7 +375,7 @@ body {
 .home-about-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
-  gap: 20px;
+  gap: 16px;
 }
 
 .home-about-banner {
@@ -4056,13 +4094,15 @@ textarea {
   grid-template-columns: 1fr;
   gap: 18px;
   margin-top: 48px;
-  padding-top: 32px;
+  padding: 32px clamp(20px, 3.2vw, 34px) 22px;
 }
 
 .campaign-footer-grid {
   display: grid;
   gap: 22px;
   grid-template-columns: 1.4fr 1fr 1fr;
+  margin: 0 auto;
+  max-width: 1140px;
 }
 
 .campaign-footer.footer p,
@@ -4476,6 +4516,10 @@ textarea {
     padding-bottom: 9px;
   }
 
+  .public-home-shell {
+    padding: 18px var(--mobile-gutter) 30px;
+  }
+
   .home-flyer-stage,
   .story-strip,
   .home-about-layout,
@@ -4535,7 +4579,7 @@ textarea {
 
   .home-stories,
   .home-about {
-    padding-bottom: 28px;
+    padding: 0 0 22px;
   }
 
   .story-article {
