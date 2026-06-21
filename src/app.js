@@ -1265,7 +1265,7 @@ function loginPageContent(route = state.route) {
 function topNav() {
   const active = (routes) => (routes.includes(state.route) ? "active" : "");
   const publicNavItems = [
-    ["Protocol", "store", ["store", "product", "story"]],
+    ["Products", "store", ["store", "product", "story"]],
     ["Stockists", "find-reseller", ["find-reseller"]],
     ...(state.auth.isAuthenticated
       ? []
@@ -1389,7 +1389,7 @@ function mobileDrawerItems() {
   if (state.auth.isAuthenticated) {
     if (state.auth.isAdmin) {
       return [
-        ["Protocol", "store", ["store", "product", "story"]],
+        ["Products", "store", ["store", "product", "story"]],
         ["Stockists", "find-reseller", ["find-reseller"]],
         ["Account", "account", ["account"]],
         ["Back to Admin", "admin", ["admin"]],
@@ -1397,14 +1397,14 @@ function mobileDrawerItems() {
     }
     if (state.auth.isPending) {
       return [
-        ["Protocol", "store", ["store", "product", "story"]],
+        ["Products", "store", ["store", "product", "story"]],
         ["Stockists", "find-reseller", ["find-reseller"]],
         ["Application", "apply", ["apply"]],
         ["Account", "account", ["account"]],
       ];
     }
     return [
-      ["Protocol", "store", ["store", "product", "story"]],
+      ["Products", "store", ["store", "product", "story"]],
       ["Stockists", "find-reseller", ["find-reseller"]],
       ["Request Products", "reseller", ["reseller"]],
       ["My Requests", "history", ["history", "request-confirmation"]],
@@ -1412,7 +1412,7 @@ function mobileDrawerItems() {
     ];
   }
   return [
-    ["Protocol", "store", ["store", "product", "story"]],
+    ["Products", "store", ["store", "product", "story"]],
     ["Stockists", "find-reseller", ["find-reseller"]],
     ["Access", "signup", ["signup"]],
     ["Join", "apply", ["apply"]],
@@ -1452,6 +1452,7 @@ function mobileContextBar() {
 function publicHomePage() {
   return `
     <main class="public-home">
+      ${homeBokehBackdrop()}
       <div class="public-home-shell">
         <div class="public-home-stack">
           ${flyerCarousel(state.homepageFlyers)}
@@ -1461,6 +1462,32 @@ function publicHomePage() {
       </div>
       ${footer()}
     </main>
+  `;
+}
+
+function homeBokehBackdrop() {
+  const colors = ["#ff5f6d", "#ff9f43", "#ffe66d", "#74e39b", "#61d2ff", "#8e7bff"];
+  const dots = Array.from({ length: 28 }, (_, index) => {
+    const left = (index * 7.9) % 100;
+    const top = (index * 11.7) % 100;
+    const size = 3 + (index % 5) * 1.8;
+    const blur = 0.5 + (index % 4) * 0.6;
+    const opacity = 0.07 + (index % 6) * 0.015;
+    const color = colors[index % colors.length];
+    const driftX = (index % 2 === 0 ? 1 : -1) * (6 + (index % 5) * 2);
+    const driftY = (index % 3 === 0 ? -1 : 1) * (4 + (index % 4) * 1.5);
+    return `<span class="home-bokeh-dot home-bokeh-dot-${index % 4}" style="left:${left}%;top:${top}%;width:${size}px;height:${size}px;background:${color};opacity:${opacity};filter:blur(${blur}px);--dot-drift-x:${driftX}px;--dot-drift-y:${driftY}px;--dot-delay:${index * 180}ms;"></span>`;
+  }).join("");
+
+  return `
+    <div class="home-bokeh-background" aria-hidden="true">
+      <div class="home-bokeh-glow home-bokeh-glow-a"></div>
+      <div class="home-bokeh-glow home-bokeh-glow-b"></div>
+      <div class="home-bokeh-glow home-bokeh-glow-c"></div>
+      <div class="home-bokeh-field">
+        ${dots}
+      </div>
+    </div>
   `;
 }
 
@@ -1475,29 +1502,33 @@ function flyerCarousel(flyers) {
     .toUpperCase();
   return `
     <section class="home-flyer-carousel" aria-label="Irunsvan Africa flyers">
-      <div class="home-flyer-stage">
-        <div class="home-flyer-copy campaign-surface-shadow">
-          <span class="campaign-eyebrow">IRUNSVAN AFRICA</span>
-          <div class="campaign-meta" aria-label="Campaign metadata">
-            <span>NEW SEASON</span>
-            <span>${escapeHtml(`EDITION ${selectedIndex + 1}/${items.length}`)}</span>
-            <span>PERFORMANCE FOOTWEAR</span>
+      <div class="home-flyer-panel campaign-surface-shadow">
+        <div class="home-flyer-stage">
+          <div class="home-flyer-copy">
+            <span class="campaign-eyebrow">IRUNSVAN AFRICA</span>
+            <div class="campaign-meta" aria-label="Campaign metadata">
+              <span>NEW SEASON</span>
+              <span>${escapeHtml(`EDITION ${selectedIndex + 1}/${items.length}`)}</span>
+              <span>PERFORMANCE FOOTWEAR</span>
+            </div>
+            <h1>${escapeHtml(heroTitle || "BLUE MOTION PROTOCOL")}</h1>
+            <p>
+              Technical footwear stories, campaign drops, and reseller-ready movement built for the
+              continent.
+            </p>
+            <div class="campaign-actions">
+              <button class="button primary" data-route="find-reseller">Find Stockists <span class="button-mark" aria-hidden="true">&rarr;</span></button>
+              <button class="button ghost home-ghost-button" data-route="apply">Join Network <span class="button-mark" aria-hidden="true">&nearr;</span></button>
+            </div>
           </div>
-          <h1>${escapeHtml(heroTitle || "BLUE MOTION PROTOCOL")}</h1>
-          <p>
-            Technical footwear stories, campaign drops, and reseller-ready movement built for the
-            continent.
-          </p>
-          <div class="campaign-actions">
-            <button class="button primary" data-route="find-reseller">Find Stockists <span class="button-mark" aria-hidden="true">&rarr;</span></button>
-            <button class="button ghost home-ghost-button" data-route="apply">Join Network <span class="button-mark" aria-hidden="true">&nearr;</span></button>
-          </div>
-        </div>
-        <div class="home-flyer-frame campaign-surface-shadow">
-          <img src="${escapeHtml(resolveContentImageUrl(selected.imagePath))}" alt="${escapeHtml(selected.title)}" loading="eager" />
-          <div class="home-flyer-overlay">
-            <span>Featured</span>
-            <strong>${escapeHtml(selected.title || "Irunsvan Campaign")}</strong>
+          <div class="home-flyer-media">
+            <div class="home-flyer-frame">
+              <img src="${escapeHtml(resolveContentImageUrl(selected.imagePath))}" alt="${escapeHtml(selected.title)}" loading="eager" onerror="this.onerror=null;this.src='Flyer Templates/Flyer Template.jpg';" />
+              <div class="home-flyer-overlay">
+                <span>Featured</span>
+                <strong>${escapeHtml(selected.title || "Irunsvan Campaign")}</strong>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -3776,7 +3807,7 @@ function footer(compact = false) {
   const publicMode = currentPortalMode() === "public";
   const resourceButtons = publicMode
     ? `
-      <button data-route="store">Protocol</button>
+      <button data-route="store">Products</button>
       <button data-route="find-reseller">Stockists</button>
       <button data-route="contact">Support</button>
     `

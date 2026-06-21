@@ -20,8 +20,11 @@
   --home-line: #bad0e8;
   --home-muted: #4b617c;
   --home-accent: #0070ea;
-  --home-shadow-soft: 0 14px 32px rgba(16, 35, 63, 0.06), 0 1px 0 rgba(255, 255, 255, 0.7) inset;
-  --home-shadow-hover: 0 18px 40px rgba(16, 35, 63, 0.08), 0 1px 0 rgba(255, 255, 255, 0.84) inset;
+  --home-max: 1288px;
+  --home-glass: rgba(255, 255, 255, 0.72);
+  --home-glass-strong: rgba(255, 255, 255, 0.88);
+  --home-shadow-soft: 0 24px 64px rgba(16, 35, 63, 0.09), 0 1px 0 rgba(255, 255, 255, 0.88) inset;
+  --home-shadow-hover: 0 28px 72px rgba(16, 35, 63, 0.12), 0 1px 0 rgba(255, 255, 255, 0.94) inset;
   --shadow: 0 2px 8px rgba(10, 10, 10, 0.08);
   --motion: cubic-bezier(0.32, 0.72, 0, 1);
   color: var(--black);
@@ -41,33 +44,136 @@ body {
 
 .public-home {
   background:
-    linear-gradient(180deg, rgba(0, 112, 234, 0.08), rgba(255, 255, 255, 0) 22%),
-    var(--home-shell);
+    radial-gradient(circle at 10% 4%, rgba(255, 95, 109, 0.14), transparent 22%),
+    radial-gradient(circle at 90% 14%, rgba(106, 215, 255, 0.18), transparent 26%),
+    radial-gradient(circle at 40% 90%, rgba(180, 140, 255, 0.14), transparent 24%),
+    linear-gradient(135deg, #fdfdff 0%, #edf6ff 33%, #f6fbff 62%, #ffffff 100%);
+  min-height: 100vh;
+  isolation: isolate;
+  position: relative;
+}
+
+.home-bokeh-background {
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.home-bokeh-field {
+  inset: 0;
+  position: absolute;
+}
+
+.home-bokeh-dot {
+  border-radius: 9999px;
+  position: absolute;
+  transform: translate3d(0, 0, 0);
+}
+
+.home-bokeh-dot-0,
+.home-bokeh-dot-1 {
+  animation: bokeh-drift 22s ease-in-out infinite, bokeh-glow 10s ease-in-out infinite;
+}
+
+.home-bokeh-dot-2,
+.home-bokeh-dot-3 {
+  animation: bokeh-drift 28s ease-in-out infinite reverse, bokeh-glow 12s ease-in-out infinite;
+}
+
+.home-bokeh-glow {
+  border-radius: 9999px;
+  filter: blur(26px);
+  opacity: 0.14;
+  position: absolute;
+}
+
+.home-bokeh-glow-a {
+  background: radial-gradient(circle, rgba(255, 95, 109, 0.45), rgba(255, 95, 109, 0));
+  height: 20vw;
+  left: -6vw;
+  top: 6vh;
+  width: 20vw;
+}
+
+.home-bokeh-glow-b {
+  background: radial-gradient(circle, rgba(106, 215, 255, 0.38), rgba(106, 215, 255, 0));
+  height: 18vw;
+  right: 4vw;
+  top: 10vh;
+  width: 18vw;
+}
+
+.home-bokeh-glow-c {
+  background: radial-gradient(circle, rgba(180, 140, 255, 0.36), rgba(180, 140, 255, 0));
+  bottom: 8vh;
+  height: 24vw;
+  left: 30vw;
+  width: 24vw;
+}
+
+@keyframes bokeh-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(var(--dot-drift-x, 0), var(--dot-drift-y, 0), 0);
+  }
 }
 
 .public-home-shell {
   margin: 0 auto;
-  max-width: 1140px;
-  padding: 26px clamp(20px, 3.2vw, 34px) 42px;
+  max-width: var(--home-max);
+  padding: 38px clamp(22px, 4vw, 42px) 56px;
+  width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .public-home-stack {
   display: grid;
-  gap: 6px;
+  gap: 26px;
 }
 
 .home-flyer-carousel {
-  padding: 0 0 18px;
+  padding: 0 0 24px;
+  width: 100%;
+}
+
+.home-flyer-panel {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(229, 241, 253, 0.76) 62%, rgba(255, 255, 255, 0.9)),
+    var(--home-glass-strong);
+  overflow: hidden;
+  padding: clamp(14px, 1.6vw, 22px);
+  position: relative;
+}
+
+.home-flyer-panel::before {
+  background: linear-gradient(180deg, rgba(0, 112, 234, 0.2), rgba(0, 112, 234, 0));
+  content: "";
+  height: 100%;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 4px;
 }
 
 .home-flyer-stage {
   display: grid;
-  grid-template-columns: minmax(360px, 0.98fr) minmax(0, 1.02fr);
-  gap: 18px;
-  align-items: stretch;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: clamp(20px, 3vw, 36px);
+  align-items: center;
+  max-width: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .campaign-surface-shadow {
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   box-shadow: var(--home-shadow-soft);
   transition:
     box-shadow 320ms var(--motion),
@@ -75,25 +181,23 @@ body {
     border-color 320ms var(--motion);
 }
 
-.home-flyer-copy,
+.home-flyer-panel,
 .home-flyer-frame,
 .story-card,
 .home-about-copy,
 .telemetry-card,
 .content-empty-state,
 .campaign-footer {
-  border: 1px solid var(--home-line);
+  border: 1px solid rgba(186, 208, 232, 0.76);
 }
 
 .home-flyer-copy {
-  background:
-    linear-gradient(135deg, rgba(0, 112, 234, 0.08), rgba(255, 255, 255, 0.96) 60%),
-    var(--home-panel);
   display: grid;
   align-content: end;
   gap: 18px;
-  min-height: 520px;
-  padding: clamp(28px, 3.5vw, 40px);
+  min-height: clamp(460px, 44vw, 590px);
+  min-width: 0;
+  padding: clamp(18px, 2.4vw, 34px);
   position: relative;
 }
 
@@ -133,14 +237,14 @@ body {
 }
 
 .home-flyer-copy h1 {
-  font-size: clamp(54px, 6.6vw, 102px);
+  font-size: clamp(58px, 7.2vw, 116px);
   margin: 0;
   max-width: 7ch;
 }
 
 .home-flyer-copy p {
   color: var(--home-muted);
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.75;
   margin: 0;
   max-width: 38rem;
@@ -153,57 +257,116 @@ body {
 }
 
 .campaign-actions .button {
-  border-color: rgba(16, 35, 63, 0.08);
-  box-shadow: 0 10px 22px rgba(16, 35, 63, 0.06);
+  border-color: rgba(16, 35, 63, 0.16);
+  box-shadow: 0 12px 26px rgba(16, 35, 63, 0.1);
+  overflow: visible;
+  transition:
+    background-color 320ms var(--motion),
+    border-color 320ms var(--motion),
+    box-shadow 320ms var(--motion),
+    color 320ms var(--motion),
+    transform 320ms var(--motion);
 }
 
 .campaign-actions .button.primary,
 .public-top-nav .nav-actions .nav-cta {
-  box-shadow: 0 12px 28px rgba(0, 112, 234, 0.18);
+  box-shadow: 0 14px 32px rgba(0, 112, 234, 0.24);
 }
 
 .campaign-actions .button:hover,
 .public-top-nav .nav-actions .nav-cta:hover {
-  box-shadow: 0 16px 30px rgba(16, 35, 63, 0.1);
-  transform: translateY(-2px);
+  box-shadow: 0 18px 38px rgba(16, 35, 63, 0.16), 0 0 0 4px rgba(0, 112, 234, 0.08);
+  transform: translateY(-3px);
+}
+
+.campaign-actions .button.primary:hover {
+  background: #005ec7;
+  border-color: #005ec7;
+}
+
+.campaign-actions .button-mark {
+  background: rgba(255, 255, 255, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  color: inherit;
+  transition:
+    background-color 320ms var(--motion),
+    filter 320ms var(--motion),
+    transform 320ms var(--motion);
+}
+
+.campaign-actions .button:hover .button-mark,
+.public-top-nav .nav-actions button:hover {
+  filter: drop-shadow(0 6px 10px rgba(0, 112, 234, 0.18));
+}
+
+.campaign-actions .button:hover .button-mark {
+  transform: translate(2px, -1px);
 }
 
 .home-ghost-button {
-  background: transparent;
-  border-color: var(--home-line);
-  color: var(--home-ink);
+  background: var(--home-ink);
+  border-color: var(--home-ink);
+  box-shadow: 0 14px 32px rgba(16, 35, 63, 0.18);
+  color: var(--white);
+}
+
+.home-ghost-button:hover {
+  background: var(--home-accent);
+  border-color: var(--home-accent);
+  color: var(--white);
 }
 
 .home-ghost-button .button-mark {
-  background: rgba(0, 112, 234, 0.12);
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: var(--white);
+}
+
+.home-ghost-button:hover .button-mark {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: var(--white);
+}
+
+.home-flyer-media {
+  align-items: center;
+  display: grid;
+  justify-items: end;
+  min-width: 0;
 }
 
 .home-flyer-frame {
-  aspect-ratio: 10 / 7;
+  aspect-ratio: 1 / 1;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(16, 35, 63, 0.08)),
-    linear-gradient(135deg, rgba(0, 112, 234, 0.08), rgba(255, 255, 255, 0.5)),
-    var(--home-panel);
+    linear-gradient(145deg, rgba(0, 112, 234, 0.1), rgba(255, 255, 255, 0.62)),
+    rgba(255, 255, 255, 0.72);
+  box-shadow: 0 20px 44px rgba(16, 35, 63, 0.14);
+  isolation: isolate;
+  max-height: 610px;
+  max-width: 100%;
   overflow: hidden;
+  min-width: 0;
   position: relative;
+  width: min(100%, 610px);
 }
 
 .home-flyer-frame img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
 }
 
 .home-flyer-overlay {
   align-items: end;
-  background: linear-gradient(180deg, rgba(16, 35, 63, 0) 30%, rgba(16, 35, 63, 0.85));
+  background: linear-gradient(180deg, rgba(16, 35, 63, 0) 48%, rgba(16, 35, 63, 0.48));
   color: var(--white);
   display: grid;
   inset: 0;
   justify-items: start;
-  padding: 22px;
+  padding: clamp(18px, 2vw, 28px);
   position: absolute;
+  pointer-events: none;
 }
 
 .home-flyer-overlay span,
@@ -238,7 +401,8 @@ body {
 
 .home-carousel-controls button {
   border: 1px solid var(--home-line);
-  background: var(--home-panel);
+  background: var(--home-glass-strong);
+  box-shadow: 0 8px 18px rgba(16, 35, 63, 0.08);
   color: var(--home-ink);
   font-size: 12px;
   font-weight: 800;
@@ -246,6 +410,20 @@ body {
   min-height: 42px;
   padding: 0 16px;
   text-transform: uppercase;
+  transition:
+    background-color 220ms var(--motion),
+    border-color 220ms var(--motion),
+    box-shadow 220ms var(--motion),
+    color 220ms var(--motion),
+    transform 220ms var(--motion);
+}
+
+.home-carousel-controls button:hover {
+  background: var(--home-accent);
+  border-color: var(--home-accent);
+  box-shadow: 0 14px 26px rgba(0, 112, 234, 0.2);
+  color: var(--white);
+  transform: translateY(-1px);
 }
 
 .home-content-notice {
@@ -254,11 +432,11 @@ body {
 
 .home-stories,
 .home-about {
-  padding: 0 4px 28px;
+  padding: 4px 0 40px;
 }
 
 .home-section-heading {
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
 
 .home-section-heading h2 {
@@ -269,7 +447,7 @@ body {
 
 .home-section-heading p {
   margin: 8px 0 0;
-  max-width: 720px;
+  max-width: 760px;
   color: var(--home-muted);
   font-size: 15px;
   line-height: 1.75;
@@ -278,12 +456,12 @@ body {
 .story-strip {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 18px;
 }
 
 .story-card {
   text-align: left;
-  background: var(--home-panel);
+  background: var(--home-glass);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -361,7 +539,7 @@ body {
   display: grid;
   gap: 18px;
   align-content: start;
-  background: var(--home-panel);
+  background: var(--home-glass);
   min-height: 100%;
   padding: clamp(24px, 4vw, 40px);
 }
@@ -374,8 +552,8 @@ body {
 
 .home-about-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+  gap: 18px;
 }
 
 .home-about-banner {
@@ -402,8 +580,8 @@ body {
 
 .telemetry-card {
   background:
-    linear-gradient(160deg, rgba(0, 112, 234, 0.08), rgba(255, 255, 255, 0)),
-    var(--home-panel-alt);
+    linear-gradient(160deg, rgba(0, 112, 234, 0.14), rgba(255, 255, 255, 0.62)),
+    var(--home-glass);
   display: grid;
   gap: 24px;
   min-height: 100%;
@@ -484,13 +662,17 @@ body {
 }
 
 .content-empty-state {
-  background: var(--home-panel);
-  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(232, 243, 255, 0.62)),
+    var(--home-glass);
+  box-shadow: 0 12px 34px rgba(16, 35, 63, 0.06);
+  padding: 22px 24px;
 }
 
 .content-empty-state p {
   margin: 0;
   color: var(--home-muted);
+  font-size: 15px;
 }
 
 .website-content-grid {
@@ -557,6 +739,10 @@ body {
 }
 
 @media (max-width: 980px) {
+  .home-flyer-stage {
+    grid-template-columns: minmax(320px, 0.9fr) minmax(0, 1.1fr);
+  }
+
   .website-content-grid {
     grid-template-columns: 1fr;
   }
@@ -701,9 +887,9 @@ a {
 }
 
 .public-top-nav {
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.76);
   border-bottom: 1px solid rgba(186, 208, 232, 0.9);
-  box-shadow: none;
+  box-shadow: 0 10px 28px rgba(16, 35, 63, 0.06);
   position: sticky;
   top: 0;
   z-index: 30;
@@ -716,8 +902,9 @@ a {
 
 .public-top-nav .main-nav button,
 .public-top-nav .nav-actions button {
-  border: 1px solid transparent;
-  color: var(--home-muted);
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid rgba(186, 208, 232, 0.72);
+  color: var(--home-ink);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -729,23 +916,27 @@ a {
 .public-top-nav .main-nav button.active,
 .public-top-nav .main-nav button:hover,
 .public-top-nav .nav-actions button:hover {
-  border-color: var(--home-line);
-  color: var(--home-ink);
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(0, 112, 234, 0.34);
+  color: var(--home-accent);
 }
 
 .public-top-nav .nav-actions .nav-utility {
-  border-color: var(--home-line);
+  border-color: rgba(0, 112, 234, 0.26);
 }
 
 .public-top-nav .nav-actions .nav-cta {
-  background: var(--home-accent);
-  border-color: var(--home-accent);
+  background: var(--home-ink);
+  border-color: var(--home-ink);
+  box-shadow: 0 14px 32px rgba(16, 35, 63, 0.16);
   color: var(--white);
 }
 
 .public-top-nav .nav-actions .nav-cta:hover {
+  background: var(--home-accent);
+  border-color: var(--home-accent);
   color: var(--white);
-  filter: brightness(0.94);
+  filter: brightness(1);
 }
 
 .mobile-menu-button,
@@ -4095,6 +4286,8 @@ textarea {
   gap: 18px;
   margin-top: 48px;
   padding: 32px clamp(20px, 3.2vw, 34px) 22px;
+  position: relative;
+  z-index: 1;
 }
 
 .campaign-footer-grid {
@@ -4102,7 +4295,8 @@ textarea {
   gap: 22px;
   grid-template-columns: 1.4fr 1fr 1fr;
   margin: 0 auto;
-  max-width: 1140px;
+  max-width: var(--home-max);
+  padding: 0 clamp(22px, 4vw, 42px);
 }
 
 .campaign-footer.footer p,
@@ -4129,6 +4323,16 @@ textarea {
   letter-spacing: 0.16em;
   margin-bottom: 14px;
   text-transform: uppercase;
+}
+
+@keyframes bokeh-glow {
+  0%,
+  100% {
+    opacity: 0.06;
+  }
+  50% {
+    opacity: 0.18;
+  }
 }
 
 .lead-copy {
@@ -4233,6 +4437,11 @@ textarea {
   .hero-bg,
   .charge-button::before,
   .charge-button::after {
+    animation: none !important;
+  }
+
+  .home-bokeh-dot,
+  .home-bokeh-glow {
     animation: none !important;
   }
 
@@ -4518,6 +4727,12 @@ textarea {
 
   .public-home-shell {
     padding: 18px var(--mobile-gutter) 30px;
+  }
+
+  .home-flyer-carousel {
+    margin-left: 0;
+    transform: none;
+    width: 100%;
   }
 
   .home-flyer-stage,
