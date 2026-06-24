@@ -6,7 +6,7 @@
       copy: "Browse the public range, then unlock live wholesale inventory through an approved Irunsvan Africa reseller account.",
       backgroundImage: "/Flyer Templates/Flyer Template.jpg",
       primaryCta: "View Catalog",
-      primaryRoute: "catalog",
+      primaryRoute: "product-flyers",
       secondaryCta: "Apply as a Reseller",
       secondaryRoute: "apply",
       electricity: true,

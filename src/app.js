@@ -333,8 +333,8 @@ function resolveContentImageUrl(path) {
 function ctaMarkup(label, route, classes) {
   const safeLabel = escapeHtml(label);
   const safeRoute = String(route || "").trim();
-  if (safeRoute === "catalog") {
-    return `<a href="#catalog" class="${classes}">${safeLabel} <span class="button-mark" aria-hidden="true">&nearr;</span></a>`;
+  if (safeRoute === "catalog" || safeRoute === "products") {
+    return `<button class="${classes}" data-route="product-flyers">${safeLabel} <span class="button-mark" aria-hidden="true">&nearr;</span></button>`;
   }
   const appRoute = ROUTES.includes(safeRoute) ? safeRoute : "apply";
   return `<button class="${classes}" data-route="${escapeHtml(appRoute)}">${safeLabel} <span class="button-mark" aria-hidden="true">&rarr;</span></button>`;
@@ -885,6 +885,14 @@ async function fetchOptionalSupabase(table, query) {
   }
 }
 
+async function fetchOptionalSupabaseResult(table, query) {
+  try {
+    return { ok: true, rows: await fetchSupabase(table, query) };
+  } catch (error) {
+    return { ok: false, rows: [], error };
+  }
+}
+
 function remoteSiteContent(heroRows, themeRows, contentRows) {
   const hero = heroRows[0] || {};
   const theme = themeRows[0] || {};
@@ -1123,7 +1131,7 @@ async function loadCatalog() {
       fetchOptionalSupabase("reseller_directory", "select=id,company_name,country,phone,email,full_name&order=country.asc,company_name.asc&limit=200"),
       fetchOptionalSupabase("homepage_flyers", "select=id,title,image_path,sort_order,published,created_at&published=eq.true&order=sort_order.asc,created_at.desc&limit=20"),
       fetchOptionalSupabase("blog_posts", "select=id,title,slug,cover_image_path,summary,body,published,published_at,created_at&published=eq.true&order=published_at.desc,created_at.desc&limit=20"),
-      fetchOptionalSupabase("public_product_flyers", "select=id,title,slug,product_class,short_description,story,main_image_path,secondary_image_path,display_order,published,created_at,updated_at&published=eq.true&order=display_order.asc,created_at.desc&limit=100"),
+      fetchOptionalSupabaseResult("public_product_flyers", "select=id,title,slug,product_class,short_description,story,main_image_path,secondary_image_path,display_order,published,created_at,updated_at&published=eq.true&order=display_order.asc,created_at.desc&limit=100"),
     ]);
     const fallback = CatalogData.fallbackCatalog();
     const catalogRows =
@@ -1136,7 +1144,9 @@ async function loadCatalog() {
     state.resellerDirectory = Array.isArray(directoryRows) ? directoryRows : [];
     state.homepageFlyers = WebsiteContent.normalizeFlyers(flyerRows);
     state.blogPosts = WebsiteContent.normalizeStories(blogRows);
-    state.publicProductFlyers = WebsiteContent.normalizeProductFlyers(productFlyerRows);
+    state.publicProductFlyers = productFlyerRows.ok
+      ? WebsiteContent.normalizeProductFlyers(productFlyerRows.rows)
+      : WebsiteContent.normalizeProductFlyers(WebsiteContent.DEFAULT_PRODUCT_FLYERS);
     if (heroRows.length || themeRows.length || contentRows.length) {
       state.siteContent = remoteSiteContent(heroRows, themeRows, contentRows);
     }
@@ -1803,16 +1813,22 @@ function productFlyerCard(flyer) {
 function productFlyersPage() {
   const flyers = publicProductFlyerItems();
   return `
-    <main class="product-flyers-page">
-      <section class="product-flyer-intro">
-        <h1>Products</h1>
-        <p>Public product flyers from Irunsvan Africa. These pages are for display and product storytelling only.</p>
-      </section>
-      ${
-        flyers.length
-          ? `<section class="product-flyer-grid">${flyers.map(productFlyerCard).join("")}</section>`
-          : `<section class="content-empty-state"><p>No public product flyers are published yet.</p></section>`
-      }
+    <main class="public-home product-flyers-page">
+      ${homeBokehBackdrop()}
+      <div class="public-home-shell">
+        <div class="public-home-stack product-flyers-stack">
+          <section class="product-flyer-intro">
+            <span class="campaign-eyebrow">IRUNSVAN PRODUCTS</span>
+            <h1>Products</h1>
+            <p>Public product flyers from Irunsvan Africa. These pages are for display and product storytelling only.</p>
+          </section>
+          ${
+            flyers.length
+              ? `<section class="product-flyer-grid">${flyers.map(productFlyerCard).join("")}</section>`
+              : `<section class="content-empty-state"><p>No public product flyers are published yet.</p></section>`
+          }
+        </div>
+      </div>
       ${footer()}
     </main>
   `;
@@ -1822,8 +1838,11 @@ function productFlyerDetailPage() {
   const flyer = selectedProductFlyer();
   if (!flyer) {
     return `
-      <main class="product-flyers-page">
-        <section class="content-empty-state"><p>This product flyer is not published yet.</p></section>
+      <main class="public-home product-flyers-page">
+        ${homeBokehBackdrop()}
+        <div class="public-home-shell">
+          <section class="content-empty-state"><p>This product flyer is not published yet.</p></section>
+        </div>
         ${footer()}
       </main>
     `;
@@ -1831,28 +1850,33 @@ function productFlyerDetailPage() {
   const mainImage = resolveContentImageUrl(flyer.mainImagePath || "");
   const secondaryImage = resolveContentImageUrl(flyer.secondaryImagePath || "");
   return `
-    <main class="product-flyer-detail-page">
-      <button type="button" class="text-link product-flyer-back" data-route="product-flyers">Back to product flyers</button>
-      <article class="product-flyer-detail">
-        <div class="product-flyer-detail-media">
-          ${
-            mainImage
-              ? `<img src="${escapeHtml(mainImage)}" alt="${escapeHtml(flyer.title)}" loading="eager" />`
-              : `<div class="product-flyer-placeholder">${logo("blue")}</div>`
-          }
-          ${
-            secondaryImage
-              ? `<img src="${escapeHtml(secondaryImage)}" alt="${escapeHtml(`${flyer.title} detail`)}" loading="lazy" />`
-              : ""
-          }
+    <main class="public-home product-flyer-detail-page">
+      ${homeBokehBackdrop()}
+      <div class="public-home-shell">
+        <div class="public-home-stack product-flyers-stack">
+          <button type="button" class="text-link product-flyer-back" data-route="product-flyers">Back to product flyers</button>
+          <article class="product-flyer-detail campaign-surface-shadow">
+            <div class="product-flyer-detail-media">
+              ${
+                mainImage
+                  ? `<img src="${escapeHtml(mainImage)}" alt="${escapeHtml(flyer.title)}" loading="eager" />`
+                  : `<div class="product-flyer-placeholder">${logo("blue")}</div>`
+              }
+              ${
+                secondaryImage
+                  ? `<img src="${escapeHtml(secondaryImage)}" alt="${escapeHtml(`${flyer.title} detail`)}" loading="lazy" />`
+                  : ""
+              }
+            </div>
+            <div class="product-flyer-detail-copy">
+              <p>${escapeHtml(flyer.productClass)}</p>
+              <h1>${escapeHtml(flyer.title)}</h1>
+              ${flyer.shortDescription ? `<strong>${escapeHtml(flyer.shortDescription)}</strong>` : ""}
+              ${flyer.story ? `<div class="product-flyer-story">${escapeHtml(flyer.story).replaceAll("\n", "<br />")}</div>` : ""}
+            </div>
+          </article>
         </div>
-        <div class="product-flyer-detail-copy">
-          <p>${escapeHtml(flyer.productClass)}</p>
-          <h1>${escapeHtml(flyer.title)}</h1>
-          ${flyer.shortDescription ? `<strong>${escapeHtml(flyer.shortDescription)}</strong>` : ""}
-          ${flyer.story ? `<div class="product-flyer-story">${escapeHtml(flyer.story).replaceAll("\n", "<br />")}</div>` : ""}
-        </div>
-      </article>
+      </div>
       ${footer()}
     </main>
   `;

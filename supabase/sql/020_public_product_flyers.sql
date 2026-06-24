@@ -64,8 +64,8 @@ values
     'Running Shoe',
     'A lightweight public flyer example for testing the magazine-style product display.',
     'Built for clean movement and daily distance, this demo flyer shows how an Irunsvan running product can be presented as a visual story instead of a shopping card. Use it to test spacing, imagery, detail copy, and the delete flow before publishing real product content.',
-    '/product-images/SKUs/005/005-1.jpg',
-    '/product-images/SKUs/005/005-3.jpg',
+    '/public/product-images/SKUs/005/005-1.jpg',
+    '/public/product-images/SKUs/005/005-3.jpg',
     10,
     true
   ),
@@ -75,8 +75,8 @@ values
     'Running Shoe',
     'A second removable flyer for checking the listing grid and detail view.',
     'This demo product gives the public Products page more than one card, making it easier to review the flyer rhythm, image treatment, and detail-page layout. Delete it from Site Controls when the real public product flyers are ready.',
-    '/product-images/SKUs/026/026-1.jpg',
-    '/product-images/SKUs/026/026-4.jpg',
+    '/public/product-images/SKUs/026/026-1.jpg',
+    '/public/product-images/SKUs/026/026-4.jpg',
     20,
     true
   )

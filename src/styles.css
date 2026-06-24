@@ -539,12 +539,19 @@ body {
 .product-flyer-detail-page {
   background: var(--home-shell);
   min-height: 100vh;
-  padding: 34px clamp(22px, 5vw, 64px) 56px;
+  padding: 0;
+}
+
+.product-flyers-stack {
+  position: relative;
+  z-index: 1;
 }
 
 .product-flyer-intro {
-  margin: 0 auto 24px;
-  max-width: 1180px;
+  background: var(--home-glass);
+  border: 1px solid var(--home-line);
+  margin: 0;
+  padding: clamp(22px, 4vw, 42px);
 }
 
 .product-flyer-intro h1 {
@@ -569,13 +576,13 @@ body {
   display: grid;
   gap: 18px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 0 auto;
-  max-width: 1180px;
+  margin: 0;
 }
 
 .product-flyer-card {
-  background: var(--home-panel);
+  background: var(--home-glass-strong);
   border: 1px solid var(--home-line);
+  box-shadow: 0 14px 34px rgba(16, 35, 63, 0.08);
   display: grid;
   grid-template-columns: minmax(0, 0.92fr) minmax(0, 1fr);
   min-height: 360px;
@@ -583,7 +590,9 @@ body {
 }
 
 .product-flyer-image {
-  background: var(--home-panel-alt);
+  background:
+    linear-gradient(145deg, rgba(0, 112, 234, 0.08), rgba(255, 255, 255, 0.62)),
+    var(--home-panel-alt);
   min-height: 100%;
 }
 
@@ -591,7 +600,7 @@ body {
 .product-flyer-detail-media img {
   display: block;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   width: 100%;
 }
 
@@ -657,17 +666,15 @@ body {
 }
 
 .product-flyer-back {
-  margin: 0 auto 18px;
-  max-width: 1180px;
+  justify-self: start;
+  margin: 0;
 }
 
 .product-flyer-detail {
-  background: var(--home-panel);
+  background: var(--home-glass-strong);
   border: 1px solid var(--home-line);
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
-  margin: 0 auto;
-  max-width: 1180px;
   min-height: 620px;
 }
 

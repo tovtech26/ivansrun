@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const {
   DEFAULT_HOME_FLYERS,
+  DEFAULT_PRODUCT_FLYERS,
   DEFAULT_ABOUT_CONTENT,
   buildStorySlug,
   buildProductFlyerSlug,
@@ -30,6 +31,11 @@ assert.deepEqual(
 );
 
 assert.equal(normalizeFlyers([])[0].imagePath, DEFAULT_HOME_FLYERS[0].imagePath);
+assert.deepEqual(
+  normalizeProductFlyers(DEFAULT_PRODUCT_FLYERS).map((item) => item.slug),
+  ["demo-irunsvan-005-runner", "demo-irunsvan-026-runner"],
+);
+assert.equal(normalizeProductFlyers(DEFAULT_PRODUCT_FLYERS)[0].mainImagePath.startsWith("/public/product-images/"), true);
 
 assert.deepEqual(
   normalizeStories([

@@ -60,7 +60,7 @@ assert.equal(appSource.includes("publicProductFlyers:"), true, "App state must t
 assert.equal(appSource.includes("selectedProductFlyerSlug:"), true, "App state must track the selected public product flyer slug.");
 assert.equal(appSource.includes('fetchOptionalSupabase("homepage_flyers"'), true, "Public bootstrap must fetch published homepage flyers.");
 assert.equal(appSource.includes('fetchOptionalSupabase("blog_posts"'), true, "Public bootstrap must fetch published blog posts.");
-assert.equal(appSource.includes('fetchOptionalSupabase("public_product_flyers"'), true, "Public bootstrap must fetch published public product flyers.");
+assert.equal(appSource.includes('fetchOptionalSupabaseResult("public_product_flyers"'), true, "Public bootstrap must fetch published public product flyers.");
 assert.equal(appSource.includes('fetchAuthedSupabase("homepage_flyers"'), true, "Admin bootstrap must fetch all homepage flyers.");
 assert.equal(appSource.includes('fetchAuthedSupabase("blog_posts"'), true, "Admin bootstrap must fetch all blog posts.");
 assert.equal(appSource.includes('fetchAuthedSupabase("public_product_flyers"'), true, "Admin bootstrap must fetch all public product flyers.");
@@ -109,11 +109,15 @@ assert.equal(appSource.includes("function storyDetailPage("), true, "Story detai
 assert.equal(appSource.includes('"store": publicHomePage'), true, "Store route must render the public content home.");
 assert.equal(appSource.includes('"story": storyDetailPage'), true, "Story route must render story details.");
 assert.equal(appSource.includes('["Products", "product-flyers", ["product-flyers", "product-flyer"]]'), true, "Public navigation must point Products to the public flyer pages, not reseller catalog products.");
+assert.equal(appSource.includes('href="#catalog"'), false, "Legacy catalog CTAs must not point to the removed in-page catalog anchor.");
+assert.equal(appSource.includes('safeRoute === "catalog" || safeRoute === "products"'), true, "Legacy catalog/product CTAs must route to the public product flyer page.");
 assert.equal(appSource.includes("<h2>Field Records</h2>"), true, "Homepage stories section should use the new editorial heading.");
 assert.equal(appSource.includes('class="home-flyer-stage"'), true, "Homepage flyer hero should render a dedicated campaign stage.");
 assert.equal(appSource.includes('class="home-flyer-panel campaign-surface-shadow"'), true, "Homepage flyer carousel should use one composed campaign panel instead of detached hero cards.");
 assert.equal(appSource.includes('class="home-bokeh-background"'), true, "Homepage should render a bokeh background layer behind the campaign content.");
 assert.equal(appSource.includes('class="public-home-shell"'), true, "Homepage should render inside a tighter editorial shell.");
+assert.equal(appSource.includes('class="public-home product-flyers-page"'), true, "Public product flyers page must use the same homepage shell styling.");
+assert.equal(appSource.includes("WebsiteContent.DEFAULT_PRODUCT_FLYERS"), true, "Public product flyers must have demo fallback rows when the remote flyer table is not available.");
 assert.equal(appSource.includes('class="campaign-eyebrow"'), true, "Homepage flyer hero should render campaign metadata labels.");
 assert.equal(appSource.includes("this.src='Flyer Templates/Flyer Template.jpg'"), true, "Homepage flyer image should fall back to the local flyer if uploaded media fails.");
 assert.equal(appSource.includes("ENGINEERED FOR THE CONTINENT"), true, "Homepage about section should use the manifesto heading fallback.");

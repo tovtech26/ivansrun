@@ -9,6 +9,34 @@
       published: true,
     },
   ];
+  const DEFAULT_PRODUCT_FLYERS = [
+    {
+      id: "demo-public-flyer-005",
+      title: "Demo IRUNSVAN 005 Runner",
+      slug: "demo-irunsvan-005-runner",
+      productClass: "Running Shoe",
+      shortDescription: "A lightweight public flyer example for testing the magazine-style product display.",
+      story:
+        "Built for clean movement and daily distance, this demo flyer shows how an Irunsvan running product can be presented as a visual story instead of a shopping card. Use it to test spacing, imagery, detail copy, and the public Products page before publishing real product content.",
+      mainImagePath: "/public/product-images/SKUs/005/005-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/005/005-3.jpg",
+      displayOrder: 10,
+      published: true,
+    },
+    {
+      id: "demo-public-flyer-026",
+      title: "Demo IRUNSVAN 026 Runner",
+      slug: "demo-irunsvan-026-runner",
+      productClass: "Running Shoe",
+      shortDescription: "A second removable flyer for checking the listing grid and detail view.",
+      story:
+        "This demo product gives the public Products page more than one card, making it easier to review the flyer rhythm, image treatment, and detail-page layout. Replace it with the real public product flyers once the Supabase table is live.",
+      mainImagePath: "/public/product-images/SKUs/026/026-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/026/026-4.jpg",
+      displayOrder: 20,
+      published: true,
+    },
+  ];
   const DEFAULT_ABOUT_CONTENT = {
     heading: "About Irunsvan Africa",
     body: "Irunsvan Africa supplies performance footwear through approved reseller channels across Africa.",
@@ -162,6 +190,7 @@
   const api = {
     CONTENT_IMAGE_BUCKET,
     DEFAULT_HOME_FLYERS,
+    DEFAULT_PRODUCT_FLYERS,
     DEFAULT_ABOUT_CONTENT,
     buildStorySlug,
     buildProductFlyerSlug,
