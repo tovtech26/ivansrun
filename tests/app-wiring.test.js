@@ -10,6 +10,7 @@ const authSource = readFileSync(join(__dirname, "..", "src", "auth.js"), "utf8")
 const supabaseClientSource = readFileSync(join(__dirname, "..", "src", "supabase-client.js"), "utf8");
 const createTestAdminsSource = readFileSync(join(__dirname, "..", "scripts", "create-test-admins.js"), "utf8");
 const resellerProductCardSource = appSource.match(/function resellerProductCard\([\s\S]*?\n}\n\nfunction resellerColourGroups/)?.[0] || "";
+const productFlyerPageSource = appSource.match(/function productFlyersPage\([\s\S]*?\n}\n\nfunction productFlyerDetailPage/)?.[0] || "";
 
 assert.equal(appSource.includes("<button>View all</button>"), false, "View all buttons must navigate or trigger an action.");
 assert.equal(appSource.includes('<button class="button mini">Approve</button>'), false, "Approve buttons must use real approval actions.");
@@ -55,11 +56,17 @@ assert.equal(appSource.includes("const WebsiteContent = window.IrunsvanWebsiteCo
 assert.equal(appSource.includes("homepageFlyers:"), true, "App state must track homepage flyers.");
 assert.equal(appSource.includes("blogPosts:"), true, "App state must track blog posts.");
 assert.equal(appSource.includes("selectedStorySlug:"), true, "App state must track selected story slug.");
+assert.equal(appSource.includes("publicProductFlyers:"), true, "App state must track public product flyers separately from reseller products.");
+assert.equal(appSource.includes("selectedProductFlyerSlug:"), true, "App state must track the selected public product flyer slug.");
 assert.equal(appSource.includes('fetchOptionalSupabase("homepage_flyers"'), true, "Public bootstrap must fetch published homepage flyers.");
 assert.equal(appSource.includes('fetchOptionalSupabase("blog_posts"'), true, "Public bootstrap must fetch published blog posts.");
+assert.equal(appSource.includes('fetchOptionalSupabase("public_product_flyers"'), true, "Public bootstrap must fetch published public product flyers.");
 assert.equal(appSource.includes('fetchAuthedSupabase("homepage_flyers"'), true, "Admin bootstrap must fetch all homepage flyers.");
 assert.equal(appSource.includes('fetchAuthedSupabase("blog_posts"'), true, "Admin bootstrap must fetch all blog posts.");
+assert.equal(appSource.includes('fetchAuthedSupabase("public_product_flyers"'), true, "Admin bootstrap must fetch all public product flyers.");
 assert.equal(appSource.includes('"story"'), true, "Story route must be registered.");
+assert.equal(appSource.includes('"product-flyers"'), true, "Public product flyer listing route must be registered.");
+assert.equal(appSource.includes('"product-flyer"'), true, "Public product flyer detail route must be registered.");
 assert.equal(appSource.includes("loadCatalog();\ninitAuth();"), false, "Startup must not fire catalog and auth without explicit orchestration.");
 assert.equal(appSource.includes("await loadCatalog();\n  await initAuth();"), false, "OAuth callback routing must not wait for the public catalog before auth restore.");
 assert.equal(appSource.includes("const catalogLoad = loadCatalog();"), true, "Startup must begin catalog loading without blocking auth restore.");
@@ -70,7 +77,11 @@ assert.equal(appSource.includes('const desktopItems = portalMode === "public" ? 
 assert.equal(appSource.includes("const resellerNavItems ="), true, "Reseller workspace should use a smaller dedicated top navigation.");
 assert.equal(appSource.includes('if (state.auth.isPending) {'), true, "Pending users need a distinct workspace menu.");
 assert.equal(appSource.includes('const url = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, historyState)}`;'), true, "Route writes must clear stale search params when changing pages.");
-assert.equal(appSource.includes('const cleanUrl = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, { productId: state.selectedProductId, storySlug: state.selectedStorySlug })}`;'), true, "Route sync must clear stale search params when restoring hashes.");
+assert.equal(appSource.includes("const cleanUrl = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, {"), true, "Route sync must clear stale search params when restoring hashes.");
+assert.equal(appSource.includes("orderId: state.selectedOrderId,"), true, "Route sync must preserve order IDs in the URL.");
+assert.equal(appSource.includes('"order"'), true, "Order route must be registered.");
+assert.equal(appSource.includes("selectedOrderId:"), true, "App state must track the selected order ID.");
+assert.equal(appSource.includes('orderId: button.getAttribute("data-order-id")'), true, "Route buttons must pass order IDs.");
 assert.equal(appSource.includes("const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });"), true, "Startup must restore real Supabase sessions before protected data loading.");
 assert.equal(supabaseClientSource.includes("if (!session?.access_token) return { session: null, user: null, profile: null };"), true, "Auth restore must not create protected access without a real Supabase session.");
 assert.equal(appSource.includes("Sign in as a test reseller"), false, "Reseller portal must not mention test-session login paths.");
@@ -86,6 +97,10 @@ assert.equal(appSource.includes("response.clone().text()"), true, "Frontend moni
 assert.equal(appSource.includes("Promise.allSettled(tasks.map"), true, "Protected data loading must preserve successful feeds when one protected request fails.");
 assert.equal(appSource.includes("Some protected data could not load:"), true, "Partial protected data failures must be visible without hiding loaded inventory.");
 assert.equal(appSource.includes('"requests"'), true, "Admin routes must include a dedicated Requests page.");
+assert.equal(appSource.includes('"requests-review"'), true, "Admin order workspace must expose a review page.");
+assert.equal(appSource.includes('"requests-payment"'), true, "Admin order workspace must expose a payment page.");
+assert.equal(appSource.includes('"requests-supplier"'), true, "Admin order workspace must expose a supplier page.");
+assert.equal(appSource.includes('"requests-completed"'), true, "Admin order workspace must expose a completed page.");
 assert.equal(appSource.includes('"applications"'), true, "Admin routes must include a dedicated Applications page.");
 assert.equal(appSource.includes("function publicHomePage("), true, "Public home must have a dedicated content page renderer.");
 assert.equal(appSource.includes("function flyerCarousel("), true, "Home must render a lightweight flyer carousel.");
@@ -93,7 +108,7 @@ assert.equal(appSource.includes("function storyCarousel("), true, "Home must ren
 assert.equal(appSource.includes("function storyDetailPage("), true, "Story detail route must render a story page.");
 assert.equal(appSource.includes('"store": publicHomePage'), true, "Store route must render the public content home.");
 assert.equal(appSource.includes('"story": storyDetailPage'), true, "Story route must render story details.");
-assert.equal(appSource.includes('["Products", "store", ["store", "product", "story"]]'), true, "Public navigation should point the home route to the products catalog label.");
+assert.equal(appSource.includes('["Products", "product-flyers", ["product-flyers", "product-flyer"]]'), true, "Public navigation must point Products to the public flyer pages, not reseller catalog products.");
 assert.equal(appSource.includes("<h2>Field Records</h2>"), true, "Homepage stories section should use the new editorial heading.");
 assert.equal(appSource.includes('class="home-flyer-stage"'), true, "Homepage flyer hero should render a dedicated campaign stage.");
 assert.equal(appSource.includes('class="home-flyer-panel campaign-surface-shadow"'), true, "Homepage flyer carousel should use one composed campaign panel instead of detached hero cards.");
@@ -122,8 +137,10 @@ assert.equal(styleSource.includes(".story-card-tag"), true, "Styles should defin
 assert.equal(appSource.includes('class="catalog-section" id="catalog"'), false, "Public home must no longer render the catalogue section.");
 assert.equal(appSource.includes("cart-like"), false, "Public home copy must not use shopping/cart language.");
 assert.equal(appSource.includes("function adminRequests()"), true, "Admin request review must have its own focused view.");
+assert.equal(appSource.includes("function adminOrderWorkspacePage("), true, "Admin orders should share one focused workspace renderer.");
+assert.equal(appSource.includes("function workspaceSubnav("), true, "Order workspaces must render a local sub-navigation.");
 assert.equal(appSource.includes("function adminApplications()"), true, "Reseller applications must have their own focused admin view.");
-assert.equal(appSource.includes('["Requests", "requests", ["requests"]]'), true, "Admin navigation must expose Requests as a first-level item.");
+assert.equal(appSource.includes('["Requests", "requests", ["requests", "requests-review", "requests-payment", "requests-supplier", "requests-completed"]]'), true, "Admin navigation must expose Requests as a first-level item.");
 assert.equal(appSource.includes('["Applications", "applications", ["applications"]]'), true, "Admin navigation must expose Applications as a first-level item.");
 assert.equal(appSource.includes("Orders & Applications"), false, "Admin navigation must not combine requests and applications into one ambiguous section.");
 assert.equal(appSource.includes('data-route="admin" class="admin-return button mini"'), true, "Logged-in admins viewing the public site must get a persistent Back to Admin control.");
@@ -139,6 +156,13 @@ assert.equal(appSource.includes("async function saveHomepageFlyer("), true, "Fly
 assert.equal(appSource.includes("async function saveBlogPost("), true, "Story saves must have a dedicated handler.");
 assert.equal(appSource.includes("async function saveAboutContent("), true, "About saves must have a dedicated handler.");
 assert.equal(appSource.includes("async function uploadContentImage("), true, "Website content images must upload through a dedicated storage helper.");
+assert.equal(appSource.includes('data-form="public-product-flyer"'), true, "Site controls must expose a public product flyer form.");
+assert.equal(appSource.includes("async function savePublicProductFlyer("), true, "Public product flyer form must save through a dedicated handler.");
+assert.equal(appSource.includes("function productFlyersPage("), true, "Public product flyer listing page must exist.");
+assert.equal(appSource.includes("function productFlyerDetailPage("), true, "Public product flyer detail page must exist.");
+assert.equal(appSource.includes('data-route="product-flyer"'), true, "Public product flyer cards must route to public flyer detail pages.");
+assert.equal(styleSource.includes(".product-flyer-grid"), true, "Public product flyer listing must have dedicated styling.");
+assert.equal(productFlyerPageSource.includes("base_price"), false, "Public flyer pages must not expose reseller pricing.");
 assert.equal(appSource.includes("Website Content"), true, "Admin page title should reflect content management.");
 assert.equal(appSource.includes('data-form="admin-invite"'), true, "Team page must let admins create private invite links.");
 assert.equal(appSource.includes('data-action="copy-admin-invite"'), true, "Invite creation must expose a copy action for the generated link.");
@@ -173,7 +197,7 @@ assert.equal(appSource.includes("builder-colour-order-list"), true, "Reseller pr
 assert.equal(appSource.includes("builder-size-row"), true, "Reseller product ordering must use form-style size quantity rows.");
 assert.equal(appSource.includes("setRoute(\"request-confirmation\")"), true, "Order submission must navigate to the confirmation page.");
 assert.equal(appSource.includes("loadProtectedDataInBackground();"), true, "Order submission must not block confirmation routing on protected data refresh.");
-assert.equal(appSource.includes("Approve and deduct stock"), true, "Admin approval action must make the stock change explicit.");
+assert.equal(appSource.includes("adminOrderActionButtons(record)"), true, "Admin request cards must render workflow-driven action buttons.");
 assert.equal(appSource.includes('<p class="mono">SKU:'), false, "Reseller order summary must not expose backend SKU labels.");
 assert.equal(appSource.includes("Available Options"), false, "Reseller metrics must use buyer-friendly language instead of backend option labels.");
 assert.equal(appSource.includes(".inventory-panel, .order-sidebar"), false, "Functional reseller panels must not be hidden behind reveal observer opacity.");
@@ -199,7 +223,15 @@ assert.equal(appSource.includes("source: \"manual_stock_reset\""), true, "Stock 
 assert.equal(appSource.includes("async function depleteSubmittedOrderStock("), false, "Order submission must not deplete stock immediately.");
 assert.equal(appSource.includes("source: \"order_submitted\""), false, "Submitted orders must not change inventory immediately.");
 assert.equal(appSource.includes("AdminOrders.buildApprovalInventoryAdjustments"), true, "Admin approval must allocate stock from the actual request items.");
-assert.equal(appSource.includes("source: \"order_approved\""), true, "Approved orders must mark stock rows as order-approved adjustments.");
+assert.equal(appSource.includes("source: \"order_reserved\""), true, "Supply approval must reserve stock against inventory rows.");
+assert.equal(appSource.includes("\"current-orders\": currentOrdersPage"), true, "Reseller route map must expose a dedicated current orders page.");
+assert.equal(appSource.includes("\"expected-orders\": expectedOrdersPage"), true, "Reseller route map must expose a dedicated expected orders page.");
+assert.equal(appSource.includes("fulfillment: fulfillmentStatusPage"), true, "Reseller route map must expose a fulfillment status page.");
+assert.equal(appSource.includes("order: orderDetailPage"), true, "Route map must expose a shared order detail page.");
+assert.equal(appSource.includes("function orderDetailPage()"), true, "Order detail page must exist.");
+assert.equal(appSource.includes('data-action="download-order-xlsx"'), true, "Order detail must expose supplier XLSX export.");
+assert.equal(appSource.includes('data-action="download-order-csv"'), true, "Order detail must expose supplier CSV export.");
+assert.equal(appSource.includes('"select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100"'), true, "Order request fetch must stay backward-compatible until the migration is applied.");
 assert.equal(appSource.includes("Stock updates only after approval."), true, "Reseller messaging must match approval-based stock deduction.");
 assert.equal(appSource.includes("Price pending"), true, "Reseller shop must show pending price instead of a false zero price.");
 assert.equal(appSource.includes('<div><button disabled>Prev</button><button class="active">1</button><button>2</button><button>3</button><button>Next</button></div>'), false, "Catalog pager must not be static fake controls.");
@@ -229,6 +261,7 @@ assert.equal(indexSource.includes(`${oldBrandSlug}-bulk-order-v1`), false, "Inde
 assert.equal(indexSource.includes(`${oldBrandSlug}-auth-stock-v2`), false, "Index must not keep the stale auth stock cache key after bulk-order UI fixes.");
 assert.equal(indexSource.includes(`${oldBrandSlug}-ops-repair-v1`), false, "Index must not keep the stale operations cache key after auth and stock visibility fixes.");
 assert.equal(indexSource.includes("operations-products.js"), true, "Index must load the operations product view-model helper before app.js.");
+assert.equal(indexSource.includes("order-export.js"), true, "Index must load the order export helper before app.js.");
 assert.equal(indexSource.includes("xlsx.full.min.js"), false, "XLSX import library must be lazy-loaded only when admin imports need it.");
 assert.equal(indexSource.includes("jszip.min.js"), false, "JSZip import library must be lazy-loaded only when admin imports need it.");
 assert.equal(appSource.includes("async function ensureImportLibraries("), true, "Admin imports must load spreadsheet/archive libraries on demand.");

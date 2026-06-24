@@ -3,17 +3,22 @@ const {
   DEFAULT_HOME_FLYERS,
   DEFAULT_ABOUT_CONTENT,
   buildStorySlug,
+  buildProductFlyerSlug,
   normalizeFlyers,
   normalizeStories,
+  normalizeProductFlyers,
   buildContentImageRecord,
   buildFlyerPayload,
   buildStoryPayload,
+  buildProductFlyerPayload,
 } = require("../src/website-content.js");
 
 assert.equal(buildStorySlug("Summer Drop: Botswana Launch!"), "summer-drop-botswana-launch");
 assert.equal(buildStorySlug("Summer 2.0"), "summer-2-0");
 assert.equal(buildStorySlug("drop-v1.2"), "drop-v1-2");
 assert.equal(buildStorySlug(""), "story");
+assert.equal(buildProductFlyerSlug("IRUNSVAN 005 Running Shoe"), "irunsvan-005-running-shoe");
+assert.equal(buildProductFlyerSlug(""), "product-flyer");
 
 assert.deepEqual(
   normalizeFlyers([
@@ -37,6 +42,44 @@ assert.deepEqual(
 assert.equal(normalizeStories([{ id: "bad", title: "", slug: "", body: "" }]).length, 0);
 assert.equal(normalizeStories([{ id: "draft", title: "Draft", slug: "draft", body: "Draft", published: false }], { includeUnpublished: true }).length, 1);
 assert.equal(normalizeStories([{ id: "draft", title: "Draft", slug: "draft", body: "Draft", published: false }]).length, 0);
+
+assert.deepEqual(
+  normalizeProductFlyers([
+    {
+      id: "2",
+      title: "Second",
+      slug: "second",
+      product_class: "Running",
+      short_description: "Second flyer",
+      story: "Story",
+      main_image_path: "content/public-products/second.jpg",
+      secondary_image_path: "content/public-products/second-detail.jpg",
+      display_order: 2,
+      published: true,
+    },
+    {
+      id: "1",
+      title: "First",
+      slug: "first",
+      product_class: "Running",
+      short_description: "First flyer",
+      story: "Story",
+      main_image_path: "content/public-products/first.jpg",
+      display_order: 1,
+      published: true,
+    },
+    {
+      id: "draft",
+      title: "Draft",
+      slug: "draft",
+      product_class: "Running",
+      story: "Draft",
+      published: false,
+    },
+  ]).map((item) => item.slug),
+  ["first", "second"],
+);
+assert.equal(normalizeProductFlyers([{ id: "draft", title: "Draft", slug: "draft", product_class: "Running", story: "Draft", published: false }], { includeUnpublished: true }).length, 1);
 
 const file = { name: "My Flyer.JPG", type: "image/jpeg" };
 assert.deepEqual(buildContentImageRecord({ folder: "flyers", file, uniquePrefix: "20260619" }), {
@@ -90,6 +133,35 @@ const unpublishedStoryPayload = buildStoryPayload(
   "admin-1",
 );
 assert.equal(unpublishedStoryPayload.published_at, null);
+
+assert.deepEqual(
+  buildProductFlyerPayload(
+    {
+      title: "IRUNSVAN 005 Running Shoe",
+      productClass: "Running",
+      shortDescription: "A public flyer description.",
+      story: "Magazine style product story.",
+      mainImagePath: "content/public-products/005-main.jpg",
+      secondaryImagePath: "content/public-products/005-side.jpg",
+      displayOrder: "7",
+      published: true,
+    },
+    "admin-1",
+  ),
+  {
+    title: "IRUNSVAN 005 Running Shoe",
+    slug: "irunsvan-005-running-shoe",
+    product_class: "Running",
+    short_description: "A public flyer description.",
+    story: "Magazine style product story.",
+    main_image_path: "content/public-products/005-main.jpg",
+    secondary_image_path: "content/public-products/005-side.jpg",
+    display_order: 7,
+    published: true,
+    created_by: "admin-1",
+    updated_by: "admin-1",
+  },
+);
 
 assert.equal(DEFAULT_ABOUT_CONTENT.heading, "About Irunsvan Africa");
 

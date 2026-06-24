@@ -1,5 +1,86 @@
 (function attachAdminOrders(root) {
-  const VALID_ORDER_STATUSES = new Set(["submitted", "approved", "rejected", "fulfilled", "draft"]);
+  const ORDER_STATUS_META = {
+    submitted: {
+      label: "Submitted",
+      bucket: "new",
+      adminActionLabel: "Review request",
+      clientLabel: "Waiting for review",
+    },
+    approved: {
+      label: "Awaiting Payment",
+      bucket: "awaitingPayment",
+      adminActionLabel: "Approved to supply",
+      clientLabel: "Approved to supply",
+    },
+    awaiting_payment: {
+      label: "Awaiting Payment",
+      bucket: "awaitingPayment",
+      adminActionLabel: "Approved to supply",
+      clientLabel: "Approved, awaiting payment",
+    },
+    paid: {
+      label: "Paid",
+      bucket: "active",
+      adminActionLabel: "Ready for supplier",
+      clientLabel: "Payment confirmed",
+    },
+    submitted_to_supplier: {
+      label: "Submitted to Supplier",
+      bucket: "active",
+      adminActionLabel: "Sent to supplier",
+      clientLabel: "Supplier order placed",
+    },
+    processing: {
+      label: "Processing",
+      bucket: "active",
+      adminActionLabel: "Processing",
+      clientLabel: "Being prepared",
+    },
+    in_fulfillment: {
+      label: "Processing",
+      bucket: "active",
+      adminActionLabel: "Processing",
+      clientLabel: "Being prepared",
+    },
+    shipped: {
+      label: "Shipped",
+      bucket: "shipped",
+      adminActionLabel: "Shipped",
+      clientLabel: "Shipped",
+    },
+    fulfilled: {
+      label: "Fulfilled",
+      bucket: "fulfilled",
+      adminActionLabel: "Completed",
+      clientLabel: "Completed",
+    },
+    rejected: {
+      label: "Rejected",
+      bucket: "closed",
+      adminActionLabel: "Cannot supply",
+      clientLabel: "Cannot supply",
+    },
+    cancelled: {
+      label: "Cancelled",
+      bucket: "closed",
+      adminActionLabel: "Cancelled",
+      clientLabel: "Cancelled",
+    },
+    draft: {
+      label: "Draft",
+      bucket: "expected",
+      adminActionLabel: "Draft",
+      clientLabel: "Draft",
+    },
+  };
+  const VALID_ORDER_STATUSES = new Set(Object.keys(ORDER_STATUS_META));
+
+  function normalizeOrderStatus(status) {
+    if (status === "approved") return "awaiting_payment";
+    if (status === "in_fulfillment") return "processing";
+    if (ORDER_STATUS_META[status]) return status;
+    return "submitted";
+  }
 
   function requestCode(id) {
     const compact = String(id || "")
@@ -19,13 +100,28 @@
 
     return requests.map((request) => {
       const requestItems = itemsByRequestId.get(request.id) || [];
+      const normalizedStatus = normalizeOrderStatus(request.status);
       return {
         id: request.id,
         code: requestCode(request.id),
         status: request.status,
+        normalizedStatus,
+        statusMeta: ORDER_STATUS_META[normalizedStatus] || ORDER_STATUS_META.submitted,
         notes: request.notes ?? null,
         adminNotes: request.admin_notes ?? null,
         createdAt: request.created_at,
+        updatedAt: request.updated_at ?? null,
+        approvedAt: request.approved_at ?? null,
+        paidAt: request.paid_at ?? null,
+        supplierSubmittedAt: request.supplier_submitted_at ?? null,
+        processingAt: request.processing_at ?? null,
+        shippedAt: request.shipped_at ?? null,
+        fulfilledAt: request.fulfilled_at ?? null,
+        expectedFulfillmentDate: request.expected_fulfillment_date ?? null,
+        invoiceNumber: request.invoice_number ?? null,
+        paymentReference: request.payment_reference ?? null,
+        paymentNote: request.payment_note ?? null,
+        supplierExportedAt: request.supplier_exported_at ?? null,
         totalItems: requestItems.length,
         totalUnits: requestItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
         subtotal: requestItems.reduce((sum, item) => sum + Number(item.quantity || 0) * Number(item.base_price || 0), 0),
@@ -34,18 +130,96 @@
   }
 
   function countRequestsByStatus(records = [], statuses = []) {
-    const allowed = new Set(statuses);
-    return records.filter((record) => allowed.has(record.status)).length;
+    const allowed = new Set(statuses.map((status) => normalizeOrderStatus(status)));
+    return records.filter((record) => allowed.has(normalizeOrderStatus(record.normalizedStatus || record.status))).length;
   }
 
-  function buildOrderStatusPatch(status, adminNotes = "") {
+  function buildOrderStatusPatch(status, adminNotes = "", currentRequest = {}) {
     if (!VALID_ORDER_STATUSES.has(status)) {
       throw new Error("Invalid order status");
     }
-    return {
+    const timestamp = new Date().toISOString();
+    const patch = {
       status,
       admin_notes: String(adminNotes || "").trim() || null,
     };
+    if (status === "awaiting_payment") {
+      patch.approved_at = currentRequest.approved_at || timestamp;
+    }
+    if (status === "paid") {
+      patch.approved_at = currentRequest.approved_at || timestamp;
+      patch.paid_at = currentRequest.paid_at || timestamp;
+    }
+    if (status === "submitted_to_supplier") {
+      patch.approved_at = currentRequest.approved_at || timestamp;
+      patch.paid_at = currentRequest.paid_at || timestamp;
+      patch.supplier_submitted_at = currentRequest.supplier_submitted_at || timestamp;
+    }
+    if (status === "processing" || status === "in_fulfillment") {
+      patch.approved_at = currentRequest.approved_at || timestamp;
+      patch.paid_at = currentRequest.paid_at || timestamp;
+      patch.supplier_submitted_at = currentRequest.supplier_submitted_at || timestamp;
+    }
+    if (status === "shipped") {
+      patch.approved_at = currentRequest.approved_at || timestamp;
+      patch.paid_at = currentRequest.paid_at || timestamp;
+      patch.supplier_submitted_at = currentRequest.supplier_submitted_at || timestamp;
+    }
+    if (status === "fulfilled") {
+      patch.approved_at = currentRequest.approved_at || timestamp;
+      patch.paid_at = currentRequest.paid_at || timestamp;
+      patch.supplier_submitted_at = currentRequest.supplier_submitted_at || timestamp;
+      patch.fulfilled_at = currentRequest.fulfilled_at || timestamp;
+    }
+    return patch;
+  }
+
+  function bucketForStatus(status) {
+    return (ORDER_STATUS_META[normalizeOrderStatus(status)] || ORDER_STATUS_META.submitted).bucket;
+  }
+
+  function buildClientOrderBuckets(records = []) {
+    return records.reduce(
+      (groups, record) => {
+        const bucket = bucketForStatus(record.normalizedStatus || record.status);
+        if (bucket === "new") groups.new.push(record);
+        else if (bucket === "awaitingPayment") groups.awaitingPayment.push(record);
+        else if (bucket === "active") groups.active.push(record);
+        else if (bucket === "shipped") groups.shipped.push(record);
+        else if (bucket === "fulfilled") groups.fulfilled.push(record);
+        else groups.closed.push(record);
+        return groups;
+      },
+      { new: [], awaitingPayment: [], active: [], shipped: [], fulfilled: [], closed: [] },
+    );
+  }
+
+  function nextAdminActions(status) {
+    switch (normalizeOrderStatus(status)) {
+      case "submitted":
+        return [
+          { status: "awaiting_payment", label: "Agree to Supply" },
+          { status: "rejected", label: "Cannot Supply", tone: "secondary" },
+        ];
+      case "awaiting_payment":
+        return [
+          { status: "paid", label: "Mark Payment Received" },
+          { status: "cancelled", label: "Cancel", tone: "secondary" },
+        ];
+      case "paid":
+        return [
+          { status: "submitted_to_supplier", label: "Mark Sent to Supplier" },
+          { status: "cancelled", label: "Cancel", tone: "secondary" },
+        ];
+      case "submitted_to_supplier":
+        return [{ status: "processing", label: "Mark Processing" }];
+      case "processing":
+        return [{ status: "shipped", label: "Mark Shipped" }];
+      case "shipped":
+        return [{ status: "fulfilled", label: "Mark Fulfilled" }];
+      default:
+        return [];
+    }
   }
 
   function buildApprovalInventoryAdjustments({ orderId, items = [], inventory = [] } = {}) {
@@ -86,11 +260,15 @@
   }
 
   const api = {
+    ORDER_STATUS_META,
     VALID_ORDER_STATUSES,
+    normalizeOrderStatus,
     buildAdminOrderRecords,
+    buildClientOrderBuckets,
     countRequestsByStatus,
     buildOrderStatusPatch,
     buildApprovalInventoryAdjustments,
+    nextAdminActions,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

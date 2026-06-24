@@ -11,6 +11,8 @@ const brandCleanupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "0
 const accountDirectorySql = readFileSync(join(__dirname, "..", "supabase", "sql", "015_account_and_directory.sql"), "utf8");
 const adminInvitesSql = readFileSync(join(__dirname, "..", "supabase", "sql", "016_admin_invites.sql"), "utf8");
 const publicHomeContentSql = readFileSync(join(__dirname, "..", "supabase", "sql", "018_public_home_content.sql"), "utf8");
+const orderWorkflowSql = readFileSync(join(__dirname, "..", "supabase", "sql", "019_order_workflow_statuses.sql"), "utf8");
+const publicProductFlyersSql = readFileSync(join(__dirname, "..", "supabase", "sql", "020_public_product_flyers.sql"), "utf8");
 
 assert.match(pricePrivacySql, /create or replace view public\.reseller_products\s+with \(security_invoker = true\)/i);
 assert.match(pricePrivacySql, /create or replace view public\.reseller_product_variants\s+with \(security_invoker = true\)/i);
@@ -96,11 +98,34 @@ assert.match(publicHomeContentSql, /create table if not exists public\.homepage_
 assert.match(publicHomeContentSql, /create table if not exists public\.blog_posts/i);
 assert.match(publicHomeContentSql, /alter table public\.homepage_flyers enable row level security/i);
 assert.match(publicHomeContentSql, /alter table public\.blog_posts enable row level security/i);
+
+assert.match(publicProductFlyersSql, /create table if not exists public\.public_product_flyers/i);
+assert.match(publicProductFlyersSql, /slug text not null unique/i);
+assert.match(publicProductFlyersSql, /product_class text not null/i);
+assert.match(publicProductFlyersSql, /main_image_path text/i);
+assert.match(publicProductFlyersSql, /secondary_image_path text/i);
+assert.match(publicProductFlyersSql, /create index if not exists public_product_flyers_public_idx/i);
+assert.match(publicProductFlyersSql, /alter table public\.public_product_flyers enable row level security/i);
+assert.match(publicProductFlyersSql, /grant select on table public\.public_product_flyers to anon, authenticated/i);
+assert.match(publicProductFlyersSql, /grant insert, update, delete on table public\.public_product_flyers to authenticated/i);
+assert.match(publicProductFlyersSql, /Public can read published product flyers/i);
+assert.match(publicProductFlyersSql, /Admins can manage product flyers/i);
+assert.match(publicProductFlyersSql, /private\.is_admin\(\)/i);
 assert.match(publicHomeContentSql, /using \(published = true\)/i);
 assert.match(publicHomeContentSql, /private\.is_admin\(\)/i);
 assert.match(publicHomeContentSql, /alter table public\.site_content[\s\S]*add column if not exists about_heading text/i);
 assert.match(publicHomeContentSql, /alter table public\.site_content[\s\S]*add column if not exists about_body text/i);
 assert.match(publicHomeContentSql, /storage\.buckets[\s\S]*'product-images'/i);
 assert.match(publicHomeContentSql, /content\/%/i);
+
+assert.match(orderWorkflowSql, /alter type public\.order_request_status add value if not exists 'awaiting_payment'/i);
+assert.match(orderWorkflowSql, /alter type public\.order_request_status add value if not exists 'paid'/i);
+assert.match(orderWorkflowSql, /alter type public\.order_request_status add value if not exists 'submitted_to_supplier'/i);
+assert.match(orderWorkflowSql, /alter type public\.order_request_status add value if not exists 'processing'/i);
+assert.match(orderWorkflowSql, /alter type public\.order_request_status add value if not exists 'shipped'/i);
+assert.match(orderWorkflowSql, /alter table public\.order_requests[\s\S]*add column if not exists approved_at timestamptz/i);
+assert.match(orderWorkflowSql, /alter table public\.order_requests[\s\S]*add column if not exists expected_fulfillment_date date/i);
+assert.match(orderWorkflowSql, /alter table public\.order_requests[\s\S]*add column if not exists processing_at timestamptz/i);
+assert.match(orderWorkflowSql, /alter table public\.order_requests[\s\S]*add column if not exists supplier_exported_at timestamptz/i);
 
 console.log("supabase-sql tests passed");

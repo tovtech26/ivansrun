@@ -1,8 +1,8 @@
 (function attachAuth(root) {
-  const PUBLIC_ROUTES = new Set(["store", "story", "product", "find-reseller", "apply", "signup", "login", "admin-login", "about", "contact", "terms", "privacy"]);
+  const PUBLIC_ROUTES = new Set(["store", "story", "product", "product-flyers", "product-flyer", "find-reseller", "apply", "signup", "login", "admin-login", "about", "contact", "terms", "privacy"]);
   const AUTHED_ROUTES = new Set(["account"]);
-  const RESELLER_ROUTES = new Set(["reseller", "reseller-product", "request-confirmation", "history"]);
-  const ADMIN_ROUTES = new Set(["admin", "products", "site", "requests", "applications", "approvals", "imports", "email", "team"]);
+  const RESELLER_ROUTES = new Set(["reseller", "reseller-product", "request-confirmation", "history", "current-orders", "expected-orders", "fulfillment", "order"]);
+  const ADMIN_ROUTES = new Set(["admin", "products", "site", "requests", "requests-review", "requests-payment", "requests-supplier", "requests-completed", "applications", "approvals", "imports", "email", "team"]);
 
   function normalizeRole(role) {
     if (role === "admin" || role === "reseller" || role === "pending_reseller") return role;

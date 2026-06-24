@@ -18,7 +18,17 @@ end $$;
 
 do $$
 begin
-  create type public.order_request_status as enum ('submitted', 'approved', 'rejected', 'fulfilled', 'cancelled');
+  create type public.order_request_status as enum (
+    'submitted',
+    'awaiting_payment',
+    'paid',
+    'submitted_to_supplier',
+    'processing',
+    'shipped',
+    'fulfilled',
+    'rejected',
+    'cancelled'
+  );
 exception
   when duplicate_object then null;
 end $$;
@@ -159,6 +169,17 @@ create table if not exists public.order_requests (
   status public.order_request_status not null default 'submitted',
   notes text,
   admin_notes text,
+  approved_at timestamptz,
+  paid_at timestamptz,
+  supplier_submitted_at timestamptz,
+  processing_at timestamptz,
+  shipped_at timestamptz,
+  fulfilled_at timestamptz,
+  expected_fulfillment_date date,
+  invoice_number text,
+  payment_reference text,
+  payment_note text,
+  supplier_exported_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

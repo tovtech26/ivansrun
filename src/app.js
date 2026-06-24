@@ -5,6 +5,8 @@ const ROUTES = [
   "store",
   "story",
   "product",
+  "product-flyers",
+  "product-flyer",
   "find-reseller",
   "apply",
   "signup",
@@ -15,9 +17,17 @@ const ROUTES = [
   "reseller-product",
   "request-confirmation",
   "history",
+  "current-orders",
+  "expected-orders",
+  "fulfillment",
+  "order",
   "admin",
   "team",
   "requests",
+  "requests-review",
+  "requests-payment",
+  "requests-supplier",
+  "requests-completed",
   "applications",
   "products",
   "site",
@@ -52,6 +62,7 @@ const InventoryWorkflow = window.IrunsvanInventoryWorkflow;
 const CatalogData = window.IrunsvanCatalogData;
 const OperationsProducts = window.IrunsvanOperationsProducts;
 const WebsiteContent = window.IrunsvanWebsiteContent;
+const OrderExport = window.IrunsvanOrderExport;
 const SITE_CONTENT_STORAGE_KEY = "irunsvan_site_content";
 const SERVER_MONITOR_ENABLED =
   typeof window !== "undefined" &&
@@ -72,7 +83,7 @@ function readStoredSiteContent() {
 }
 
 function readInitialRouteState() {
-  return MobileNavigation.parseRouteUrl(window.location.hash) || { route: "store", productId: null, storySlug: null };
+  return MobileNavigation.parseRouteUrl(window.location.hash) || { route: "store", productId: null, orderId: null, storySlug: null, flyerSlug: null };
 }
 
 function hasPendingOAuthCallback() {
@@ -98,12 +109,15 @@ const initialRouteState = readInitialRouteState();
 const state = {
   route: initialRouteState.route,
   selectedProductId: initialRouteState.productId,
+  selectedOrderId: initialRouteState.orderId || null,
   selectedStorySlug: initialRouteState.storySlug || null,
+  selectedProductFlyerSlug: initialRouteState.flyerSlug || null,
   products: [],
   variants: [],
   homepageFlyers: WebsiteContent.normalizeFlyers([]),
   homeFlyerIndex: 0,
   blogPosts: [],
+  publicProductFlyers: [],
   resellerDirectory: [],
   colourMappings: [],
   inventory: [],
@@ -143,6 +157,7 @@ const state = {
   siteSavePending: false,
   flyerSavePending: false,
   storySavePending: false,
+  publicProductFlyerSavePending: false,
   aboutSavePending: false,
   importPending: false,
   stockResetPending: false,
@@ -697,7 +712,7 @@ function loadExternalScript(key, src, globalName) {
 }
 
 async function ensureImportLibraries(type, fileName = "") {
-  const needsSpreadsheet = type === "inventory_xlsx" && !/\.csv$/i.test(fileName);
+  const needsSpreadsheet = (type === "inventory_xlsx" && !/\.csv$/i.test(fileName)) || type === "order_xlsx";
   if (needsSpreadsheet) {
     await loadExternalScript("xlsx", IMPORT_LIBRARY_URLS.xlsx, "XLSX");
   }
@@ -984,6 +999,73 @@ function requestHistoryRecords() {
   }));
 }
 
+function visibleRequestHistoryRecords() {
+  if (state.auth.isAdmin) return requestHistoryRecords();
+  const userId = state.auth.user?.id;
+  if (!userId) return [];
+  const allowedOrderIds = new Set(
+    state.orderRequests.filter((request) => !request.reseller_id || request.reseller_id === userId).map((request) => request.id),
+  );
+  return requestHistoryRecords().filter((record) => allowedOrderIds.has(record.id));
+}
+
+function visibleOrderBuckets() {
+  return AdminOrders.buildClientOrderBuckets(visibleRequestHistoryRecords());
+}
+
+function orderRecordById(orderId) {
+  return requestHistoryRecords().find((record) => record.id === orderId) || null;
+}
+
+function orderItemsFor(orderId) {
+  return state.orderRequestItems.filter((item) => item.order_request_id === orderId);
+}
+
+function selectedOrderRecord() {
+  if (!state.selectedOrderId) return null;
+  const record = orderRecordById(state.selectedOrderId);
+  if (!record) return null;
+  if (state.auth.isAdmin) return record;
+  return visibleRequestHistoryRecords().some((entry) => entry.id === record.id) ? record : null;
+}
+
+function visibleOrderRecords() {
+  return state.auth.isAdmin ? requestHistoryRecords() : visibleRequestHistoryRecords();
+}
+
+function orderCompanyFor(record) {
+  const request = state.orderRequests.find((entry) => entry.id === record?.id);
+  if (!request?.reseller_id) return state.auth.profile?.company_name || state.auth.user?.email || "Reseller account";
+  const profile = profileForUserId(request.reseller_id);
+  return profile?.company_name || profile?.email || "Reseller account";
+}
+
+function orderStatusTimeline(record) {
+  const normalizedStatus = record?.normalizedStatus || AdminOrders.normalizeOrderStatus(record?.status);
+  const steps = [
+    ["submitted", "Request Submitted", record?.createdAt],
+    ["awaiting_payment", "Awaiting Payment", record?.approvedAt],
+    ["paid", "Payment Received", record?.paidAt],
+    ["submitted_to_supplier", "Sent to Supplier", record?.supplierSubmittedAt],
+    ["processing", "Processing", record?.processingAt],
+    ["shipped", "Shipped", record?.shippedAt],
+    ["fulfilled", "Fulfilled", record?.fulfilledAt],
+  ];
+  const order = ["submitted", "awaiting_payment", "paid", "submitted_to_supplier", "processing", "shipped", "fulfilled"];
+  const activeIndex = Math.max(0, order.indexOf(normalizedStatus));
+  return steps.map(([status, label, value]) => ({
+    status,
+    label,
+    value,
+    complete:
+      normalizedStatus === "fulfilled"
+        ? true
+        : normalizedStatus === "cancelled" || normalizedStatus === "rejected"
+          ? status === "submitted"
+          : order.indexOf(status) <= activeIndex,
+  }));
+}
+
 function latestRequestForCurrentUser() {
   const requests = state.auth.isAdmin
     ? state.orderRequests
@@ -1013,7 +1095,7 @@ async function loadCatalog() {
   try {
     state.homepageContentLoading = true;
     state.homepageContentError = null;
-    const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows, flyerRows, blogRows] = await Promise.all([
+    const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows, flyerRows, blogRows, productFlyerRows] = await Promise.all([
       fetchOptionalSupabase("products", CatalogData.productSelectQuery()),
       fetchOptionalSupabase("product_variants", CatalogData.variantSelectQuery()),
       fetchOptionalSupabase(
@@ -1028,6 +1110,7 @@ async function loadCatalog() {
       fetchOptionalSupabase("reseller_directory", "select=id,company_name,country,phone,email,full_name&order=country.asc,company_name.asc&limit=200"),
       fetchOptionalSupabase("homepage_flyers", "select=id,title,image_path,sort_order,published,created_at&published=eq.true&order=sort_order.asc,created_at.desc&limit=20"),
       fetchOptionalSupabase("blog_posts", "select=id,title,slug,cover_image_path,summary,body,published,published_at,created_at&published=eq.true&order=published_at.desc,created_at.desc&limit=20"),
+      fetchOptionalSupabase("public_product_flyers", "select=id,title,slug,product_class,short_description,story,main_image_path,secondary_image_path,display_order,published,created_at,updated_at&published=eq.true&order=display_order.asc,created_at.desc&limit=100"),
     ]);
     const fallback = CatalogData.fallbackCatalog();
     const catalogRows =
@@ -1040,6 +1123,7 @@ async function loadCatalog() {
     state.resellerDirectory = Array.isArray(directoryRows) ? directoryRows : [];
     state.homepageFlyers = WebsiteContent.normalizeFlyers(flyerRows);
     state.blogPosts = WebsiteContent.normalizeStories(blogRows);
+    state.publicProductFlyers = WebsiteContent.normalizeProductFlyers(productFlyerRows);
     if (heroRows.length || themeRows.length || contentRows.length) {
       state.siteContent = remoteSiteContent(heroRows, themeRows, contentRows);
     }
@@ -1057,6 +1141,7 @@ async function loadProtectedData() {
   if (!state.auth.isAuthenticated) {
     state.homepageFlyers = WebsiteContent.normalizeFlyers(state.homepageFlyers);
     state.blogPosts = WebsiteContent.normalizeStories(state.blogPosts);
+    state.publicProductFlyers = WebsiteContent.normalizeProductFlyers(state.publicProductFlyers);
     state.inventory = [];
     state.orderRequests = [];
     state.orderRequestItems = [];
@@ -1102,8 +1187,14 @@ async function loadProtectedData() {
         ["productPrices", fetchAuthedSupabase(CatalogData.protectedProductPriceSource(), CatalogData.protectedProductPriceSelectQuery())],
         ["variantPrices", fetchAuthedSupabase(CatalogData.protectedVariantPriceSource(), CatalogData.protectedVariantPriceSelectQuery())],
         ["colourMappings", fetchAuthedSupabase(CatalogData.protectedColourMappingSource(), CatalogData.protectedColourMappingSelectQuery())],
-        ["inventory", fetchAuthedSupabase("inventory", "select=id,variant_id,sku,stock_quantity,updated_at&order=sku.asc&limit=5000")],
-        ["orderRequests", fetchAuthedSupabase("order_requests", "select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100")],
+        ["inventory", fetchAuthedSupabase("inventory", "select=id,variant_id,sku,style_code,stock_quantity,updated_at&order=sku.asc&limit=5000")],
+        [
+          "orderRequests",
+          fetchAuthedSupabase(
+            "order_requests",
+            "select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100",
+          ),
+        ],
         [
           "orderRequestItems",
           fetchAuthedSupabase(
@@ -1120,6 +1211,10 @@ async function loadProtectedData() {
         ["adminInvites", fetchAuthedSupabase("admin_invites", "select=id,email,status,note,created_by,claimed_by,created_at,expires_at,used_at,revoked_at&order=created_at.desc&limit=200")],
         ["homepageFlyers", fetchAuthedSupabase("homepage_flyers", "select=id,title,image_path,sort_order,published,created_at,updated_at&order=sort_order.asc,created_at.desc&limit=200")],
         ["blogPosts", fetchAuthedSupabase("blog_posts", "select=id,title,slug,cover_image_path,summary,body,published,published_at,created_at,updated_at&order=created_at.desc&limit=200")],
+        [
+          "publicProductFlyers",
+          fetchAuthedSupabase("public_product_flyers", "select=id,title,slug,product_class,short_description,story,main_image_path,secondary_image_path,display_order,published,created_at,updated_at&order=display_order.asc,created_at.desc&limit=200"),
+        ],
         [
           "importJobs",
           fetchAuthedSupabase(
@@ -1163,8 +1258,10 @@ async function loadProtectedData() {
     if (state.auth.isAdmin) {
       const adminFlyerRows = Array.isArray(data.homepageFlyers) ? data.homepageFlyers : [];
       const adminBlogRows = Array.isArray(data.blogPosts) ? data.blogPosts : [];
+      const adminProductFlyerRows = Array.isArray(data.publicProductFlyers) ? data.publicProductFlyers : [];
       state.homepageFlyers = adminFlyerRows.length ? WebsiteContent.normalizeFlyers(adminFlyerRows, { includeUnpublished: true }) : [];
       state.blogPosts = WebsiteContent.normalizeStories(adminBlogRows, { includeUnpublished: true });
+      state.publicProductFlyers = WebsiteContent.normalizeProductFlyers(adminProductFlyerRows, { includeUnpublished: true });
     }
     if (failures.length) {
       const message = `Some protected data could not load: ${failures.join("; ")}`;
@@ -1190,11 +1287,20 @@ function setRoute(route, params = {}, options = {}) {
   const nextRoute = routeForAccess(route);
   state.route = nextRoute;
   if (params.productId) state.selectedProductId = params.productId;
+  if (Object.prototype.hasOwnProperty.call(params, "orderId")) state.selectedOrderId = params.orderId || null;
+  else if (nextRoute !== "order") state.selectedOrderId = null;
   state.selectedStorySlug = params.storySlug || null;
+  state.selectedProductFlyerSlug = params.flyerSlug || null;
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;
   if (options.writeHistory !== false) {
-    const historyState = { route: nextRoute, productId: state.selectedProductId || null, storySlug: state.selectedStorySlug || null };
+    const historyState = {
+      route: nextRoute,
+      productId: state.selectedProductId || null,
+      orderId: state.selectedOrderId || null,
+      storySlug: state.selectedStorySlug || null,
+      flyerSlug: state.selectedProductFlyerSlug || null,
+    };
     const url = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, historyState)}`;
     if (options.replaceHistory) {
       window.history.replaceState(historyState, "", url);
@@ -1265,7 +1371,7 @@ function loginPageContent(route = state.route) {
 function topNav() {
   const active = (routes) => (routes.includes(state.route) ? "active" : "");
   const publicNavItems = [
-    ["Products", "store", ["store", "product", "story"]],
+    ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
     ["Stockists", "find-reseller", ["find-reseller"]],
     ...(state.auth.isAuthenticated
       ? []
@@ -1279,13 +1385,13 @@ function topNav() {
     ? [
         ["Application", "apply", ["apply"]],
         ["Account", "account", ["account"]],
-        ["Public Catalog", "store", ["store", "product"]],
+        ["Public Products", "product-flyers", ["product-flyers", "product-flyer"]],
       ]
     : [
         ["Request Products", "reseller", ["reseller", "reseller-product"]],
-        ["My Requests", "history", ["history", "request-confirmation"]],
+        ["My Orders", "history", ["history", "request-confirmation", "current-orders", "expected-orders", "fulfillment", "order"]],
         ["Account", "account", ["account"]],
-        ["Public Catalog", "store", ["store", "product"]],
+        ["Public Products", "product-flyers", ["product-flyers", "product-flyer"]],
       ];
   const drawerItems = mobileDrawerItems();
   const drawerLabel = mobileDrawerLabel();
@@ -1342,11 +1448,11 @@ function mobileAreaLabel() {
 }
 
 function isAdminRoute(route = state.route) {
-  return ["admin", "team", "requests", "applications", "products", "site", "approvals", "imports", "email"].includes(route);
+  return ["admin", "team", "requests", "requests-review", "requests-payment", "requests-supplier", "requests-completed", "applications", "products", "site", "approvals", "imports", "email"].includes(route);
 }
 
 function isResellerRoute(route = state.route) {
-  return ["reseller", "reseller-product", "request-confirmation", "history"].includes(route);
+  return ["reseller", "reseller-product", "request-confirmation", "history", "current-orders", "expected-orders", "fulfillment", "order"].includes(route);
 }
 
 function mobileDrawerLabel() {
@@ -1359,14 +1465,14 @@ function mobileDrawerItems() {
   if (currentPortalMode() === "admin") {
     return [
       ["Dashboard", "admin", ["admin"]],
-      ["Requests", "requests", ["requests"]],
+      ["Requests", "requests", ["requests", "requests-review", "requests-payment", "requests-supplier", "requests-completed"]],
       ["Applications", "applications", ["applications"]],
       ["Team", "team", ["team"]],
       ["Products", "products", ["products"]],
       ["Inventory Uploads", "imports", ["imports"]],
       ["Site Controls", "site", ["site"]],
       ["Account", "account", ["account"]],
-      ["View Public Site", "store", ["store", "product"]],
+      ["View Public Site", "store", ["store", "story"]],
     ];
   }
   if (currentPortalMode() === "reseller") {
@@ -1377,19 +1483,19 @@ function mobileDrawerItems() {
         ["Public Catalog", "store", ["store", "product"]],
       ];
     }
-    return [
-      ["Request Products", "reseller", ["reseller", "reseller-product"]],
-      ["Product", "reseller-product", ["reseller-product"]],
-      ["My Requests", "history", ["history", "request-confirmation"]],
-      ["Account", "account", ["account"]],
-      ["Public Catalog", "store", ["store", "product"]],
-      ["Become a Reseller", "apply", ["apply"]],
+      return [
+        ["Request Products", "reseller", ["reseller", "reseller-product"]],
+        ["Product", "reseller-product", ["reseller-product"]],
+        ["My Orders", "history", ["history", "request-confirmation", "current-orders", "expected-orders", "fulfillment", "order"]],
+        ["Account", "account", ["account"]],
+        ["Public Products", "product-flyers", ["product-flyers", "product-flyer"]],
+        ["Become a Reseller", "apply", ["apply"]],
     ];
   }
   if (state.auth.isAuthenticated) {
     if (state.auth.isAdmin) {
       return [
-        ["Products", "store", ["store", "product", "story"]],
+        ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
         ["Stockists", "find-reseller", ["find-reseller"]],
         ["Account", "account", ["account"]],
         ["Back to Admin", "admin", ["admin"]],
@@ -1397,22 +1503,22 @@ function mobileDrawerItems() {
     }
     if (state.auth.isPending) {
       return [
-        ["Products", "store", ["store", "product", "story"]],
+        ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
         ["Stockists", "find-reseller", ["find-reseller"]],
         ["Application", "apply", ["apply"]],
         ["Account", "account", ["account"]],
       ];
     }
     return [
-      ["Products", "store", ["store", "product", "story"]],
+      ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
       ["Stockists", "find-reseller", ["find-reseller"]],
       ["Request Products", "reseller", ["reseller"]],
-      ["My Requests", "history", ["history", "request-confirmation"]],
+      ["My Orders", "history", ["history", "request-confirmation", "current-orders", "expected-orders", "fulfillment", "order"]],
       ["Account", "account", ["account"]],
     ];
   }
   return [
-    ["Products", "store", ["store", "product", "story"]],
+    ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
     ["Stockists", "find-reseller", ["find-reseller"]],
     ["Access", "signup", ["signup"]],
     ["Join", "apply", ["apply"]],
@@ -1426,11 +1532,21 @@ function mobileContextBar() {
   const labels = {
     story: "Home",
     product: "Catalog",
+    "product-flyers": "Home",
+    "product-flyer": "Products",
     "reseller-product": "Shop",
     history: "Inventory",
+    "current-orders": "My Orders",
+    "expected-orders": "My Orders",
+    fulfillment: "My Orders",
+    order: "My Orders",
     products: "Admin",
     site: "Admin",
     requests: "Admin",
+    "requests-review": "Orders",
+    "requests-payment": "Orders",
+    "requests-supplier": "Orders",
+    "requests-completed": "Orders",
     applications: "Admin",
     approvals: "Admin",
     imports: "Admin",
@@ -1635,6 +1751,98 @@ function selectedStory() {
     return items.find((story) => story.slug === state.selectedStorySlug) || null;
   }
   return items[0];
+}
+
+function publicProductFlyerItems(options = {}) {
+  return WebsiteContent.normalizeProductFlyers(state.publicProductFlyers, options);
+}
+
+function selectedProductFlyer() {
+  const items = publicProductFlyerItems();
+  if (!items.length) return null;
+  if (state.selectedProductFlyerSlug) {
+    return items.find((flyer) => flyer.slug === state.selectedProductFlyerSlug) || null;
+  }
+  return items[0];
+}
+
+function productFlyerCard(flyer) {
+  const imageUrl = resolveContentImageUrl(flyer.mainImagePath || "");
+  return `
+    <article class="product-flyer-card">
+      <div class="product-flyer-image">
+        ${
+          imageUrl
+            ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(flyer.title)}" loading="lazy" />`
+            : `<div class="product-flyer-placeholder">${logo("blue")}</div>`
+        }
+      </div>
+      <div class="product-flyer-copy">
+        <p>${escapeHtml(flyer.productClass)}</p>
+        <h2>${escapeHtml(flyer.title)}</h2>
+        <span>${escapeHtml(flyer.shortDescription || "Irunsvan Africa public product flyer.")}</span>
+        <button type="button" class="button secondary" data-route="product-flyer" data-flyer-slug="${escapeHtml(flyer.slug)}">View flyer</button>
+      </div>
+    </article>
+  `;
+}
+
+function productFlyersPage() {
+  const flyers = publicProductFlyerItems();
+  return `
+    <main class="product-flyers-page">
+      <section class="product-flyer-intro">
+        <h1>Products</h1>
+        <p>Public product flyers from Irunsvan Africa. These pages are for display and product storytelling only.</p>
+      </section>
+      ${
+        flyers.length
+          ? `<section class="product-flyer-grid">${flyers.map(productFlyerCard).join("")}</section>`
+          : `<section class="content-empty-state"><p>No public product flyers are published yet.</p></section>`
+      }
+      ${footer()}
+    </main>
+  `;
+}
+
+function productFlyerDetailPage() {
+  const flyer = selectedProductFlyer();
+  if (!flyer) {
+    return `
+      <main class="product-flyers-page">
+        <section class="content-empty-state"><p>This product flyer is not published yet.</p></section>
+        ${footer()}
+      </main>
+    `;
+  }
+  const mainImage = resolveContentImageUrl(flyer.mainImagePath || "");
+  const secondaryImage = resolveContentImageUrl(flyer.secondaryImagePath || "");
+  return `
+    <main class="product-flyer-detail-page">
+      <button type="button" class="text-link product-flyer-back" data-route="product-flyers">Back to product flyers</button>
+      <article class="product-flyer-detail">
+        <div class="product-flyer-detail-media">
+          ${
+            mainImage
+              ? `<img src="${escapeHtml(mainImage)}" alt="${escapeHtml(flyer.title)}" loading="eager" />`
+              : `<div class="product-flyer-placeholder">${logo("blue")}</div>`
+          }
+          ${
+            secondaryImage
+              ? `<img src="${escapeHtml(secondaryImage)}" alt="${escapeHtml(`${flyer.title} detail`)}" loading="lazy" />`
+              : ""
+          }
+        </div>
+        <div class="product-flyer-detail-copy">
+          <p>${escapeHtml(flyer.productClass)}</p>
+          <h1>${escapeHtml(flyer.title)}</h1>
+          ${flyer.shortDescription ? `<strong>${escapeHtml(flyer.shortDescription)}</strong>` : ""}
+          ${flyer.story ? `<div class="product-flyer-story">${escapeHtml(flyer.story).replaceAll("\n", "<br />")}</div>` : ""}
+        </div>
+      </article>
+      ${footer()}
+    </main>
+  `;
 }
 
 function storyDetailPage() {
@@ -2589,50 +2797,238 @@ function resellerSizeQuantityCell(row, productCanOrder = true) {
   `;
 }
 
-function requestHistory() {
-  const records = requestHistoryRecords();
+function formatOrderDate(value) {
+  if (!value) return "Date pending";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? "Date pending" : parsed.toLocaleDateString();
+}
+
+function orderGroupSection(title, records = [], emptyCopy, description = "") {
+  return `
+    <section class="admin-card">
+      <div class="panel-toolbar">
+        <h2>${escapeHtml(title)}</h2>
+        <span>${escapeHtml(String(records.length))}</span>
+      </div>
+      ${description ? `<p>${escapeHtml(description)}</p>` : ""}
+      <div class="approval-stack">
+        ${
+          records.length
+            ? records
+                .map(
+                  (record) => `
+                    <article class="approval-item request-review-item">
+                      <div class="approval-item-body">
+                        <div class="approval-item-head">
+                          <strong>${escapeHtml(record.code)}</strong>
+                          ${statusPill(record.statusMeta?.label || record.normalizedStatus || record.status)}
+                        </div>
+                        <div class="request-meta-line">
+                          <span>${escapeHtml(formatOrderDate(record.createdAt))}</span>
+                          <span>${escapeHtml(`${record.totalUnits} pairs`)}</span>
+                          <span>${escapeHtml(`${record.totalItems} SKU lines`)}</span>
+                        </div>
+                        <div class="request-meta-line">
+                          <span>Total</span>
+                          <strong>${money(record.subtotal)}</strong>
+                        </div>
+                        <p class="request-note">${escapeHtml(record.adminNotes || record.notes || "No notes available yet.")}</p>
+                      </div>
+                      <div class="approval-actions">
+                        <button class="button secondary" data-route="order" data-order-id="${escapeHtml(record.id)}">View Order</button>
+                      </div>
+                    </article>
+                  `,
+                )
+                .join("")
+            : `<p class="notice">${escapeHtml(emptyCopy)}</p>`
+        }
+      </div>
+    </section>
+  `;
+}
+
+function workspaceSubnav(title, items = [], activeRoute = state.route) {
+  return `
+    <aside class="workspace-subnav">
+      <div class="workspace-subnav-head">
+        <h2>${escapeHtml(title)}</h2>
+      </div>
+      <nav>
+        ${items
+          .map(
+            ([label, route, count]) => `
+              <button class="${route === activeRoute ? "active" : ""}" data-route="${escapeHtml(route)}">
+                <span>${escapeHtml(label)}</span>
+                ${typeof count === "number" ? `<strong>${escapeHtml(String(count))}</strong>` : ""}
+              </button>
+            `,
+          )
+          .join("")}
+      </nav>
+    </aside>
+  `;
+}
+
+function workspaceShell({ title, copy, backRoute, subnavTitle, subnavItems, content }) {
   return `
     <main class="portal-page">
       <section class="portal-header">
         <div>
-          <span class="eyebrow dark">Irunsvan Africa requests</span>
-          <h1>Request History</h1>
-          <p>Track order requests from draft through admin approval.</p>
+          <h1>${escapeHtml(title)}</h1>
+          <p>${escapeHtml(copy)}</p>
         </div>
-        <button class="button secondary" data-route="reseller">Back to Shop</button>
+        ${backRoute ? `<button class="button secondary" data-route="${escapeHtml(backRoute)}">Back</button>` : ""}
       </section>
-      <section class="inventory-panel">
-        ${state.historyError ? `<p class="notice error">${escapeHtml(state.historyError)}</p>` : ""}
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Request</th><th>Status</th><th>Items</th><th>Quantity</th><th>Total</th><th>Notes</th></tr></thead>
-            <tbody>
-              ${
-                state.historyLoading
-                  ? `<tr><td colspan="6">Loading request history...</td></tr>`
-                  : records.length
-                    ? records
-                        .map(
-                          (record) => `
-                        <tr>
-                          <td>${escapeHtml(record.code)}</td>
-                          <td>${statusPill(record.status)}</td>
-                          <td>${escapeHtml(`${record.totalItems} SKUs`)}</td>
-                          <td>${escapeHtml(`${record.totalUnits} units`)}</td>
-                          <td>${money(record.subtotal)}</td>
-                          <td>${escapeHtml(record.adminNotes || record.notes || "—")}</td>
-                        </tr>`,
-                        )
-                        .join("")
-                    : `<tr><td colspan="6">No requests submitted yet.</td></tr>`
-              }
-            </tbody>
-          </table>
+      <section class="workspace-shell">
+        ${workspaceSubnav(subnavTitle, subnavItems)}
+        <div class="workspace-content">
+          ${content}
         </div>
       </section>
       ${footer(true)}
     </main>
   `;
+}
+
+function resellerOrderSubnavItems() {
+  const buckets = visibleOrderBuckets();
+  return [
+    ["Overview", "history", buckets.new.length + buckets.awaitingPayment.length + buckets.active.length + buckets.shipped.length + buckets.fulfilled.length + buckets.closed.length],
+    ["Awaiting Payment", "expected-orders", buckets.awaitingPayment.length + buckets.new.length],
+    ["Active", "current-orders", buckets.active.length],
+    ["Fulfillment", "fulfillment", buckets.shipped.length + buckets.fulfilled.length],
+  ];
+}
+
+function adminOrderSubnavItems() {
+  const buckets = AdminOrders.buildClientOrderBuckets(requestHistoryRecords());
+  return [
+    ["Needs Review", "requests", buckets.new.length],
+    ["Awaiting Payment", "requests-payment", buckets.awaitingPayment.length],
+    ["Supplier", "requests-supplier", buckets.active.length],
+    ["Completed", "requests-completed", buckets.shipped.length + buckets.fulfilled.length],
+  ];
+}
+
+function requestHistory() {
+  const buckets = visibleOrderBuckets();
+  const summaryCards = [
+    ["New Requests", buckets.new.length, "Requests that have been submitted and are waiting for review.", "history"],
+    ["Awaiting Payment", buckets.awaitingPayment.length, "Supply has been approved and payment is still outstanding.", "expected-orders"],
+    ["Active Orders", buckets.active.length, "Paid and supplier-bound orders currently moving through the workflow.", "current-orders"],
+    ["Shipped", buckets.shipped.length, "Orders that have already shipped and are on the way.", "fulfillment"],
+  ];
+  return workspaceShell({
+    title: "My Orders",
+    copy: "Use the menu to move between payment, active fulfillment, and completed order history.",
+    backRoute: "reseller",
+    subnavTitle: "Order Menu",
+    subnavItems: resellerOrderSubnavItems(),
+    content: `
+      ${state.historyError ? `<p class="notice error">${escapeHtml(state.historyError)}</p>` : ""}
+      ${
+        state.historyLoading
+          ? `<section class="inventory-panel"><p class="notice">Loading order history...</p></section>`
+          : `<section class="admin-panels">
+              ${summaryCards
+                .map(
+                  ([label, value, copy, route]) => `
+                    <article class="admin-card">
+                      <div class="panel-toolbar"><h2>${escapeHtml(label)}</h2><span>${escapeHtml(String(value))}</span></div>
+                      <p>${escapeHtml(copy)}</p>
+                      <div class="approval-actions" style="padding: 0 20px 20px;">
+                        <button class="button secondary" data-route="${route}">Open ${escapeHtml(label)}</button>
+                      </div>
+                    </article>
+                  `,
+                )
+                .join("")}
+            </section>
+            ${orderGroupSection("Recent History", [...buckets.shipped, ...buckets.fulfilled, ...buckets.closed].slice(0, 6), "No completed or closed orders yet.", "Recent finished, shipped, and closed orders stay in history here.")}`
+      }
+    `,
+  });
+}
+
+function orderStatusCollection(title, copy, records = [], emptyCopy = "No orders available.") {
+  return workspaceShell({
+    title,
+    copy,
+    backRoute: "history",
+    subnavTitle: "Order Menu",
+    subnavItems: resellerOrderSubnavItems(),
+    content: `
+      <section class="approval-stack">
+        ${
+          records.length
+            ? records
+                .map(
+                  (record) => `
+                    <article class="approval-item request-review-item">
+                      <div class="approval-item-body">
+                        <div class="approval-item-head">
+                          <strong>${escapeHtml(record.code)}</strong>
+                          ${statusPill(record.statusMeta?.label || record.normalizedStatus || record.status)}
+                        </div>
+                        <div class="request-meta-line">
+                          <span>${escapeHtml(formatOrderDate(record.createdAt))}</span>
+                          <span>${escapeHtml(String(record.totalItems) + " SKU lines")}</span>
+                          <span>${escapeHtml(String(record.totalUnits) + " pairs")}</span>
+                        </div>
+                        <div class="request-meta-line">
+                          <span>Total</span>
+                          <strong>${money(record.subtotal)}</strong>
+                        </div>
+                        ${
+                          record.expectedFulfillmentDate
+                            ? `<div class="request-meta-line"><span>Expected fulfillment</span><strong>${escapeHtml(record.expectedFulfillmentDate)}</strong></div>`
+                            : ""
+                        }
+                        <p class="request-note">${escapeHtml(record.adminNotes || record.notes || "No notes available.")}</p>
+                      </div>
+                      <div class="approval-actions">
+                        <button class="button secondary" data-route="order" data-order-id="${escapeHtml(record.id)}">View Order</button>
+                      </div>
+                    </article>
+                  `,
+                )
+                .join("")
+            : `<p class="notice">${escapeHtml(emptyCopy)}</p>`
+        }
+      </section>
+    `,
+  });
+}
+
+function currentOrdersPage() {
+  const buckets = visibleOrderBuckets();
+  return orderStatusCollection(
+    "Current Orders",
+    "Paid orders and supplier-bound requests that are already moving through the pipeline.",
+    buckets.active,
+    "No current orders yet.",
+  );
+}
+
+function expectedOrdersPage() {
+  const buckets = visibleOrderBuckets();
+  return orderStatusCollection(
+    "Expected Orders",
+    "Requests still waiting for review or payment before supplier fulfillment begins.",
+    [...buckets.new, ...buckets.awaitingPayment],
+    "No expected orders right now.",
+  );
+}
+
+function fulfillmentStatusPage() {
+  const buckets = visibleOrderBuckets();
+  return orderStatusCollection(
+    "Fulfillment Status",
+    "Orders that have already shipped and orders that are now fully completed.",
+    [...buckets.shipped, ...buckets.fulfilled],
+    "No fulfillment updates yet.",
+  );
 }
 
 function requestConfirmationPage() {
@@ -2890,6 +3286,12 @@ function storyAdminList() {
   return `<div class="content-admin-list">${items.map((story) => contentAdminItem({ title: story.title, imagePath: story.coverImagePath, meta: `${story.published ? "Published" : "Draft"}${story.publishedAt ? ` • ${new Date(story.publishedAt).toLocaleDateString()}` : ""}`, published: story.published })).join("")}</div>`;
 }
 
+function publicProductFlyerAdminList() {
+  const items = Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : [];
+  if (!items.length) return `<div class="content-empty-state"><p>No public product flyers saved yet.</p></div>`;
+  return `<div class="content-admin-list">${items.map((flyer) => contentAdminItem({ title: flyer.title, imagePath: flyer.mainImagePath, meta: `${flyer.productClass} - ${flyer.published ? "Published" : "Draft"}`, published: flyer.published })).join("")}</div>`;
+}
+
 function adminSiteControls() {
   const site = state.siteContent;
   const hero = site.hero;
@@ -2928,6 +3330,21 @@ function adminSiteControls() {
               <button class="button primary full" type="submit" ${state.storySavePending ? "disabled" : ""}>${state.storySavePending ? "Saving..." : "Save Story"}</button>
             </form>
             ${storyAdminList()}
+          </div>
+          <div class="admin-card">
+            <div class="panel-toolbar"><h2>Public Product Flyers</h2><span>${state.publicProductFlyers.length} items</span></div>
+            <form class="workflow-form" data-form="public-product-flyer">
+              ${controlInput("Product Name", "product_flyer_title", "")}
+              ${controlInput("Product Class", "product_flyer_class", "")}
+              ${controlInput("Display Order", "product_flyer_display_order", "0", "number")}
+              <label><span>Main Image</span><input name="product_flyer_main_image" type="file" accept="image/*" /></label>
+              <label><span>Secondary Image</span><input name="product_flyer_secondary_image" type="file" accept="image/*" /></label>
+              ${controlTextarea("Short Description", "product_flyer_short_description", "")}
+              ${controlTextarea("Flyer Story", "product_flyer_story", "")}
+              <label class="toggle-row"><input name="product_flyer_published" type="checkbox" /><span>Publish on public Products page</span></label>
+              <button class="button primary full" type="submit" ${state.publicProductFlyerSavePending ? "disabled" : ""}>${state.publicProductFlyerSavePending ? "Saving..." : "Save Product Flyer"}</button>
+            </form>
+            ${publicProductFlyerAdminList()}
           </div>
         </section>
         <section class="admin-panels">
@@ -3228,26 +3645,244 @@ function adminRequestItemList(record) {
   `;
 }
 
+function adminOrderActionButtons(record) {
+  const actions = AdminOrders.nextAdminActions(record.status);
+  if (!actions.length) return `<span class="form-note">No further workflow steps for this request.</span>`;
+  return actions
+    .map(
+      (action) => `
+        <button class="button mini${action.tone === "secondary" ? " secondary" : ""}" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="${escapeHtml(action.status)}">${escapeHtml(action.label)}</button>
+      `,
+    )
+    .join("");
+}
+
 function requestImpactSummary(record) {
   const totalItems = Number(record.totalItems || 0);
   const totalUnits = Number(record.totalUnits || 0);
   return `${totalItems} ${totalItems === 1 ? "SKU line" : "SKU lines"} · ${totalUnits} ${totalUnits === 1 ? "pair" : "pairs"}`;
 }
 
+function invoiceNumberFor(record) {
+  return record?.invoiceNumber || `INV-${String(record?.id || "").replaceAll("-", "").slice(-8).toUpperCase() || "PENDING"}`;
+}
+
+function orderTimelineMarkup(record) {
+  return `
+    <div class="request-item-list order-timeline">
+      ${orderStatusTimeline(record)
+        .map(
+          (step) => `
+            <div class="request-item-row">
+              <strong>${escapeHtml(step.label)}</strong>
+              <span>${escapeHtml(step.complete ? "Complete" : "Pending")}</span>
+              <span>${escapeHtml(step.value ? formatOrderDate(step.value) : "Waiting")}</span>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
+function orderInvoicePanel(record, items) {
+  return `
+    <section class="admin-card">
+      <div class="panel-toolbar"><h2>Invoice</h2><span>${escapeHtml(invoiceNumberFor(record))}</span></div>
+      <div class="request-meta-line">
+        <span>${escapeHtml(orderCompanyFor(record))}</span>
+        <span>${escapeHtml(formatOrderDate(record.createdAt))}</span>
+      </div>
+      <div class="request-item-list">
+        ${items
+          .map(
+            (item) => `
+              <div class="request-item-row">
+                <strong>${escapeHtml(item.product_name || item.sku || "Product")}</strong>
+                <span>${escapeHtml([item.colour, item.size ? `Size ${item.size}` : ""].filter(Boolean).join(" / ") || "Option")}</span>
+                <span>${escapeHtml(String(Number(item.quantity || 0)) + " x " + money(item.base_price || 0))}</span>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+      <div class="request-meta-line">
+        <span>Subtotal</span>
+        <strong>${money(record.subtotal)}</strong>
+      </div>
+      <p class="request-note">
+        ${escapeHtml(
+          record.normalizedStatus === "submitted"
+            ? "Awaiting admin approval before the invoice is ready for payment."
+            : ["awaiting_payment", "approved"].includes(record.normalizedStatus)
+              ? "Invoice is ready. Payment still needs to be confirmed."
+              : "Invoice generated from the current order lines.",
+        )}
+      </p>
+    </section>
+  `;
+}
+
+function orderPaymentPanel(record) {
+  const normalizedStatus = record.normalizedStatus || AdminOrders.normalizeOrderStatus(record.status);
+  return `
+    <section class="admin-card">
+      <div class="panel-toolbar"><h2>Payment</h2><span>${escapeHtml(record.paymentReference || "No reference")}</span></div>
+      <div class="request-meta-line">
+        <span>Status</span>
+        <strong>${escapeHtml(record.statusMeta?.clientLabel || record.statusMeta?.label || normalizedStatus)}</strong>
+      </div>
+      <p class="request-note">
+        ${escapeHtml(
+          normalizedStatus === "submitted"
+            ? "Awaiting admin approval."
+            : normalizedStatus === "awaiting_payment"
+              ? "Awaiting payment."
+              : normalizedStatus === "paid"
+                ? "Payment received."
+                : "Payment has already been confirmed for this order.",
+        )}
+      </p>
+      ${
+        state.auth.isAdmin && ["submitted", "awaiting_payment", "approved"].includes(normalizedStatus)
+          ? `<div class="approval-actions"><button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="paid">Mark Payment Received</button></div>`
+          : ""
+      }
+    </section>
+  `;
+}
+
+function orderSupplierExportPanel(record, items) {
+  const exportReady = ["paid", "submitted_to_supplier", "processing", "shipped", "fulfilled"].includes(record.normalizedStatus);
+  return `
+    <section class="admin-card">
+      <div class="panel-toolbar"><h2>Supplier Export</h2><span>${escapeHtml(record.supplierExportedAt ? formatOrderDate(record.supplierExportedAt) : "Not exported")}</span></div>
+      <p>${escapeHtml(exportReady ? "Download the supplier file in the master-style spreadsheet format." : "Supplier export unlocks once payment has been confirmed.")}</p>
+      ${
+        state.auth.isAdmin
+          ? `<div class="approval-actions">
+              <button class="button mini" data-action="download-order-xlsx" data-order-id="${escapeHtml(record.id)}" ${exportReady ? "" : "disabled"}>Download Supplier XLSX</button>
+              <button class="button mini secondary" data-action="download-order-csv" data-order-id="${escapeHtml(record.id)}" ${exportReady ? "" : "disabled"}>Download CSV</button>
+            </div>`
+          : ""
+      }
+      ${
+        items.length
+          ? `<p class="request-note">${escapeHtml(String(items.length) + " SKU lines will be included in the supplier sheet.")}</p>`
+          : `<p class="request-note">No items are attached to this order yet.</p>`
+      }
+    </section>
+  `;
+}
+
+function orderDetailPage() {
+  const record = selectedOrderRecord();
+  if (!record) {
+    return `
+      <main class="portal-page">
+        <section class="request-confirmation">
+          <h1>Order not found</h1>
+          <p>This order is not available in the current session.</p>
+          <div class="confirmation-actions">
+            <button class="button primary" data-route="${state.auth.isAdmin ? "requests" : "history"}">Back</button>
+          </div>
+        </section>
+        ${footer(true)}
+      </main>
+    `;
+  }
+  const items = orderItemsFor(record.id);
+  return `
+    <main class="portal-page">
+      <section class="portal-header">
+        <div>
+          <span class="eyebrow dark">Irunsvan Africa orders</span>
+          <h1>${escapeHtml(record.code)}</h1>
+          <p>${escapeHtml(orderCompanyFor(record))}</p>
+        </div>
+        <div class="approval-actions">
+          ${statusPill(record.statusMeta?.label || record.normalizedStatus || record.status)}
+          <button class="button secondary" data-route="${state.auth.isAdmin ? "requests" : "history"}">Back</button>
+        </div>
+      </section>
+      <section class="admin-panels">
+        <section class="admin-card">
+          <div class="panel-toolbar"><h2>Order Overview</h2><span>${escapeHtml(formatOrderDate(record.createdAt))}</span></div>
+          <div class="request-meta-line">
+            <span>${escapeHtml(requestImpactSummary(record))}</span>
+            <strong>${money(record.subtotal)}</strong>
+          </div>
+          <p class="request-note">${escapeHtml(record.adminNotes || record.notes || "No notes have been added yet.")}</p>
+          ${state.auth.isAdmin ? `<div class="approval-actions">${adminOrderActionButtons(record)}</div>` : ""}
+        </section>
+        <section class="admin-card">
+          <div class="panel-toolbar"><h2>Timeline</h2><span>${escapeHtml(record.statusMeta?.clientLabel || record.statusMeta?.label || record.status)}</span></div>
+          ${orderTimelineMarkup(record)}
+        </section>
+        <section class="admin-card">
+          <div class="panel-toolbar"><h2>Items</h2><span>${escapeHtml(String(items.length))}</span></div>
+          ${adminRequestItemList(record)}
+        </section>
+        ${orderInvoicePanel(record, items)}
+        ${orderPaymentPanel(record)}
+        ${orderSupplierExportPanel(record, items)}
+      </section>
+      ${footer(true)}
+    </main>
+  `;
+}
+
 function adminRequests() {
-  const orderRecords = requestHistoryRecords();
+  const buckets = AdminOrders.buildClientOrderBuckets(requestHistoryRecords());
+  const summaryCards = [
+    ["Needs Review", buckets.new.length, "New requests waiting for approval.", "requests"],
+    ["Awaiting Payment", buckets.awaitingPayment.length, "Approved orders waiting for payment.", "requests-payment"],
+    ["Supplier", buckets.active.length, "Orders moving through supplier and processing.", "requests-supplier"],
+    ["Completed", buckets.shipped.length + buckets.fulfilled.length, "Shipped and fulfilled orders.", "requests-completed"],
+  ];
   return `
     <main class="admin-layout">
       ${adminSidebar("requests")}
       <section class="admin-main">
-        <header class="admin-topbar"><div><h1>Product Requests</h1><p>Approve only when the inventory move is correct.</p></div></header>
-        <section class="admin-panels">
-          <div class="admin-card">
-            <div class="panel-toolbar"><h2>Submitted Requests</h2><span>${orderRecords.length} requests</span></div>
-            <div class="approval-stack">
+        <header class="admin-topbar"><div><h1>Orders</h1><p>Use the order menu to move between review, payment, supplier handling, and completed orders.</p></div></header>
+        <section class="workspace-shell admin-workspace-shell">
+          ${workspaceSubnav("Order Menu", adminOrderSubnavItems())}
+          <div class="workspace-content">
+            <section class="admin-panels">
+              ${summaryCards
+                .map(
+                  ([label, value, copy, route]) => `
+                    <article class="admin-card">
+                      <div class="panel-toolbar"><h2>${escapeHtml(label)}</h2><span>${escapeHtml(String(value))}</span></div>
+                      <p>${escapeHtml(copy)}</p>
+                      <div class="approval-actions" style="padding: 0 20px 20px;">
+                        <button class="button secondary" data-route="${route}">Open ${escapeHtml(label)}</button>
+                      </div>
+                    </article>
+                  `,
+                )
+                .join("")}
+            </section>
+          </div>
+        </section>
+      </section>
+    </main>
+  `;
+}
+
+function adminOrderWorkspacePage(title, copy, records = [], emptyCopy = "No orders in this section right now.") {
+  return `
+    <main class="admin-layout">
+      ${adminSidebar("requests")}
+      <section class="admin-main">
+        <header class="admin-topbar"><div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(copy)}</p></div></header>
+        <section class="workspace-shell admin-workspace-shell">
+          ${workspaceSubnav("Order Menu", adminOrderSubnavItems())}
+          <div class="workspace-content">
+            <section class="approval-stack">
               ${
-                orderRecords.length
-                  ? orderRecords
+                records.length
+                  ? records
                       .map((record) => {
                         const request = state.orderRequests.find((entry) => entry.id === record.id);
                         const reseller = profileForUserId(request?.reseller_id);
@@ -3256,11 +3891,12 @@ function adminRequests() {
                             <div class="approval-item-body">
                               <div class="approval-item-head">
                                 <strong>${escapeHtml(record.code)}</strong>
-                                ${statusPill(record.status)}
+                                ${statusPill(record.statusMeta?.label || record.normalizedStatus || record.status)}
                               </div>
                               <div class="request-meta-line">
                                 <span>${escapeHtml(reseller?.company_name || reseller?.email || "Reseller account")}</span>
                                 <span>${escapeHtml(requestImpactSummary(record))}</span>
+                                <span>${escapeHtml(formatOrderDate(record.createdAt))}</span>
                               </div>
                               <div class="request-meta-line">
                                 <span>Request total</span>
@@ -3268,24 +3904,44 @@ function adminRequests() {
                               </div>
                               ${adminRequestItemList(record)}
                               <p class="request-note">${escapeHtml(record.notes || "No reseller notes provided.")}</p>
-                              ${record.adminNotes ? `<p class="request-note">${escapeHtml(`Admin note: ${record.adminNotes}`)}</p>` : ""}
+                              ${record.adminNotes ? `<p class="request-note">${escapeHtml("Admin note: " + record.adminNotes)}</p>` : ""}
                             </div>
                             <div class="approval-actions">
-                              <button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="approved">Approve and deduct stock</button>
-                              <button class="button mini secondary" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="rejected">Cannot Supply</button>
+                              <button class="button mini secondary" data-route="order" data-order-id="${escapeHtml(record.id)}">Open Order</button>
+                              ${adminOrderActionButtons(record)}
                             </div>
                           </article>
                         `;
                       })
                       .join("")
-                  : `<p class="notice">No product requests available yet.</p>`
+                  : `<p class="notice">${escapeHtml(emptyCopy)}</p>`
               }
-            </div>
+            </section>
           </div>
         </section>
       </section>
     </main>
   `;
+}
+
+function adminRequestsReviewPage() {
+  const buckets = AdminOrders.buildClientOrderBuckets(requestHistoryRecords());
+  return adminOrderWorkspacePage("Needs Review", "Review new requests and decide whether to supply them.", buckets.new);
+}
+
+function adminRequestsPaymentPage() {
+  const buckets = AdminOrders.buildClientOrderBuckets(requestHistoryRecords());
+  return adminOrderWorkspacePage("Awaiting Payment", "These orders have been approved and are waiting for payment confirmation.", buckets.awaitingPayment);
+}
+
+function adminRequestsSupplierPage() {
+  const buckets = AdminOrders.buildClientOrderBuckets(requestHistoryRecords());
+  return adminOrderWorkspacePage("Supplier", "These orders are paid or already moving through supplier handling and processing.", buckets.active);
+}
+
+function adminRequestsCompletedPage() {
+  const buckets = AdminOrders.buildClientOrderBuckets(requestHistoryRecords());
+  return adminOrderWorkspacePage("Completed", "Shipped and fulfilled orders stay here for operational lookup.", [...buckets.shipped, ...buckets.fulfilled]);
 }
 
 function adminApplications() {
@@ -3387,8 +4043,7 @@ function adminApprovals() {
                           ${record.adminNotes ? `<p class="request-note">${escapeHtml(`Admin note: ${record.adminNotes}`)}</p>` : ""}
                         </div>
                         <div class="approval-actions">
-                          <button class="button mini" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="approved">Approve and deduct stock</button>
-                          <button class="button mini secondary" data-action="order-status" data-order-id="${escapeHtml(record.id)}" data-status="rejected">Reject</button>
+                          ${adminOrderActionButtons(record)}
                         </div>
                       </article>
                     `,
@@ -3691,7 +4346,9 @@ function adminTable(title, headers, rows, route = "requests") {
 }
 
 function statusPill(status) {
-  return `<span class="status ${escapeHtml(status).toLowerCase()}">${escapeHtml(status)}</span>`;
+  const label = String(status || "");
+  const className = label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `<span class="status ${escapeHtml(className)}">${escapeHtml(label)}</span>`;
 }
 
 function uploadBox(title, copy, importType, accept) {
@@ -3807,12 +4464,12 @@ function footer(compact = false) {
   const publicMode = currentPortalMode() === "public";
   const resourceButtons = publicMode
     ? `
-      <button data-route="store">Products</button>
+      <button data-route="product-flyers">Products</button>
       <button data-route="find-reseller">Stockists</button>
       <button data-route="contact">Support</button>
     `
     : `
-      <button data-route="store">Products</button>
+      <button data-route="product-flyers">Products</button>
       <button data-route="find-reseller">Find a Reseller</button>
       <button data-route="contact">Support</button>
     `;
@@ -3858,6 +4515,8 @@ function routeView() {
     "store": publicHomePage,
     "story": storyDetailPage,
     "product": productDetail,
+    "product-flyers": productFlyersPage,
+    "product-flyer": productFlyerDetailPage,
     "find-reseller": findResellerPage,
     apply: resellerApplication,
     signup: signupPage,
@@ -3868,9 +4527,17 @@ function routeView() {
     "reseller-product": resellerProductOrderPage,
     "request-confirmation": requestConfirmationPage,
     history: requestHistory,
+    "current-orders": currentOrdersPage,
+    "expected-orders": expectedOrdersPage,
+    fulfillment: fulfillmentStatusPage,
+    order: orderDetailPage,
     admin: adminDashboard,
     team: adminTeam,
     requests: adminRequests,
+    "requests-review": adminRequestsReviewPage,
+    "requests-payment": adminRequestsPaymentPage,
+    "requests-supplier": adminRequestsSupplierPage,
+    "requests-completed": adminRequestsCompletedPage,
     applications: adminApplications,
     products: adminProducts,
     site: adminSiteControls,
@@ -3890,7 +4557,9 @@ function bindEvents() {
     button.addEventListener("click", () =>
       setRoute(button.getAttribute("data-route"), {
         productId: button.getAttribute("data-product-id"),
+        orderId: button.getAttribute("data-order-id"),
         storySlug: button.getAttribute("data-story-slug"),
+        flyerSlug: button.getAttribute("data-flyer-slug"),
       }),
     );
   });
@@ -4052,6 +4721,7 @@ function bindEvents() {
       if (formName === "team-role") await handleTeamRoleSave(form);
       if (formName === "homepage-flyer") await saveHomepageFlyer(form);
       if (formName === "blog-post") await saveBlogPost(form);
+      if (formName === "public-product-flyer") await savePublicProductFlyer(form);
       if (formName === "about-content") await saveAboutContent(form);
       if (formName === "site-controls") await saveSiteControls(form);
       if (formName === "product") await handleProductSubmit(form);
@@ -4178,6 +4848,20 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='download-order-xlsx']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const orderId = button.getAttribute("data-order-id");
+      await handleOrderExport(orderId, "xlsx");
+    });
+  });
+
+  document.querySelectorAll("[data-action='download-order-csv']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const orderId = button.getAttribute("data-order-id");
+      await handleOrderExport(orderId, "csv");
+    });
+  });
+
   document.querySelectorAll("[data-action='application-status']").forEach((button) => {
     button.addEventListener("click", async () => {
       const applicationId = button.getAttribute("data-application-id");
@@ -4277,12 +4961,29 @@ function syncRouteFromLocation(options = {}) {
   const nextRoute = routeForAccess(parsed.route);
   state.route = nextRoute;
   if (parsed.productId) state.selectedProductId = parsed.productId;
+  state.selectedOrderId = parsed.orderId || (nextRoute === "order" ? state.selectedOrderId : null);
   state.selectedStorySlug = parsed.storySlug || null;
+  state.selectedProductFlyerSlug = parsed.flyerSlug || null;
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;
   if (options.replaceHistory !== false) {
-    const cleanUrl = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, { productId: state.selectedProductId, storySlug: state.selectedStorySlug })}`;
-    window.history.replaceState({ route: nextRoute, productId: state.selectedProductId || null, storySlug: state.selectedStorySlug || null }, "", cleanUrl);
+    const cleanUrl = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, {
+      productId: state.selectedProductId,
+      orderId: state.selectedOrderId,
+      storySlug: state.selectedStorySlug,
+      flyerSlug: state.selectedProductFlyerSlug,
+    })}`;
+    window.history.replaceState(
+      {
+        route: nextRoute,
+        productId: state.selectedProductId || null,
+        orderId: state.selectedOrderId || null,
+        storySlug: state.selectedStorySlug || null,
+        flyerSlug: state.selectedProductFlyerSlug || null,
+      },
+      "",
+      cleanUrl,
+    );
   }
 }
 
@@ -4830,8 +5531,12 @@ async function handleOrderStatusUpdate(orderId, status) {
     const orderRequest = state.orderRequests.find((request) => request.id === orderId);
     const currentStatus = orderRequest?.status || "submitted";
     const approvalItems = state.orderRequestItems.filter((item) => item.order_request_id === orderId);
-    const patch = AdminOrders.buildOrderStatusPatch(status, `Updated from admin dashboard on ${new Date().toLocaleString()}`);
-    const shouldAdjustInventory = status === "approved" && currentStatus !== "approved";
+    const patch = AdminOrders.buildOrderStatusPatch(
+      status,
+      `Updated from admin dashboard on ${new Date().toLocaleString()}`,
+      orderRequest,
+    );
+    const shouldAdjustInventory = status === "awaiting_payment" && currentStatus !== "awaiting_payment";
     const inventoryAdjustments = shouldAdjustInventory
       ? AdminOrders.buildApprovalInventoryAdjustments({ orderId, items: approvalItems, inventory: state.inventory })
       : [];
@@ -4842,7 +5547,7 @@ async function handleOrderStatusUpdate(orderId, status) {
         for (const adjustment of inventoryAdjustments) {
           await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
             stock_quantity: adjustment.nextStock,
-            source: "order_approved",
+            source: "order_reserved",
           });
           appliedAdjustments.push(adjustment);
         }
@@ -4850,7 +5555,7 @@ async function handleOrderStatusUpdate(orderId, status) {
         for (const adjustment of appliedAdjustments.reverse()) {
           await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
             stock_quantity: adjustment.previousStock,
-            source: "order_request_revert",
+            source: "order_reserve_revert",
           }).catch(() => {});
         }
         await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, {
@@ -4880,6 +5585,42 @@ async function handleOrderStatusUpdate(orderId, status) {
     await loadProtectedData();
   } catch (error) {
     state.historyError = error instanceof Error ? error.message : "Unable to update order status";
+    render();
+  }
+}
+
+function orderExportPayload(orderId) {
+  const request = state.orderRequests.find((entry) => entry.id === orderId);
+  const record = orderRecordById(orderId);
+  if (!request || !record) throw new Error("Order not found.");
+  const profile = profileForUserId(request.reseller_id);
+  return {
+    order: {
+      ...request,
+      ...record,
+    },
+    items: orderItemsFor(orderId),
+    inventory: state.inventory,
+    variants: state.variants,
+    products: state.products,
+    companyName: profile?.company_name || profile?.email || "",
+  };
+}
+
+async function handleOrderExport(orderId, format) {
+  try {
+    const payload = orderExportPayload(orderId);
+    if (format === "xlsx") {
+      await ensureImportLibraries("order_xlsx");
+      OrderExport.downloadSupplierXlsx({
+        ...payload,
+        XLSX: window.XLSX,
+      });
+      return;
+    }
+    OrderExport.downloadSupplierCsv(payload);
+  } catch (error) {
+    state.historyError = error instanceof Error ? error.message : "Unable to export order";
     render();
   }
 }
@@ -5059,6 +5800,49 @@ async function saveBlogPost(form) {
     state.adminContentError = error instanceof Error ? error.message : "Unable to save story";
   } finally {
     state.storySavePending = false;
+    render();
+  }
+}
+
+async function savePublicProductFlyer(form) {
+  const data = new FormData(form);
+  state.publicProductFlyerSavePending = true;
+  state.adminContentError = null;
+  render();
+  try {
+    const mainFile = form.elements.namedItem("product_flyer_main_image")?.files?.[0];
+    const secondaryFile = form.elements.namedItem("product_flyer_secondary_image")?.files?.[0];
+    if (!mainFile) throw new Error("Choose a main product flyer image before saving.");
+    const uniquePrefix = new Date().toISOString().replace(/\D/g, "");
+    const mainRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: mainFile, uniquePrefix });
+    await uploadContentImage(mainRecord);
+    let secondaryImagePath = "";
+    if (secondaryFile) {
+      const secondaryRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: secondaryFile, uniquePrefix: `${uniquePrefix}-secondary` });
+      await uploadContentImage(secondaryRecord);
+      secondaryImagePath = secondaryRecord.storagePath;
+    }
+    const [saved] = await insertAuthedSupabase(
+      "public_product_flyers",
+      WebsiteContent.buildProductFlyerPayload(
+        {
+          title: data.get("product_flyer_title"),
+          productClass: data.get("product_flyer_class"),
+          shortDescription: data.get("product_flyer_short_description"),
+          story: data.get("product_flyer_story"),
+          mainImagePath: mainRecord.storagePath,
+          secondaryImagePath,
+          displayOrder: data.get("product_flyer_display_order"),
+          published: data.get("product_flyer_published") === "on",
+        },
+        state.auth.user?.id || null,
+      ),
+    );
+    state.publicProductFlyers = WebsiteContent.normalizeProductFlyers([saved, ...state.publicProductFlyers], { includeUnpublished: true });
+  } catch (error) {
+    state.adminContentError = error instanceof Error ? error.message : "Unable to save public product flyer";
+  } finally {
+    state.publicProductFlyerSavePending = false;
     render();
   }
 }
@@ -5644,7 +6428,9 @@ window.addEventListener("popstate", (event) => {
   state.navigationDepth = Math.max(0, state.navigationDepth - 1);
   state.route = routeForAccess(routeState.route);
   if (routeState.productId) state.selectedProductId = routeState.productId;
+  state.selectedOrderId = routeState.orderId || (state.route === "order" ? state.selectedOrderId : null);
   state.selectedStorySlug = routeState.storySlug || null;
+  state.selectedProductFlyerSlug = routeState.flyerSlug || null;
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;
   render();

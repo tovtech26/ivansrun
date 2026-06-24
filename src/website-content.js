@@ -51,6 +51,10 @@
     return titleSlugPart(title) || "story";
   }
 
+  function buildProductFlyerSlug(title) {
+    return titleSlugPart(title) || "product-flyer";
+  }
+
   function normalizeFlyers(rows = [], options = {}) {
     const normalized = (Array.isArray(rows) ? rows : [])
       .map((row) => ({
@@ -79,6 +83,26 @@
       }))
       .filter((row) => row.id && row.title && row.slug && row.body && (options.includeUnpublished === true || row.published))
       .sort((left, right) => String(right.publishedAt).localeCompare(String(left.publishedAt)));
+  }
+
+  function normalizeProductFlyers(rows = [], options = {}) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => ({
+        id: safeText(row.id),
+        title: safeText(row.title),
+        slug: safeText(row.slug) || buildProductFlyerSlug(row.title),
+        productClass: safeText(row.product_class || row.productClass),
+        shortDescription: safeText(row.short_description || row.shortDescription),
+        story: safeText(row.story),
+        mainImagePath: safeText(row.main_image_path || row.mainImagePath),
+        secondaryImagePath: safeText(row.secondary_image_path || row.secondaryImagePath),
+        displayOrder: safeInteger(row.display_order ?? row.displayOrder, 0),
+        published: row.published !== false,
+        createdAt: safeText(row.created_at || row.createdAt),
+        updatedAt: safeText(row.updated_at || row.updatedAt),
+      }))
+      .filter((row) => row.id && row.title && row.slug && row.productClass && (options.includeUnpublished === true || row.published))
+      .sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title));
   }
 
   function buildContentImageRecord({ folder, file, uniquePrefix = "" } = {}) {
@@ -118,16 +142,36 @@
     };
   }
 
+  function buildProductFlyerPayload(input = {}, adminUserId = null) {
+    const title = safeText(input.title) || "Public Product Flyer";
+    return {
+      title,
+      slug: buildProductFlyerSlug(input.slug || title),
+      product_class: safeText(input.productClass || input.product_class) || "Product",
+      short_description: safeText(input.shortDescription || input.short_description) || null,
+      story: safeText(input.story) || null,
+      main_image_path: safeText(input.mainImagePath || input.main_image_path) || null,
+      secondary_image_path: safeText(input.secondaryImagePath || input.secondary_image_path) || null,
+      display_order: safeInteger(input.displayOrder ?? input.display_order, 0),
+      published: safeBool(input.published),
+      created_by: adminUserId,
+      updated_by: adminUserId,
+    };
+  }
+
   const api = {
     CONTENT_IMAGE_BUCKET,
     DEFAULT_HOME_FLYERS,
     DEFAULT_ABOUT_CONTENT,
     buildStorySlug,
+    buildProductFlyerSlug,
     normalizeFlyers,
     normalizeStories,
+    normalizeProductFlyers,
     buildContentImageRecord,
     buildFlyerPayload,
     buildStoryPayload,
+    buildProductFlyerPayload,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;
