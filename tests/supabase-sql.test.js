@@ -111,6 +111,10 @@ assert.match(publicProductFlyersSql, /grant insert, update, delete on table publ
 assert.match(publicProductFlyersSql, /Public can read published product flyers/i);
 assert.match(publicProductFlyersSql, /Admins can manage product flyers/i);
 assert.match(publicProductFlyersSql, /private\.is_admin\(\)/i);
+assert.match(publicProductFlyersSql, /insert into public\.public_product_flyers/i);
+assert.match(publicProductFlyersSql, /demo-irunsvan-005-runner/i);
+assert.match(publicProductFlyersSql, /demo-irunsvan-026-runner/i);
+assert.match(publicProductFlyersSql, /on conflict \(slug\) do update/i);
 assert.match(publicHomeContentSql, /using \(published = true\)/i);
 assert.match(publicHomeContentSql, /private\.is_admin\(\)/i);
 assert.match(publicHomeContentSql, /alter table public\.site_content[\s\S]*add column if not exists about_heading text/i);

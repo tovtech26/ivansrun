@@ -158,6 +158,10 @@ assert.equal(appSource.includes("async function saveAboutContent("), true, "Abou
 assert.equal(appSource.includes("async function uploadContentImage("), true, "Website content images must upload through a dedicated storage helper.");
 assert.equal(appSource.includes('data-form="public-product-flyer"'), true, "Site controls must expose a public product flyer form.");
 assert.equal(appSource.includes("async function savePublicProductFlyer("), true, "Public product flyer form must save through a dedicated handler.");
+assert.equal(appSource.includes('data-action="delete-public-product-flyer"'), true, "Site controls must let admins delete public product flyer test rows.");
+assert.equal(appSource.includes("async function deletePublicProductFlyer("), true, "Public product flyer deletes must use a dedicated handler.");
+assert.equal(appSource.includes('deleteAuthedSupabase("public_product_flyers"'), true, "Public product flyer deletes must remove the row from Supabase.");
+assert.equal(appSource.includes("state.publicProductFlyers = state.publicProductFlyers.filter"), true, "Public product flyer deletes must remove the item from local state after success.");
 assert.equal(appSource.includes("function productFlyersPage("), true, "Public product flyer listing page must exist.");
 assert.equal(appSource.includes("function productFlyerDetailPage("), true, "Public product flyer detail page must exist.");
 assert.equal(appSource.includes('data-route="product-flyer"'), true, "Public product flyer cards must route to public flyer detail pages.");

@@ -498,6 +498,19 @@ async function updateAuthedSupabase(table, id, payload) {
   return response.json();
 }
 
+async function deleteAuthedSupabase(table, filters) {
+  const session = requireAuthedSession();
+  const response = await monitoredFetch(`delete:${table}`, `${SUPABASE_URL}/rest/v1/${table}?${filters}`, {
+    method: "DELETE",
+    headers: {
+      ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token),
+      Prefer: "return=minimal",
+    },
+  });
+  if (!response.ok) throw await buildResponseError(`${table} delete failed`, response);
+  return true;
+}
+
 async function uploadProductImage(record) {
   const session = requireAuthedSession();
   const response = await monitoredFetch(
@@ -3257,7 +3270,7 @@ function adminTeam() {
   `;
 }
 
-function contentAdminItem({ title, imagePath, meta, published }) {
+function contentAdminItem({ title, imagePath, meta, published, actions = "" }) {
   const imageUrl = resolveContentImageUrl(imagePath || "");
   return `
     <article class="content-admin-item">
@@ -3270,6 +3283,7 @@ function contentAdminItem({ title, imagePath, meta, published }) {
         <strong>${escapeHtml(title || "Untitled")}</strong>
         <span>${escapeHtml(meta || (published ? "Published" : "Draft"))}</span>
       </div>
+      ${actions ? `<div class="content-admin-actions">${actions}</div>` : ""}
     </article>
   `;
 }
@@ -3289,7 +3303,13 @@ function storyAdminList() {
 function publicProductFlyerAdminList() {
   const items = Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : [];
   if (!items.length) return `<div class="content-empty-state"><p>No public product flyers saved yet.</p></div>`;
-  return `<div class="content-admin-list">${items.map((flyer) => contentAdminItem({ title: flyer.title, imagePath: flyer.mainImagePath, meta: `${flyer.productClass} - ${flyer.published ? "Published" : "Draft"}`, published: flyer.published })).join("")}</div>`;
+  return `<div class="content-admin-list">${items.map((flyer) => contentAdminItem({
+    title: flyer.title,
+    imagePath: flyer.mainImagePath,
+    meta: `${flyer.productClass} - ${flyer.published ? "Published" : "Draft"}`,
+    published: flyer.published,
+    actions: `<button type="button" class="button mini secondary" data-action="delete-public-product-flyer" data-flyer-id="${escapeHtml(flyer.id)}">Delete</button>`,
+  })).join("")}</div>`;
 }
 
 function adminSiteControls() {
@@ -4707,6 +4727,12 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='delete-public-product-flyer']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await deletePublicProductFlyer(button.getAttribute("data-flyer-id"));
+    });
+  });
+
   document.querySelectorAll("[data-form]").forEach((form) => {
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -5843,6 +5869,23 @@ async function savePublicProductFlyer(form) {
     state.adminContentError = error instanceof Error ? error.message : "Unable to save public product flyer";
   } finally {
     state.publicProductFlyerSavePending = false;
+    render();
+  }
+}
+
+async function deletePublicProductFlyer(flyerId) {
+  const id = String(flyerId || "").trim();
+  if (!id) return;
+  state.adminContentError = null;
+  try {
+    await deleteAuthedSupabase("public_product_flyers", `id=eq.${encodeURIComponent(id)}`);
+    state.publicProductFlyers = state.publicProductFlyers.filter((flyer) => flyer.id !== id);
+    if (state.selectedProductFlyerSlug && !state.publicProductFlyers.some((flyer) => flyer.slug === state.selectedProductFlyerSlug)) {
+      state.selectedProductFlyerSlug = null;
+    }
+  } catch (error) {
+    state.adminContentError = error instanceof Error ? error.message : "Unable to delete public product flyer";
+  } finally {
     render();
   }
 }

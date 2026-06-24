@@ -837,7 +837,7 @@ body {
 
 .content-admin-item {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 72px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 10px;
@@ -883,6 +883,12 @@ body {
 .content-admin-copy span {
   color: var(--muted);
   font-size: 13px;
+}
+
+.content-admin-actions {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
 }
 
 @media (max-width: 980px) {
@@ -942,6 +948,15 @@ body {
   .product-flyer-copy,
   .product-flyer-detail-copy {
     padding: 20px;
+  }
+
+  .content-admin-item {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .content-admin-actions {
+    grid-column: 2;
+    justify-content: flex-start;
   }
 }
 
