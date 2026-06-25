@@ -37,7 +37,10 @@ assert.equal(appSource.includes("SupabaseClient.signInWithOAuth({"), true, "Goog
 assert.equal(appSource.includes("signup: signupPage"), true, "Normal email account creation must have a dedicated signup route.");
 assert.equal(appSource.includes("function signupPage()"), true, "Signup page must render a first-class email account creation form.");
 assert.equal(appSource.includes('["Create account", "signup"]'), true, "Login must expose normal email account creation.");
-assert.equal(appSource.includes('["Access", "signup", ["signup"]]'), true, "Public navigation should use campaign-style labels for account access.");
+assert.equal(appSource.includes("function publicNavItems("), true, "Public navigation must be generated from one consolidated item list.");
+assert.equal(appSource.includes('["Access", "signup", ["signup"]]'), false, "Public top navigation must not expose duplicate account access links.");
+assert.equal(appSource.includes('["Join", "apply", ["apply"]]'), false, "Public top navigation must not duplicate Join Network.");
+assert.equal(appSource.includes("const publicItems = publicNavItems();"), true, "Top navigation must use the consolidated public nav list.");
 assert.equal(appSource.includes('inputField("Confirm Password", "password_confirm"'), true, "Signup must require password confirmation.");
 assert.equal(appSource.includes("state.signupConfirmationEmail = email;"), true, "Signup must handle email confirmation before application submission.");
 assert.equal(appSource.includes('["Back to public site", "store"]'), true, "Admin login should point back to the public site instead of reseller application.");
@@ -73,7 +76,7 @@ assert.equal(appSource.includes("const catalogLoad = loadCatalog();"), true, "St
 assert.equal(appSource.includes("await initAuth({ loadProtected: false });"), true, "OAuth callback routing must restore auth before protected data loading.");
 assert.equal(appSource.includes("state.authBootstrapPending = false;"), true, "Auth bootstrap screen must be cleared before background protected data loading.");
 assert.equal(appSource.includes("loadProtectedData().catch"), true, "Protected data should load in the background after sign-in routing.");
-assert.equal(appSource.includes('const desktopItems = portalMode === "public" ? publicNavItems : portalMode === "reseller" ? resellerNavItems : [];'), true, "Admin workspace should not duplicate the full top navigation.");
+assert.equal(appSource.includes('const desktopItems = portalMode === "public" ? publicItems : portalMode === "reseller" ? resellerNavItems : [];'), true, "Admin workspace should not duplicate the full top navigation.");
 assert.equal(appSource.includes("const resellerNavItems ="), true, "Reseller workspace should use a smaller dedicated top navigation.");
 assert.equal(appSource.includes('if (state.auth.isPending) {'), true, "Pending users need a distinct workspace menu.");
 assert.equal(appSource.includes('const url = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, historyState)}`;'), true, "Route writes must clear stale search params when changing pages.");
@@ -163,6 +166,15 @@ assert.equal(appSource.includes("async function saveHomepageFlyer("), true, "Fly
 assert.equal(appSource.includes("async function saveBlogPost("), true, "Story saves must have a dedicated handler.");
 assert.equal(appSource.includes("async function saveAboutContent("), true, "About saves must have a dedicated handler.");
 assert.equal(appSource.includes("async function uploadContentImage("), true, "Website content images must upload through a dedicated storage helper.");
+assert.equal(appSource.includes("const SITE_CONTROL_SECTIONS"), true, "Site Controls must define a local section menu.");
+assert.equal(appSource.includes("function activeSiteControlSection("), true, "Site Controls must track an active submenu section.");
+assert.equal(appSource.includes("function siteControlsSubnav("), true, "Site Controls must render a local submenu.");
+assert.equal(appSource.includes('data-action="site-controls-section"'), true, "Site Controls submenu buttons must switch sections without cluttering the main sidebar.");
+assert.equal(appSource.includes("function siteHomepageFlyersPanel("), true, "Homepage flyers must render in a focused Site Controls panel.");
+assert.equal(appSource.includes("function siteStoriesPanel("), true, "Stories must render in a focused Site Controls panel.");
+assert.equal(appSource.includes("function siteProductFlyersPanel("), true, "Public product flyers must render in a focused Site Controls panel.");
+assert.equal(appSource.includes("function siteAboutPanel("), true, "About content must render in a focused Site Controls panel.");
+assert.equal(appSource.includes("function siteHeroThemePanel("), true, "Hero/theme/banner controls must render in a focused Site Controls panel.");
 assert.equal(appSource.includes('data-form="public-product-flyer"'), true, "Site controls must expose a public product flyer form.");
 assert.equal(appSource.includes("public-product-flyer-admin-card"), true, "Public product flyer editor must have a dedicated full-width admin card class.");
 assert.equal(appSource.includes("async function savePublicProductFlyer("), true, "Public product flyer form must save through a dedicated handler.");
@@ -189,6 +201,8 @@ assert.equal(styleSource.includes(".product-flyer-category"), true, "Public prod
 assert.equal(styleSource.includes(".public-product-flyer-admin-card"), true, "Public product flyer editor must have dedicated layout styling.");
 assert.equal(styleSource.includes("grid-column: 1 / -1"), true, "Public product flyer editor must span the Site Controls grid so copy is not clipped.");
 assert.equal(styleSource.includes("overflow-wrap: anywhere"), true, "Admin product flyer copy must wrap instead of clipping inside narrow cards.");
+assert.equal(styleSource.includes(".site-controls-workspace"), true, "Site Controls must use a submenu workspace layout.");
+assert.equal(styleSource.includes(".site-controls-panel"), true, "Site Controls focused panels must have dedicated styling.");
 assert.equal(productFlyerPageSource.includes("base_price"), false, "Public flyer pages must not expose reseller pricing.");
 assert.equal(appSource.includes("Website Content"), true, "Admin page title should reflect content management.");
 assert.equal(appSource.includes('data-form="admin-invite"'), true, "Team page must let admins create private invite links.");

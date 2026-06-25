@@ -932,6 +932,53 @@ body {
   justify-content: flex-end;
 }
 
+.site-controls-workspace {
+  align-items: start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.site-controls-panel {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+
+.site-controls-card {
+  min-width: 0;
+}
+
+.site-controls-panel .workflow-form {
+  padding: 24px;
+}
+
+.site-controls-panel .content-admin-list {
+  margin-top: 0;
+  padding: 0 24px 24px;
+}
+
+.site-controls-panel .content-admin-item {
+  align-items: start;
+  gap: 14px;
+  grid-template-columns: 72px minmax(0, 1fr);
+  padding: 14px;
+}
+
+.site-controls-panel .content-admin-actions {
+  flex-wrap: wrap;
+  grid-column: 2;
+  justify-content: flex-start;
+}
+
+.site-controls-panel .content-empty-state {
+  margin: 0 24px 24px;
+}
+
+.site-controls-panel .site-control-grid {
+  margin: 0;
+}
+
 .public-product-flyer-admin-card {
   grid-column: 1 / -1;
 }
@@ -959,6 +1006,14 @@ body {
 
   .website-content-grid {
     grid-template-columns: 1fr;
+  }
+
+  .site-controls-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .site-controls-subnav nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

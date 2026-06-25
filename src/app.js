@@ -159,6 +159,7 @@ const state = {
   storySavePending: false,
   publicProductFlyerSavePending: false,
   publicProductFlyerEditingId: null,
+  siteControlSection: "product-flyers",
   aboutSavePending: false,
   importPending: false,
   stockResetPending: false,
@@ -219,6 +220,13 @@ const state = {
 };
 
 const CATALOG_PAGE_SIZE = 8;
+const SITE_CONTROL_SECTIONS = [
+  ["product-flyers", "Product Flyers"],
+  ["homepage-flyers", "Homepage Flyers"],
+  ["stories", "Stories"],
+  ["about", "About"],
+  ["hero-theme", "Hero & Theme"],
+];
 
 function money(value) {
   if (value === null || value === undefined || value === "") return "Price TBC";
@@ -1404,19 +1412,16 @@ function loginPageContent(route = state.route) {
   };
 }
 
-function topNav() {
-  const active = (routes) => (routes.includes(state.route) ? "active" : "");
-  const publicNavItems = [
+function publicNavItems() {
+  return [
     ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
     ["Stockists", "find-reseller", ["find-reseller"]],
-    ...(state.auth.isAuthenticated
-      ? []
-      : [
-          ["Access", "signup", ["signup"]],
-          ["Join", "apply", ["apply"]],
-          ["Enter", "login", ["login", "admin-login"]],
-        ]),
   ];
+}
+
+function topNav() {
+  const active = (routes) => (routes.includes(state.route) ? "active" : "");
+  const publicItems = publicNavItems();
   const resellerNavItems = state.auth.isPending
     ? [
         ["Application", "apply", ["apply"]],
@@ -1433,7 +1438,7 @@ function topNav() {
   const drawerLabel = mobileDrawerLabel();
   const homeRoute = currentPortalHomeRoute();
   const portalMode = currentPortalMode();
-  const desktopItems = portalMode === "public" ? publicNavItems : portalMode === "reseller" ? resellerNavItems : [];
+  const desktopItems = portalMode === "public" ? publicItems : portalMode === "reseller" ? resellerNavItems : [];
   const navActions = state.auth.isAuthenticated
     ? `
       <div class="account-chip">
@@ -1531,33 +1536,28 @@ function mobileDrawerItems() {
   if (state.auth.isAuthenticated) {
     if (state.auth.isAdmin) {
       return [
-        ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
-        ["Stockists", "find-reseller", ["find-reseller"]],
+        ...publicNavItems(),
         ["Account", "account", ["account"]],
         ["Back to Admin", "admin", ["admin"]],
       ];
     }
     if (state.auth.isPending) {
       return [
-        ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
-        ["Stockists", "find-reseller", ["find-reseller"]],
+        ...publicNavItems(),
         ["Application", "apply", ["apply"]],
         ["Account", "account", ["account"]],
       ];
     }
     return [
-      ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
-      ["Stockists", "find-reseller", ["find-reseller"]],
+      ...publicNavItems(),
       ["Request Products", "reseller", ["reseller"]],
       ["My Orders", "history", ["history", "request-confirmation", "current-orders", "expected-orders", "fulfillment", "order"]],
       ["Account", "account", ["account"]],
     ];
   }
   return [
-    ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
-    ["Stockists", "find-reseller", ["find-reseller"]],
-    ["Access", "signup", ["signup"]],
-    ["Join", "apply", ["apply"]],
+    ...publicNavItems(),
+    ["Join Network", "apply", ["apply"]],
     ["Enter", "login", ["login", "admin-login"]],
   ];
 }
@@ -1670,7 +1670,7 @@ function flyerCarousel(flyers) {
             </p>
             <div class="campaign-actions">
               <button class="button primary" data-route="find-reseller">Find Stockists <span class="button-mark" aria-hidden="true">&rarr;</span></button>
-              <button class="button ghost home-ghost-button" data-route="apply">Join Network <span class="button-mark" aria-hidden="true">&nearr;</span></button>
+              <button class="button ghost home-ghost-button" data-route="product-flyers">View Products <span class="button-mark" aria-hidden="true">&nearr;</span></button>
             </div>
           </div>
           <div class="home-flyer-media">
@@ -3389,14 +3389,176 @@ function isSeededProductFlyer(flyer) {
   return WebsiteContent.DEFAULT_PRODUCT_FLYERS.some((item) => item.slug === slug);
 }
 
-function adminSiteControls() {
-  const site = state.siteContent;
-  const hero = site.hero;
-  const theme = site.theme;
+function activeSiteControlSection() {
+  const key = String(state.siteControlSection || "").trim();
+  return SITE_CONTROL_SECTIONS.some(([sectionKey]) => sectionKey === key) ? key : SITE_CONTROL_SECTIONS[0][0];
+}
+
+function siteControlSectionCount(key) {
+  if (key === "product-flyers") return state.publicProductFlyers.length;
+  if (key === "homepage-flyers") return state.homepageFlyers.length;
+  if (key === "stories") return state.blogPosts.length;
+  return "";
+}
+
+function siteControlsSubnav() {
+  const activeKey = activeSiteControlSection();
+  return `
+    <aside class="workspace-subnav site-controls-subnav" aria-label="Site controls menu">
+      <div class="workspace-subnav-head">
+        <h2>Site Controls</h2>
+      </div>
+      <nav>
+        ${SITE_CONTROL_SECTIONS.map(([key, label]) => {
+          const count = siteControlSectionCount(key);
+          return `<button type="button" class="${key === activeKey ? "active" : ""}" data-action="site-controls-section" data-section="${escapeHtml(key)}"><span>${escapeHtml(label)}</span>${count === "" ? "" : `<strong>${escapeHtml(String(count))}</strong>`}</button>`;
+        }).join("")}
+      </nav>
+    </aside>
+  `;
+}
+
+function siteHomepageFlyersPanel() {
+  return `
+    <div class="admin-card site-controls-card">
+      <div class="panel-toolbar"><h2>Homepage Flyers</h2><span>${state.homepageFlyers.length} items</span></div>
+      <form class="workflow-form" data-form="homepage-flyer">
+        ${controlInput("Flyer Title", "flyer_title", "")}
+        ${controlInput("Display Order", "flyer_sort_order", "0", "number")}
+        <label><span>Flyer Image</span><input name="flyer_image" type="file" accept="image/*" /></label>
+        <label class="toggle-row"><input name="flyer_published" type="checkbox" checked /><span>Publish now</span></label>
+        <button class="button primary full" type="submit" ${state.flyerSavePending ? "disabled" : ""}>${state.flyerSavePending ? "Saving..." : "Save Flyer"}</button>
+      </form>
+      ${flyerAdminList()}
+    </div>
+  `;
+}
+
+function siteStoriesPanel() {
+  return `
+    <div class="admin-card site-controls-card">
+      <div class="panel-toolbar"><h2>Stories</h2><span>${state.blogPosts.length} items</span></div>
+      <form class="workflow-form" data-form="blog-post">
+        ${controlInput("Story Title", "story_title", "")}
+        <label><span>Cover Image</span><input name="story_cover_image" type="file" accept="image/*" /></label>
+        ${controlTextarea("Summary", "story_summary", "")}
+        ${controlTextarea("Story Body", "story_body", "")}
+        <label class="toggle-row"><input name="story_published" type="checkbox" /><span>Publish now</span></label>
+        <button class="button primary full" type="submit" ${state.storySavePending ? "disabled" : ""}>${state.storySavePending ? "Saving..." : "Save Story"}</button>
+      </form>
+      ${storyAdminList()}
+    </div>
+  `;
+}
+
+function siteProductFlyersPanel() {
   const productFlyerEdit = publicProductFlyerBeingEdited();
   const productFlyerFormTitle = productFlyerEdit ? "Edit Product Flyer" : "Add Product Flyer";
   const productFlyerSubmitLabel = productFlyerEdit ? "Update Product Flyer" : "Save Product Flyer";
   const productFlyerSavingLabel = productFlyerEdit ? "Updating..." : "Saving...";
+  return `
+    <div class="admin-card site-controls-card public-product-flyer-admin-card">
+      <div class="panel-toolbar"><h2>Public Product Flyers</h2><span>${state.publicProductFlyers.length} items</span></div>
+      <form class="workflow-form" data-form="public-product-flyer">
+        <input type="hidden" name="product_flyer_id" value="${escapeHtml(productFlyerEdit?.id || "")}" />
+        <div class="form-section-title">${escapeHtml(productFlyerFormTitle)}</div>
+        ${controlInput("Product Name", "product_flyer_title", productFlyerEdit?.title || "")}
+        ${controlInput("Product Class", "product_flyer_class", productFlyerEdit?.productClass || "")}
+        ${controlInput("Display Order", "product_flyer_display_order", String(productFlyerEdit?.displayOrder ?? 0), "number")}
+        <label><span>Main Image</span><input name="product_flyer_main_image" type="file" accept="image/*" /></label>
+        ${productFlyerEdit?.mainImagePath ? `<p class="form-note">Current main photo stays unless you choose a replacement.</p>` : ""}
+        <label><span>Secondary Image</span><input name="product_flyer_secondary_image" type="file" accept="image/*" /></label>
+        ${productFlyerEdit?.secondaryImagePath ? `<p class="form-note">Current secondary photo stays unless you choose a replacement.</p>` : ""}
+        ${controlTextarea("Short Description", "product_flyer_short_description", productFlyerEdit?.shortDescription || "")}
+        ${controlTextarea("Flyer Story", "product_flyer_story", productFlyerEdit?.story || "")}
+        <label class="toggle-row"><input name="product_flyer_published" type="checkbox" ${productFlyerEdit?.published ? "checked" : ""} /><span>Publish on public Products page</span></label>
+        <div class="form-actions-row">
+          <button class="button primary full" type="submit" ${state.publicProductFlyerSavePending ? "disabled" : ""}>${state.publicProductFlyerSavePending ? productFlyerSavingLabel : productFlyerSubmitLabel}</button>
+          ${productFlyerEdit ? `<button class="button secondary full" type="button" data-action="cancel-public-product-flyer-edit">Cancel Edit</button>` : ""}
+        </div>
+      </form>
+      ${publicProductFlyerAdminList()}
+    </div>
+  `;
+}
+
+function siteAboutPanel(site) {
+  return `
+    <div class="admin-card site-controls-card">
+      <div class="panel-toolbar"><h2>About Section</h2><span>Public homepage copy</span></div>
+      <form class="workflow-form" data-form="about-content">
+        ${controlInput("Heading", "about_heading", site.about?.heading || "")}
+        ${controlTextarea("Body", "about_body", site.about?.body || "")}
+        <button class="button primary full" type="submit" ${state.aboutSavePending ? "disabled" : ""}>${state.aboutSavePending ? "Saving..." : "Save About Copy"}</button>
+      </form>
+    </div>
+  `;
+}
+
+function siteHeroThemePanel(site, hero, theme) {
+  return `
+    <section class="site-control-grid site-control-grid-focused">
+      <form class="site-control-form" data-form="site-controls">
+        <div class="control-section">
+          <h2>Hero</h2>
+          ${controlInput("Eyebrow", "hero_eyebrow", hero.eyebrow)}
+          ${controlInput("Headline", "hero_title", hero.title)}
+          ${controlTextarea("Subtitle", "hero_copy", hero.copy)}
+          ${controlInput("Background Image Path", "hero_background_image", hero.backgroundImage)}
+          <div class="two-fields">
+            ${controlInput("Primary Button", "hero_primary_cta", hero.primaryCta)}
+            ${controlInput("Primary Route", "hero_primary_route", hero.primaryRoute)}
+          </div>
+          <div class="two-fields">
+            ${controlInput("Secondary Button", "hero_secondary_cta", hero.secondaryCta)}
+            ${controlInput("Secondary Route", "hero_secondary_route", hero.secondaryRoute)}
+          </div>
+          <label class="toggle-row"><input name="hero_electricity" type="checkbox" ${hero.electricity ? "checked" : ""} /><span>Show button electricity</span></label>
+        </div>
+        <div class="control-section">
+          <h2>Theme</h2>
+          ${controlInput("Theme Name", "theme_name", theme.name)}
+          <div class="color-grid">
+            ${colorInput("Primary", "theme_primary", theme.primary)}
+            ${colorInput("Primary Dark", "theme_primary_dark", theme.primaryDark)}
+            ${colorInput("Background", "theme_background", theme.background)}
+            ${colorInput("Surface", "theme_surface", theme.surface)}
+            ${colorInput("Electric Accent", "theme_accent", theme.accent)}
+            ${colorInput("Deep Header", "theme_deep", theme.deep)}
+          </div>
+          ${controlTextarea("Reseller Banner", "site_banner", site.banner)}
+        </div>
+        <button class="button primary full" type="submit" ${state.siteSavePending ? "disabled" : ""}>${state.siteSavePending ? "Publishing..." : "Publish Site Controls"}</button>
+      </form>
+      <aside class="site-preview" style="${cssUrl(hero.backgroundImage)}">
+        <div class="site-preview-bg"></div>
+        <div class="site-preview-content">
+          <span>${escapeHtml(hero.eyebrow)}</span>
+          <h2>${escapeHtml(hero.title)}</h2>
+          <p>${escapeHtml(hero.copy)}</p>
+          <div class="hero-actions">
+            <button class="button primary${hero.electricity ? " charge-button" : ""}">${escapeHtml(hero.primaryCta)} <span class="button-mark" aria-hidden="true">&nearr;</span></button>
+            <button class="button ghost${hero.electricity ? " charge-button subdued" : ""}">${escapeHtml(hero.secondaryCta)} <span class="button-mark" aria-hidden="true">&rarr;</span></button>
+          </div>
+        </div>
+      </aside>
+    </section>
+  `;
+}
+
+function siteControlsPanel(section, site, hero, theme) {
+  if (section === "homepage-flyers") return siteHomepageFlyersPanel();
+  if (section === "stories") return siteStoriesPanel();
+  if (section === "about") return siteAboutPanel(site);
+  if (section === "hero-theme") return siteHeroThemePanel(site, hero, theme);
+  return siteProductFlyersPanel();
+}
+
+function adminSiteControls() {
+  const site = state.siteContent;
+  const hero = site.hero;
+  const theme = site.theme;
+  const section = activeSiteControlSection();
   return `
     <main class="admin-layout">
       ${adminSidebar("site")}
@@ -3408,108 +3570,11 @@ function adminSiteControls() {
         ${state.siteSaved ? `<p class="notice success">Site controls published to Supabase. The public site now reads the active hero, theme, and banner from the database.</p>` : ""}
         ${state.siteSaveError ? `<p class="notice error">${escapeHtml(state.siteSaveError)}</p>` : ""}
         ${state.adminContentError ? `<p class="notice error">${escapeHtml(state.adminContentError)}</p>` : ""}
-        <section class="website-content-grid">
-          <div class="admin-card">
-            <div class="panel-toolbar"><h2>Homepage Flyers</h2><span>${state.homepageFlyers.length} items</span></div>
-            <form class="workflow-form" data-form="homepage-flyer">
-              ${controlInput("Flyer Title", "flyer_title", "")}
-              ${controlInput("Display Order", "flyer_sort_order", "0", "number")}
-              <label><span>Flyer Image</span><input name="flyer_image" type="file" accept="image/*" /></label>
-              <label class="toggle-row"><input name="flyer_published" type="checkbox" checked /><span>Publish now</span></label>
-              <button class="button primary full" type="submit" ${state.flyerSavePending ? "disabled" : ""}>${state.flyerSavePending ? "Saving..." : "Save Flyer"}</button>
-            </form>
-            ${flyerAdminList()}
+        <section class="site-controls-workspace">
+          ${siteControlsSubnav()}
+          <div class="site-controls-panel">
+            ${siteControlsPanel(section, site, hero, theme)}
           </div>
-          <div class="admin-card">
-            <div class="panel-toolbar"><h2>Stories</h2><span>${state.blogPosts.length} items</span></div>
-            <form class="workflow-form" data-form="blog-post">
-              ${controlInput("Story Title", "story_title", "")}
-              <label><span>Cover Image</span><input name="story_cover_image" type="file" accept="image/*" /></label>
-              ${controlTextarea("Summary", "story_summary", "")}
-              ${controlTextarea("Story Body", "story_body", "")}
-              <label class="toggle-row"><input name="story_published" type="checkbox" /><span>Publish now</span></label>
-              <button class="button primary full" type="submit" ${state.storySavePending ? "disabled" : ""}>${state.storySavePending ? "Saving..." : "Save Story"}</button>
-            </form>
-            ${storyAdminList()}
-          </div>
-          <div class="admin-card public-product-flyer-admin-card">
-            <div class="panel-toolbar"><h2>Public Product Flyers</h2><span>${state.publicProductFlyers.length} items</span></div>
-            <form class="workflow-form" data-form="public-product-flyer">
-              <input type="hidden" name="product_flyer_id" value="${escapeHtml(productFlyerEdit?.id || "")}" />
-              <div class="form-section-title">${escapeHtml(productFlyerFormTitle)}</div>
-              ${controlInput("Product Name", "product_flyer_title", productFlyerEdit?.title || "")}
-              ${controlInput("Product Class", "product_flyer_class", productFlyerEdit?.productClass || "")}
-              ${controlInput("Display Order", "product_flyer_display_order", String(productFlyerEdit?.displayOrder ?? 0), "number")}
-              <label><span>Main Image</span><input name="product_flyer_main_image" type="file" accept="image/*" /></label>
-              ${productFlyerEdit?.mainImagePath ? `<p class="form-note">Current main photo stays unless you choose a replacement.</p>` : ""}
-              <label><span>Secondary Image</span><input name="product_flyer_secondary_image" type="file" accept="image/*" /></label>
-              ${productFlyerEdit?.secondaryImagePath ? `<p class="form-note">Current secondary photo stays unless you choose a replacement.</p>` : ""}
-              ${controlTextarea("Short Description", "product_flyer_short_description", productFlyerEdit?.shortDescription || "")}
-              ${controlTextarea("Flyer Story", "product_flyer_story", productFlyerEdit?.story || "")}
-              <label class="toggle-row"><input name="product_flyer_published" type="checkbox" ${productFlyerEdit?.published ? "checked" : ""} /><span>Publish on public Products page</span></label>
-              <div class="form-actions-row">
-                <button class="button primary full" type="submit" ${state.publicProductFlyerSavePending ? "disabled" : ""}>${state.publicProductFlyerSavePending ? productFlyerSavingLabel : productFlyerSubmitLabel}</button>
-                ${productFlyerEdit ? `<button class="button secondary full" type="button" data-action="cancel-public-product-flyer-edit">Cancel Edit</button>` : ""}
-              </div>
-            </form>
-            ${publicProductFlyerAdminList()}
-          </div>
-        </section>
-        <section class="admin-panels">
-          <div class="admin-card">
-            <div class="panel-toolbar"><h2>About Section</h2><span>Public homepage copy</span></div>
-            <form class="workflow-form" data-form="about-content">
-              ${controlInput("Heading", "about_heading", site.about?.heading || "")}
-              ${controlTextarea("Body", "about_body", site.about?.body || "")}
-              <button class="button primary full" type="submit" ${state.aboutSavePending ? "disabled" : ""}>${state.aboutSavePending ? "Saving..." : "Save About Copy"}</button>
-            </form>
-          </div>
-        </section>
-        <section class="site-control-grid">
-          <form class="site-control-form" data-form="site-controls">
-            <div class="control-section">
-              <h2>Hero</h2>
-              ${controlInput("Eyebrow", "hero_eyebrow", hero.eyebrow)}
-              ${controlInput("Headline", "hero_title", hero.title)}
-              ${controlTextarea("Subtitle", "hero_copy", hero.copy)}
-              ${controlInput("Background Image Path", "hero_background_image", hero.backgroundImage)}
-              <div class="two-fields">
-                ${controlInput("Primary Button", "hero_primary_cta", hero.primaryCta)}
-                ${controlInput("Primary Route", "hero_primary_route", hero.primaryRoute)}
-              </div>
-              <div class="two-fields">
-                ${controlInput("Secondary Button", "hero_secondary_cta", hero.secondaryCta)}
-                ${controlInput("Secondary Route", "hero_secondary_route", hero.secondaryRoute)}
-              </div>
-              <label class="toggle-row"><input name="hero_electricity" type="checkbox" ${hero.electricity ? "checked" : ""} /><span>Show button electricity</span></label>
-            </div>
-            <div class="control-section">
-              <h2>Theme</h2>
-              ${controlInput("Theme Name", "theme_name", theme.name)}
-              <div class="color-grid">
-                ${colorInput("Primary", "theme_primary", theme.primary)}
-                ${colorInput("Primary Dark", "theme_primary_dark", theme.primaryDark)}
-                ${colorInput("Background", "theme_background", theme.background)}
-                ${colorInput("Surface", "theme_surface", theme.surface)}
-                ${colorInput("Electric Accent", "theme_accent", theme.accent)}
-                ${colorInput("Deep Header", "theme_deep", theme.deep)}
-              </div>
-              ${controlTextarea("Reseller Banner", "site_banner", site.banner)}
-            </div>
-            <button class="button primary full" type="submit" ${state.siteSavePending ? "disabled" : ""}>${state.siteSavePending ? "Publishing..." : "Publish Site Controls"}</button>
-          </form>
-          <aside class="site-preview" style="${cssUrl(hero.backgroundImage)}">
-            <div class="site-preview-bg"></div>
-            <div class="site-preview-content">
-              <span>${escapeHtml(hero.eyebrow)}</span>
-              <h2>${escapeHtml(hero.title)}</h2>
-              <p>${escapeHtml(hero.copy)}</p>
-              <div class="hero-actions">
-                <button class="button primary${hero.electricity ? " charge-button" : ""}">${escapeHtml(hero.primaryCta)} <span class="button-mark" aria-hidden="true">&nearr;</span></button>
-                <button class="button ghost${hero.electricity ? " charge-button subdued" : ""}">${escapeHtml(hero.secondaryCta)} <span class="button-mark" aria-hidden="true">&rarr;</span></button>
-              </div>
-            </div>
-          </aside>
         </section>
       </section>
     </main>
@@ -4812,6 +4877,13 @@ function bindEvents() {
   document.querySelectorAll("[data-action='revoke-admin-invite']").forEach((button) => {
     button.addEventListener("click", async () => {
       await handleAdminInviteRevoke(button.getAttribute("data-invite-id"));
+    });
+  });
+
+  document.querySelectorAll("[data-action='site-controls-section']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.siteControlSection = button.getAttribute("data-section") || "product-flyers";
+      render();
     });
   });
 
