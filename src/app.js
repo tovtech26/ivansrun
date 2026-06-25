@@ -1810,8 +1810,34 @@ function productFlyerCard(flyer) {
   `;
 }
 
+function productFlyerCategoryDescription(productClass) {
+  switch (productClass) {
+    case "Everyday Trainer":
+      return "Daily movement shoes for public discovery, easy styling, and regular training.";
+    case "Performance Trainer":
+      return "Training-focused shoes for faster sessions, stronger support, and more technical runs.";
+    case "Race Day Performance":
+      return "Top-end public performance stories for race-day intent and premium speed.";
+    default:
+      return "Public product flyers from Irunsvan Africa.";
+  }
+}
+
+function productFlyerCategorySection(group) {
+  return `
+    <section class="product-flyer-category">
+      <div class="product-flyer-category-head">
+        <h2>${escapeHtml(group.productClass)}</h2>
+        <p>${escapeHtml(productFlyerCategoryDescription(group.productClass))}</p>
+      </div>
+      <div class="product-flyer-grid">${group.items.map(productFlyerCard).join("")}</div>
+    </section>
+  `;
+}
+
 function productFlyersPage() {
   const flyers = publicProductFlyerItems();
+  const groups = WebsiteContent.groupProductFlyersByClass(flyers);
   return `
     <main class="public-home product-flyers-page">
       ${homeBokehBackdrop()}
@@ -1823,8 +1849,8 @@ function productFlyersPage() {
             <p>Public product flyers from Irunsvan Africa. These pages are for display and product storytelling only.</p>
           </section>
           ${
-            flyers.length
-              ? `<section class="product-flyer-grid">${flyers.map(productFlyerCard).join("")}</section>`
+            groups.length
+              ? groups.map(productFlyerCategorySection).join("")
               : `<section class="content-empty-state"><p>No public product flyers are published yet.</p></section>`
           }
         </div>

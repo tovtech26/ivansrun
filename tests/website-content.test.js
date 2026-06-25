@@ -8,6 +8,7 @@ const {
   normalizeFlyers,
   normalizeStories,
   normalizeProductFlyers,
+  groupProductFlyersByClass,
   buildContentImageRecord,
   buildFlyerPayload,
   buildStoryPayload,
@@ -33,9 +34,29 @@ assert.deepEqual(
 assert.equal(normalizeFlyers([])[0].imagePath, DEFAULT_HOME_FLYERS[0].imagePath);
 assert.deepEqual(
   normalizeProductFlyers(DEFAULT_PRODUCT_FLYERS).map((item) => item.slug),
-  ["demo-irunsvan-005-runner", "demo-irunsvan-026-runner"],
+  [
+    "irunsvan-028-heat-1-0",
+    "irunsvan-166-fei-ran-3-0",
+    "irunsvan-121-chasing-wind-1-0",
+    "irunsvan-126-chasing-light-1-0",
+    "irunsvan-066-heat-2-0",
+    "irunsvan-072-breeze-suc-1-0",
+    "irunsvan-098-heat-2-0-pro",
+    "irunsvan-125-feiran-gt-3-0",
+    "irunsvan-131-shadow-wing-3-0",
+    "irunsvan-087-shadowing-2-0-plus",
+    "irunsvan-2503-shadow-wing-2-0-pro",
+  ],
 );
 assert.equal(normalizeProductFlyers(DEFAULT_PRODUCT_FLYERS)[0].mainImagePath.startsWith("/public/product-images/"), true);
+assert.deepEqual(
+  groupProductFlyersByClass(normalizeProductFlyers(DEFAULT_PRODUCT_FLYERS)).map((group) => [group.productClass, group.items.length]),
+  [
+    ["Everyday Trainer", 3],
+    ["Performance Trainer", 4],
+    ["Race Day Performance", 4],
+  ],
+);
 
 assert.deepEqual(
   normalizeStories([

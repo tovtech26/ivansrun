@@ -572,6 +572,37 @@ body {
   max-width: 680px;
 }
 
+.product-flyer-category {
+  display: grid;
+  gap: 16px;
+}
+
+.product-flyer-category-head {
+  align-items: end;
+  border-bottom: 1px solid var(--home-line);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 0.78fr) minmax(280px, 0.42fr);
+  padding-bottom: 14px;
+}
+
+.product-flyer-category-head h2 {
+  color: var(--home-ink);
+  font-family: "Oswald", "Hanken Grotesk", sans-serif;
+  font-size: clamp(32px, 4.6vw, 64px);
+  letter-spacing: 0.02em;
+  line-height: 0.96;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.product-flyer-category-head p {
+  color: var(--home-muted);
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 0;
+}
+
 .product-flyer-grid {
   display: grid;
   gap: 18px;
@@ -933,6 +964,10 @@ body {
   .product-flyer-grid,
   .product-flyer-card,
   .product-flyer-detail {
+    grid-template-columns: 1fr;
+  }
+
+  .product-flyer-category-head {
     grid-template-columns: 1fr;
   }
 

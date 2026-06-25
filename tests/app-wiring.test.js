@@ -118,6 +118,8 @@ assert.equal(appSource.includes('class="home-bokeh-background"'), true, "Homepag
 assert.equal(appSource.includes('class="public-home-shell"'), true, "Homepage should render inside a tighter editorial shell.");
 assert.equal(appSource.includes('class="public-home product-flyers-page"'), true, "Public product flyers page must use the same homepage shell styling.");
 assert.equal(appSource.includes("WebsiteContent.DEFAULT_PRODUCT_FLYERS"), true, "Public product flyers must have demo fallback rows when the remote flyer table is not available.");
+assert.equal(appSource.includes("WebsiteContent.groupProductFlyersByClass"), true, "Public product flyers page must group flyers by the Word document product categories.");
+assert.equal(appSource.includes("product-flyer-category"), true, "Public product flyers page must render category sections.");
 assert.equal(appSource.includes('class="campaign-eyebrow"'), true, "Homepage flyer hero should render campaign metadata labels.");
 assert.equal(appSource.includes("this.src='Flyer Templates/Flyer Template.jpg'"), true, "Homepage flyer image should fall back to the local flyer if uploaded media fails.");
 assert.equal(appSource.includes("ENGINEERED FOR THE CONTINENT"), true, "Homepage about section should use the manifesto heading fallback.");
@@ -170,6 +172,7 @@ assert.equal(appSource.includes("function productFlyersPage("), true, "Public pr
 assert.equal(appSource.includes("function productFlyerDetailPage("), true, "Public product flyer detail page must exist.");
 assert.equal(appSource.includes('data-route="product-flyer"'), true, "Public product flyer cards must route to public flyer detail pages.");
 assert.equal(styleSource.includes(".product-flyer-grid"), true, "Public product flyer listing must have dedicated styling.");
+assert.equal(styleSource.includes(".product-flyer-category"), true, "Public product flyer category sections must have dedicated styling.");
 assert.equal(productFlyerPageSource.includes("base_price"), false, "Public flyer pages must not expose reseller pricing.");
 assert.equal(appSource.includes("Website Content"), true, "Admin page title should reflect content management.");
 assert.equal(appSource.includes('data-form="admin-invite"'), true, "Team page must let admins create private invite links.");

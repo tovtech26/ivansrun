@@ -11,29 +11,135 @@
   ];
   const DEFAULT_PRODUCT_FLYERS = [
     {
-      id: "demo-public-flyer-005",
-      title: "Demo IRUNSVAN 005 Runner",
-      slug: "demo-irunsvan-005-runner",
-      productClass: "Running Shoe",
-      shortDescription: "A lightweight public flyer example for testing the magazine-style product display.",
-      story:
-        "Built for clean movement and daily distance, this demo flyer shows how an Irunsvan running product can be presented as a visual story instead of a shopping card. Use it to test spacing, imagery, detail copy, and the public Products page before publishing real product content.",
-      mainImagePath: "/public/product-images/SKUs/005/005-1.jpg",
-      secondaryImagePath: "/public/product-images/SKUs/005/005-3.jpg",
+      id: "fallback-public-flyer-028",
+      title: "IRUNSVAN 028 HEAT 1.0",
+      slug: "irunsvan-028-heat-1-0",
+      productClass: "Everyday Trainer",
+      shortDescription: "A public display flyer for daily trainer discovery.",
+      story: "Everyday Trainer models are built for easy daily movement, clean styling, and dependable comfort across regular training and casual wear.",
+      mainImagePath: "/public/product-images/SKUs/028/028-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/028/028-4.jpg",
       displayOrder: 10,
       published: true,
     },
     {
-      id: "demo-public-flyer-026",
-      title: "Demo IRUNSVAN 026 Runner",
-      slug: "demo-irunsvan-026-runner",
-      productClass: "Running Shoe",
-      shortDescription: "A second removable flyer for checking the listing grid and detail view.",
-      story:
-        "This demo product gives the public Products page more than one card, making it easier to review the flyer rhythm, image treatment, and detail-page layout. Replace it with the real public product flyers once the Supabase table is live.",
-      mainImagePath: "/public/product-images/SKUs/026/026-1.jpg",
-      secondaryImagePath: "/public/product-images/SKUs/026/026-4.jpg",
+      id: "fallback-public-flyer-166",
+      title: "IRUNSVAN 166 FEI RAN 3.0",
+      slug: "irunsvan-166-fei-ran-3-0",
+      productClass: "Everyday Trainer",
+      shortDescription: "A lightweight everyday trainer presentation.",
+      story: "FEI RAN 3.0 sits in the everyday class for buyers who want a versatile Irunsvan trainer with a lighter, more active profile.",
+      mainImagePath: "/public/product-images/SKUs/166/166-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/166/166-2.jpg",
       displayOrder: 20,
+      published: true,
+    },
+    {
+      id: "fallback-public-flyer-121",
+      title: "IRUNSVAN 121 Chasing Wind 1.0",
+      slug: "irunsvan-121-chasing-wind-1-0",
+      productClass: "Everyday Trainer",
+      shortDescription: "A daily trainer flyer for steady movement.",
+      story: "Chasing Wind 1.0 rounds out the everyday trainer category with a simple, usable profile for daily runs, walking, and lifestyle wear.",
+      mainImagePath: "/public/product-images/SKUs/121/121-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/121/121-2.jpg",
+      displayOrder: 30,
+      published: true,
+    },
+    {
+      id: "fallback-public-flyer-126",
+      title: "IRUNSVAN 126 CHASING LIGHT 1.0",
+      slug: "irunsvan-126-chasing-light-1-0",
+      productClass: "Performance Trainer",
+      shortDescription: "A performance trainer flyer for sharper sessions.",
+      story: "Performance Trainer models bring a stronger training signal for faster workouts, tempo days, and more intentional road movement.",
+      mainImagePath: "/public/product-images/SKUs/126/126-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/126/126-3.jpg",
+      displayOrder: 110,
+      published: true,
+    },
+    {
+      id: "fallback-public-flyer-066",
+      title: "IRUNSVAN 066 HEAT 2.0",
+      slug: "irunsvan-066-heat-2-0",
+      productClass: "Performance Trainer",
+      shortDescription: "A structured performance trainer presentation.",
+      story: "HEAT 2.0 is presented as a more capable training option for customers who want a stronger feel than a basic daily trainer.",
+      mainImagePath: "/public/product-images/SKUs/066/066-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/066/066-3.jpg",
+      displayOrder: 120,
+      published: true,
+    },
+    {
+      id: "fallback-public-flyer-072",
+      title: "IRUNSVAN 072 BREEZE SUC 1.0",
+      slug: "irunsvan-072-breeze-suc-1-0",
+      productClass: "Performance Trainer",
+      shortDescription: "A breathable performance trainer flyer.",
+      story: "BREEZE SUC 1.0 keeps the performance trainer class visually light while still sitting above the everyday models in training intent.",
+      mainImagePath: "/public/product-images/SKUs/072/072-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/072/072-3.jpg",
+      displayOrder: 130,
+      published: true,
+    },
+    {
+      id: "fallback-public-flyer-098",
+      title: "IRUNSVAN 098 HEAT 2.0 PRO",
+      slug: "irunsvan-098-heat-2-0-pro",
+      productClass: "Performance Trainer",
+      shortDescription: "A pro-level performance trainer presentation.",
+      story: "HEAT 2.0 PRO is the strongest visual signal in the Performance Trainer category before the range moves into race-day shoes.",
+      mainImagePath: "/public/product-images/SKUs/098/098-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/098/098-3.jpg",
+      displayOrder: 140,
+      published: true,
+    },
+    {
+      id: "fallback-public-flyer-125",
+      title: "IRUNSVAN 125 Feiran GT 3.0",
+      slug: "irunsvan-125-feiran-gt-3-0",
+      productClass: "Race Day Performance",
+      shortDescription: "A race-day performance flyer for top-end motion.",
+      story: "Race Day Performance models are the sharpest public-facing shoes in the range, built to read faster, lighter, and more competition-focused.",
+      mainImagePath: "/public/product-images/SKUs/125/125-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/125/125-3.jpg",
+      displayOrder: 210,
+      published: true,
+    },
+    {
+      id: "fallback-public-flyer-131",
+      title: "IRUNSVAN 131 SHADOW WING 3.0",
+      slug: "irunsvan-131-shadow-wing-3-0",
+      productClass: "Race Day Performance",
+      shortDescription: "A high-class race-day product flyer.",
+      story: "SHADOW WING 3.0 is presented for the highest-performance lane: a shoe meant to feel technical, fast, and visually premium.",
+      mainImagePath: "/public/product-images/SKUs/131/131-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/131/131-4.jpg",
+      displayOrder: 220,
+      published: true,
+    },
+    {
+      id: "fallback-public-flyer-087",
+      title: "IRUNSVAN 087 SHADOWING 2.0+",
+      slug: "irunsvan-087-shadowing-2-0-plus",
+      productClass: "Race Day Performance",
+      shortDescription: "A race-day flyer for technical speed.",
+      story: "SHADOWING 2.0+ gives the Race Day Performance section another fast visual option while keeping the page organized by product class.",
+      mainImagePath: "/public/product-images/SKUs/087/1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/087/2.jpg",
+      displayOrder: 230,
+      published: true,
+    },
+    {
+      id: "fallback-public-flyer-2503",
+      title: "IRUNSVAN 2503 SHADOW WING 2.0 PRO",
+      slug: "irunsvan-2503-shadow-wing-2-0-pro",
+      productClass: "Race Day Performance",
+      shortDescription: "A pro race-day flyer for the public Products page.",
+      story: "SHADOW WING 2.0 PRO closes the race-day category as a focused public flyer for high-intent performance storytelling.",
+      mainImagePath: "/public/product-images/SKUs/2503/2503-1.jpg",
+      secondaryImagePath: "/public/product-images/SKUs/2503/2503-3.jpg",
+      displayOrder: 240,
       published: true,
     },
   ];
@@ -133,6 +239,21 @@
       .sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title));
   }
 
+  function groupProductFlyersByClass(rows = []) {
+    const groups = new Map();
+    normalizeProductFlyers(rows, { includeUnpublished: true }).forEach((flyer) => {
+      const key = flyer.productClass || "Product";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(flyer);
+    });
+    return [...groups.entries()]
+      .map(([productClass, items]) => ({
+        productClass,
+        items: items.sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title)),
+      }))
+      .sort((left, right) => left.items[0].displayOrder - right.items[0].displayOrder || left.productClass.localeCompare(right.productClass));
+  }
+
   function buildContentImageRecord({ folder, file, uniquePrefix = "" } = {}) {
     const safeFolder = fileSlugPart(folder) || "content";
     const name = fileSlugPart(file?.name) || "image";
@@ -197,6 +318,7 @@
     normalizeFlyers,
     normalizeStories,
     normalizeProductFlyers,
+    groupProductFlyersByClass,
     buildContentImageRecord,
     buildFlyerPayload,
     buildStoryPayload,
