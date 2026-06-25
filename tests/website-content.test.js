@@ -13,6 +13,7 @@ const {
   buildFlyerPayload,
   buildStoryPayload,
   buildProductFlyerPayload,
+  buildProductFlyerUpdatePayload,
 } = require("../src/website-content.js");
 
 assert.equal(buildStorySlug("Summer Drop: Botswana Launch!"), "summer-drop-botswana-launch");
@@ -187,6 +188,34 @@ assert.deepEqual(
     published: true,
     created_by: "admin-1",
     updated_by: "admin-1",
+  },
+);
+
+assert.deepEqual(
+  buildProductFlyerUpdatePayload(
+    {
+      title: "IRUNSVAN 005 Running Shoe Updated",
+      productClass: "Performance Trainer",
+      shortDescription: "Updated public flyer description.",
+      story: "Updated magazine style product story.",
+      mainImagePath: "content/public-products/005-main-existing.jpg",
+      secondaryImagePath: "content/public-products/005-side-existing.jpg",
+      displayOrder: "9",
+      published: false,
+    },
+    "admin-2",
+  ),
+  {
+    title: "IRUNSVAN 005 Running Shoe Updated",
+    slug: "irunsvan-005-running-shoe-updated",
+    product_class: "Performance Trainer",
+    short_description: "Updated public flyer description.",
+    story: "Updated magazine style product story.",
+    main_image_path: "content/public-products/005-main-existing.jpg",
+    secondary_image_path: "content/public-products/005-side-existing.jpg",
+    display_order: 9,
+    published: false,
+    updated_by: "admin-2",
   },
 );
 

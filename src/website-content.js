@@ -308,6 +308,22 @@
     };
   }
 
+  function buildProductFlyerUpdatePayload(input = {}, adminUserId = null) {
+    const title = safeText(input.title) || "Public Product Flyer";
+    return {
+      title,
+      slug: buildProductFlyerSlug(input.slug || title),
+      product_class: safeText(input.productClass || input.product_class) || "Product",
+      short_description: safeText(input.shortDescription || input.short_description) || null,
+      story: safeText(input.story) || null,
+      main_image_path: safeText(input.mainImagePath || input.main_image_path) || null,
+      secondary_image_path: safeText(input.secondaryImagePath || input.secondary_image_path) || null,
+      display_order: safeInteger(input.displayOrder ?? input.display_order, 0),
+      published: safeBool(input.published),
+      updated_by: adminUserId,
+    };
+  }
+
   const api = {
     CONTENT_IMAGE_BUCKET,
     DEFAULT_HOME_FLYERS,
@@ -323,6 +339,7 @@
     buildFlyerPayload,
     buildStoryPayload,
     buildProductFlyerPayload,
+    buildProductFlyerUpdatePayload,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -158,6 +158,7 @@ const state = {
   flyerSavePending: false,
   storySavePending: false,
   publicProductFlyerSavePending: false,
+  publicProductFlyerEditingId: null,
   aboutSavePending: false,
   importPending: false,
   stockResetPending: false,
@@ -3358,14 +3359,27 @@ function publicProductFlyerAdminList() {
     imagePath: flyer.mainImagePath,
     meta: `${flyer.productClass} - ${flyer.published ? "Published" : "Draft"}`,
     published: flyer.published,
-    actions: `<button type="button" class="button mini secondary" data-action="delete-public-product-flyer" data-flyer-id="${escapeHtml(flyer.id)}">Delete</button>`,
+    actions: `
+      <button type="button" class="button mini" data-action="edit-public-product-flyer" data-flyer-id="${escapeHtml(flyer.id)}">Edit</button>
+      <button type="button" class="button mini secondary" data-action="delete-public-product-flyer" data-flyer-id="${escapeHtml(flyer.id)}">Delete</button>
+    `,
   })).join("")}</div>`;
+}
+
+function publicProductFlyerBeingEdited() {
+  const id = String(state.publicProductFlyerEditingId || "").trim();
+  if (!id) return null;
+  return (Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : []).find((flyer) => flyer.id === id) || null;
 }
 
 function adminSiteControls() {
   const site = state.siteContent;
   const hero = site.hero;
   const theme = site.theme;
+  const productFlyerEdit = publicProductFlyerBeingEdited();
+  const productFlyerFormTitle = productFlyerEdit ? "Edit Product Flyer" : "Add Product Flyer";
+  const productFlyerSubmitLabel = productFlyerEdit ? "Update Product Flyer" : "Save Product Flyer";
+  const productFlyerSavingLabel = productFlyerEdit ? "Updating..." : "Saving...";
   return `
     <main class="admin-layout">
       ${adminSidebar("site")}
@@ -3404,15 +3418,22 @@ function adminSiteControls() {
           <div class="admin-card">
             <div class="panel-toolbar"><h2>Public Product Flyers</h2><span>${state.publicProductFlyers.length} items</span></div>
             <form class="workflow-form" data-form="public-product-flyer">
-              ${controlInput("Product Name", "product_flyer_title", "")}
-              ${controlInput("Product Class", "product_flyer_class", "")}
-              ${controlInput("Display Order", "product_flyer_display_order", "0", "number")}
+              <input type="hidden" name="product_flyer_id" value="${escapeHtml(productFlyerEdit?.id || "")}" />
+              <div class="form-section-title">${escapeHtml(productFlyerFormTitle)}</div>
+              ${controlInput("Product Name", "product_flyer_title", productFlyerEdit?.title || "")}
+              ${controlInput("Product Class", "product_flyer_class", productFlyerEdit?.productClass || "")}
+              ${controlInput("Display Order", "product_flyer_display_order", String(productFlyerEdit?.displayOrder ?? 0), "number")}
               <label><span>Main Image</span><input name="product_flyer_main_image" type="file" accept="image/*" /></label>
+              ${productFlyerEdit?.mainImagePath ? `<p class="form-note">Current main photo stays unless you choose a replacement.</p>` : ""}
               <label><span>Secondary Image</span><input name="product_flyer_secondary_image" type="file" accept="image/*" /></label>
-              ${controlTextarea("Short Description", "product_flyer_short_description", "")}
-              ${controlTextarea("Flyer Story", "product_flyer_story", "")}
-              <label class="toggle-row"><input name="product_flyer_published" type="checkbox" /><span>Publish on public Products page</span></label>
-              <button class="button primary full" type="submit" ${state.publicProductFlyerSavePending ? "disabled" : ""}>${state.publicProductFlyerSavePending ? "Saving..." : "Save Product Flyer"}</button>
+              ${productFlyerEdit?.secondaryImagePath ? `<p class="form-note">Current secondary photo stays unless you choose a replacement.</p>` : ""}
+              ${controlTextarea("Short Description", "product_flyer_short_description", productFlyerEdit?.shortDescription || "")}
+              ${controlTextarea("Flyer Story", "product_flyer_story", productFlyerEdit?.story || "")}
+              <label class="toggle-row"><input name="product_flyer_published" type="checkbox" ${productFlyerEdit?.published ? "checked" : ""} /><span>Publish on public Products page</span></label>
+              <div class="form-actions-row">
+                <button class="button primary full" type="submit" ${state.publicProductFlyerSavePending ? "disabled" : ""}>${state.publicProductFlyerSavePending ? productFlyerSavingLabel : productFlyerSubmitLabel}</button>
+                ${productFlyerEdit ? `<button class="button secondary full" type="button" data-action="cancel-public-product-flyer-edit">Cancel Edit</button>` : ""}
+              </div>
             </form>
             ${publicProductFlyerAdminList()}
           </div>
@@ -4777,6 +4798,18 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='edit-public-product-flyer']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await editPublicProductFlyer(button.getAttribute("data-flyer-id"));
+    });
+  });
+
+  document.querySelectorAll("[data-action='cancel-public-product-flyer-edit']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await cancelPublicProductFlyerEdit();
+    });
+  });
+
   document.querySelectorAll("[data-action='delete-public-product-flyer']").forEach((button) => {
     button.addEventListener("click", async () => {
       await deletePublicProductFlyer(button.getAttribute("data-flyer-id"));
@@ -4797,7 +4830,11 @@ function bindEvents() {
       if (formName === "team-role") await handleTeamRoleSave(form);
       if (formName === "homepage-flyer") await saveHomepageFlyer(form);
       if (formName === "blog-post") await saveBlogPost(form);
-      if (formName === "public-product-flyer") await savePublicProductFlyer(form);
+      if (formName === "public-product-flyer") {
+        const flyerId = String(new FormData(form).get("product_flyer_id") || "").trim();
+        if (flyerId) await updatePublicProductFlyer(form);
+        else await savePublicProductFlyer(form);
+      }
       if (formName === "about-content") await saveAboutContent(form);
       if (formName === "site-controls") await saveSiteControls(form);
       if (formName === "product") await handleProductSubmit(form);
@@ -5923,6 +5960,83 @@ async function savePublicProductFlyer(form) {
   }
 }
 
+async function editPublicProductFlyer(flyerId) {
+  const id = String(flyerId || "").trim();
+  if (!id) return;
+  const flyer = (Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : []).find((item) => item.id === id);
+  if (!flyer) {
+    state.adminContentError = "That public product flyer could not be found.";
+    render();
+    return;
+  }
+  state.publicProductFlyerEditingId = id;
+  state.adminContentError = null;
+  render();
+}
+
+async function cancelPublicProductFlyerEdit() {
+  state.publicProductFlyerEditingId = null;
+  state.adminContentError = null;
+  render();
+}
+
+async function updatePublicProductFlyer(form) {
+  const data = new FormData(form);
+  const id = String(data.get("product_flyer_id") || state.publicProductFlyerEditingId || "").trim();
+  const currentFlyer = (Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : []).find((flyer) => flyer.id === id);
+  state.publicProductFlyerSavePending = true;
+  state.adminContentError = null;
+  render();
+  try {
+    if (!id || !currentFlyer) throw new Error("Choose a public product flyer before updating.");
+    const mainFile = form.elements.namedItem("product_flyer_main_image")?.files?.[0];
+    const secondaryFile = form.elements.namedItem("product_flyer_secondary_image")?.files?.[0];
+    const uniquePrefix = new Date().toISOString().replace(/\D/g, "");
+    let mainImagePath = currentFlyer.mainImagePath || "";
+    let secondaryImagePath = currentFlyer.secondaryImagePath || "";
+    if (mainFile) {
+      const mainRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: mainFile, uniquePrefix });
+      await uploadContentImage(mainRecord);
+      mainImagePath = mainRecord.storagePath;
+    }
+    if (secondaryFile) {
+      const secondaryRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: secondaryFile, uniquePrefix: `${uniquePrefix}-secondary` });
+      await uploadContentImage(secondaryRecord);
+      secondaryImagePath = secondaryRecord.storagePath;
+    }
+    if (!mainImagePath) throw new Error("Choose a main product flyer image before updating.");
+    const [updated] = await updateAuthedSupabase("public_product_flyers", id,
+      WebsiteContent.buildProductFlyerUpdatePayload(
+        {
+          title: data.get("product_flyer_title"),
+          productClass: data.get("product_flyer_class"),
+          shortDescription: data.get("product_flyer_short_description"),
+          story: data.get("product_flyer_story"),
+          mainImagePath,
+          secondaryImagePath,
+          displayOrder: data.get("product_flyer_display_order"),
+          published: data.get("product_flyer_published") === "on",
+        },
+        state.auth.user?.id || null,
+      ),
+    );
+    state.publicProductFlyers = WebsiteContent.normalizeProductFlyers(
+      state.publicProductFlyers.map((flyer) => (flyer.id === id ? updated : flyer)),
+      { includeUnpublished: true },
+    );
+    if (state.selectedProductFlyerSlug === currentFlyer.slug) {
+      const normalizedUpdated = WebsiteContent.normalizeProductFlyers([updated], { includeUnpublished: true })[0];
+      state.selectedProductFlyerSlug = normalizedUpdated?.slug || null;
+    }
+    state.publicProductFlyerEditingId = null;
+  } catch (error) {
+    state.adminContentError = error instanceof Error ? error.message : "Unable to update public product flyer";
+  } finally {
+    state.publicProductFlyerSavePending = false;
+    render();
+  }
+}
+
 async function deletePublicProductFlyer(flyerId) {
   const id = String(flyerId || "").trim();
   if (!id) return;
@@ -5930,6 +6044,9 @@ async function deletePublicProductFlyer(flyerId) {
   try {
     await deleteAuthedSupabase("public_product_flyers", `id=eq.${encodeURIComponent(id)}`);
     state.publicProductFlyers = state.publicProductFlyers.filter((flyer) => flyer.id !== id);
+    if (state.publicProductFlyerEditingId === id) {
+      state.publicProductFlyerEditingId = null;
+    }
     if (state.selectedProductFlyerSlug && !state.publicProductFlyers.some((flyer) => flyer.slug === state.selectedProductFlyerSlug)) {
       state.selectedProductFlyerSlug = null;
     }

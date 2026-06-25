@@ -164,6 +164,11 @@ assert.equal(appSource.includes("async function saveAboutContent("), true, "Abou
 assert.equal(appSource.includes("async function uploadContentImage("), true, "Website content images must upload through a dedicated storage helper.");
 assert.equal(appSource.includes('data-form="public-product-flyer"'), true, "Site controls must expose a public product flyer form.");
 assert.equal(appSource.includes("async function savePublicProductFlyer("), true, "Public product flyer form must save through a dedicated handler.");
+assert.equal(appSource.includes('name="product_flyer_id"'), true, "Public product flyer form must keep the selected flyer id while editing.");
+assert.equal(appSource.includes('data-action="edit-public-product-flyer"'), true, "Site controls must let admins edit existing public product flyers.");
+assert.equal(appSource.includes("async function editPublicProductFlyer("), true, "Public product flyer edits must use a dedicated edit handler.");
+assert.equal(appSource.includes("async function updatePublicProductFlyer("), true, "Public product flyer edits must use a dedicated update handler.");
+assert.equal(appSource.includes('updateAuthedSupabase("public_product_flyers"'), true, "Public product flyer edits must update the existing Supabase row.");
 assert.equal(appSource.includes('data-action="delete-public-product-flyer"'), true, "Site controls must let admins delete public product flyer test rows.");
 assert.equal(appSource.includes("async function deletePublicProductFlyer("), true, "Public product flyer deletes must use a dedicated handler.");
 assert.equal(appSource.includes('deleteAuthedSupabase("public_product_flyers"'), true, "Public product flyer deletes must remove the row from Supabase.");

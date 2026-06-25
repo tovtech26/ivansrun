@@ -926,6 +926,7 @@ body {
 .content-admin-actions {
   align-items: center;
   display: flex;
+  gap: 8px;
   justify-content: flex-end;
 }
 
@@ -2172,6 +2173,18 @@ h4 {
 .workflow-form {
   display: grid;
   gap: 16px;
+}
+
+.form-section-title {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.form-actions-row {
+  display: grid;
+  gap: 10px;
 }
 
 .dev-login-links {
