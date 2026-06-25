@@ -239,6 +239,19 @@
       .sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title));
   }
 
+  function mergeProductFlyersWithDefaults(rows = [], options = {}) {
+    const mergedBySlug = new Map();
+    normalizeProductFlyers(DEFAULT_PRODUCT_FLYERS, { includeUnpublished: true }).forEach((flyer) => {
+      mergedBySlug.set(flyer.slug, flyer);
+    });
+    normalizeProductFlyers(rows, { includeUnpublished: true }).forEach((flyer) => {
+      mergedBySlug.set(flyer.slug, flyer);
+    });
+    return [...mergedBySlug.values()]
+      .filter((flyer) => options.includeUnpublished === true || flyer.published)
+      .sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title));
+  }
+
   function groupProductFlyersByClass(rows = []) {
     const groups = new Map();
     normalizeProductFlyers(rows, { includeUnpublished: true }).forEach((flyer) => {
@@ -334,6 +347,7 @@
     normalizeFlyers,
     normalizeStories,
     normalizeProductFlyers,
+    mergeProductFlyersWithDefaults,
     groupProductFlyersByClass,
     buildContentImageRecord,
     buildFlyerPayload,

@@ -1146,8 +1146,8 @@ async function loadCatalog() {
     state.homepageFlyers = WebsiteContent.normalizeFlyers(flyerRows);
     state.blogPosts = WebsiteContent.normalizeStories(blogRows);
     state.publicProductFlyers = productFlyerRows.ok
-      ? WebsiteContent.normalizeProductFlyers(productFlyerRows.rows)
-      : WebsiteContent.normalizeProductFlyers(WebsiteContent.DEFAULT_PRODUCT_FLYERS);
+      ? WebsiteContent.mergeProductFlyersWithDefaults(productFlyerRows.rows)
+      : WebsiteContent.mergeProductFlyersWithDefaults([]);
     if (heroRows.length || themeRows.length || contentRows.length) {
       state.siteContent = remoteSiteContent(heroRows, themeRows, contentRows);
     }
@@ -1165,7 +1165,7 @@ async function loadProtectedData() {
   if (!state.auth.isAuthenticated) {
     state.homepageFlyers = WebsiteContent.normalizeFlyers(state.homepageFlyers);
     state.blogPosts = WebsiteContent.normalizeStories(state.blogPosts);
-    state.publicProductFlyers = WebsiteContent.normalizeProductFlyers(state.publicProductFlyers);
+    state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults(state.publicProductFlyers);
     state.inventory = [];
     state.orderRequests = [];
     state.orderRequestItems = [];
@@ -1285,7 +1285,7 @@ async function loadProtectedData() {
       const adminProductFlyerRows = Array.isArray(data.publicProductFlyers) ? data.publicProductFlyers : [];
       state.homepageFlyers = adminFlyerRows.length ? WebsiteContent.normalizeFlyers(adminFlyerRows, { includeUnpublished: true }) : [];
       state.blogPosts = WebsiteContent.normalizeStories(adminBlogRows, { includeUnpublished: true });
-      state.publicProductFlyers = WebsiteContent.normalizeProductFlyers(adminProductFlyerRows, { includeUnpublished: true });
+      state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults(adminProductFlyerRows, { includeUnpublished: true });
     }
     if (failures.length) {
       const message = `Some protected data could not load: ${failures.join("; ")}`;
@@ -3370,6 +3370,11 @@ function publicProductFlyerBeingEdited() {
   const id = String(state.publicProductFlyerEditingId || "").trim();
   if (!id) return null;
   return (Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : []).find((flyer) => flyer.id === id) || null;
+}
+
+function isSeededProductFlyer(flyer) {
+  const slug = String(flyer?.slug || "").trim();
+  return WebsiteContent.DEFAULT_PRODUCT_FLYERS.some((item) => item.slug === slug);
 }
 
 function adminSiteControls() {
@@ -5951,7 +5956,7 @@ async function savePublicProductFlyer(form) {
         state.auth.user?.id || null,
       ),
     );
-    state.publicProductFlyers = WebsiteContent.normalizeProductFlyers([saved, ...state.publicProductFlyers], { includeUnpublished: true });
+    state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults([saved, ...state.publicProductFlyers], { includeUnpublished: true });
   } catch (error) {
     state.adminContentError = error instanceof Error ? error.message : "Unable to save public product flyer";
   } finally {
@@ -6005,23 +6010,24 @@ async function updatePublicProductFlyer(form) {
       secondaryImagePath = secondaryRecord.storagePath;
     }
     if (!mainImagePath) throw new Error("Choose a main product flyer image before updating.");
-    const [updated] = await updateAuthedSupabase("public_product_flyers", id,
-      WebsiteContent.buildProductFlyerUpdatePayload(
-        {
-          title: data.get("product_flyer_title"),
-          productClass: data.get("product_flyer_class"),
-          shortDescription: data.get("product_flyer_short_description"),
-          story: data.get("product_flyer_story"),
-          mainImagePath,
-          secondaryImagePath,
-          displayOrder: data.get("product_flyer_display_order"),
-          published: data.get("product_flyer_published") === "on",
-        },
-        state.auth.user?.id || null,
-      ),
-    );
-    state.publicProductFlyers = WebsiteContent.normalizeProductFlyers(
-      state.publicProductFlyers.map((flyer) => (flyer.id === id ? updated : flyer)),
+    const payloadInput = {
+      title: data.get("product_flyer_title"),
+      slug: currentFlyer.slug,
+      productClass: data.get("product_flyer_class"),
+      shortDescription: data.get("product_flyer_short_description"),
+      story: data.get("product_flyer_story"),
+      mainImagePath,
+      secondaryImagePath,
+      displayOrder: data.get("product_flyer_display_order"),
+      published: data.get("product_flyer_published") === "on",
+    };
+    const [updated] = isSeededProductFlyer(currentFlyer) && String(currentFlyer.id || "").startsWith("fallback-public-flyer-")
+      ? await upsertAuthedSupabase("public_product_flyers", WebsiteContent.buildProductFlyerPayload(payloadInput, state.auth.user?.id || null), "slug")
+      : await updateAuthedSupabase("public_product_flyers", id,
+          WebsiteContent.buildProductFlyerUpdatePayload(payloadInput, state.auth.user?.id || null),
+        );
+    state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults(
+      [updated, ...state.publicProductFlyers.filter((flyer) => flyer.slug !== currentFlyer.slug)],
       { includeUnpublished: true },
     );
     if (state.selectedProductFlyerSlug === currentFlyer.slug) {
@@ -6042,8 +6048,32 @@ async function deletePublicProductFlyer(flyerId) {
   if (!id) return;
   state.adminContentError = null;
   try {
-    await deleteAuthedSupabase("public_product_flyers", `id=eq.${encodeURIComponent(id)}`);
-    state.publicProductFlyers = state.publicProductFlyers.filter((flyer) => flyer.id !== id);
+    const currentFlyer = (Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : []).find((flyer) => flyer.id === id);
+    if (currentFlyer && isSeededProductFlyer(currentFlyer)) {
+      const hiddenInput = {
+        title: currentFlyer.title,
+        slug: currentFlyer.slug,
+        productClass: currentFlyer.productClass,
+        shortDescription: currentFlyer.shortDescription,
+        story: currentFlyer.story,
+        mainImagePath: currentFlyer.mainImagePath,
+        secondaryImagePath: currentFlyer.secondaryImagePath,
+        displayOrder: currentFlyer.displayOrder,
+        published: false,
+      };
+      const [hidden] = String(currentFlyer.id || "").startsWith("fallback-public-flyer-")
+        ? await upsertAuthedSupabase("public_product_flyers", WebsiteContent.buildProductFlyerPayload(hiddenInput, state.auth.user?.id || null), "slug")
+        : await updateAuthedSupabase("public_product_flyers", id,
+            WebsiteContent.buildProductFlyerUpdatePayload(hiddenInput, state.auth.user?.id || null),
+          );
+      state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults(
+        [hidden, ...state.publicProductFlyers.filter((flyer) => flyer.slug !== currentFlyer.slug)],
+        { includeUnpublished: true },
+      );
+    } else {
+      await deleteAuthedSupabase("public_product_flyers", `id=eq.${encodeURIComponent(id)}`);
+      state.publicProductFlyers = state.publicProductFlyers.filter((flyer) => flyer.id !== id);
+    }
     if (state.publicProductFlyerEditingId === id) {
       state.publicProductFlyerEditingId = null;
     }

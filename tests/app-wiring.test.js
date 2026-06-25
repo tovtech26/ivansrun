@@ -118,6 +118,7 @@ assert.equal(appSource.includes('class="home-bokeh-background"'), true, "Homepag
 assert.equal(appSource.includes('class="public-home-shell"'), true, "Homepage should render inside a tighter editorial shell.");
 assert.equal(appSource.includes('class="public-home product-flyers-page"'), true, "Public product flyers page must use the same homepage shell styling.");
 assert.equal(appSource.includes("WebsiteContent.DEFAULT_PRODUCT_FLYERS"), true, "Public product flyers must have demo fallback rows when the remote flyer table is not available.");
+assert.equal(appSource.includes("WebsiteContent.mergeProductFlyersWithDefaults"), true, "Default public flyers must merge with Supabase rows so the visible seeded flyers remain editable.");
 assert.equal(appSource.includes("WebsiteContent.groupProductFlyersByClass"), true, "Public product flyers page must group flyers by the Word document product categories.");
 assert.equal(appSource.includes("product-flyer-category"), true, "Public product flyers page must render category sections.");
 assert.equal(appSource.includes('class="campaign-eyebrow"'), true, "Homepage flyer hero should render campaign metadata labels.");
@@ -169,6 +170,8 @@ assert.equal(appSource.includes('data-action="edit-public-product-flyer"'), true
 assert.equal(appSource.includes("async function editPublicProductFlyer("), true, "Public product flyer edits must use a dedicated edit handler.");
 assert.equal(appSource.includes("async function updatePublicProductFlyer("), true, "Public product flyer edits must use a dedicated update handler.");
 assert.equal(appSource.includes('updateAuthedSupabase("public_product_flyers"'), true, "Public product flyer edits must update the existing Supabase row.");
+assert.equal(appSource.includes("isSeededProductFlyer("), true, "Seeded hard-coded product flyers must be detected by slug.");
+assert.equal(appSource.includes("upsertAuthedSupabase(\"public_product_flyers\""), true, "Editing a seeded hard-coded product flyer must promote it to a Supabase row by slug.");
 assert.equal(appSource.includes('data-action="delete-public-product-flyer"'), true, "Site controls must let admins delete public product flyer test rows.");
 assert.equal(appSource.includes("async function deletePublicProductFlyer("), true, "Public product flyer deletes must use a dedicated handler.");
 assert.equal(appSource.includes('deleteAuthedSupabase("public_product_flyers"'), true, "Public product flyer deletes must remove the row from Supabase.");

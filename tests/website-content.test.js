@@ -8,6 +8,7 @@ const {
   normalizeFlyers,
   normalizeStories,
   normalizeProductFlyers,
+  mergeProductFlyersWithDefaults,
   groupProductFlyersByClass,
   buildContentImageRecord,
   buildFlyerPayload,
@@ -50,6 +51,52 @@ assert.deepEqual(
   ],
 );
 assert.equal(normalizeProductFlyers(DEFAULT_PRODUCT_FLYERS)[0].mainImagePath.startsWith("/public/product-images/"), true);
+assert.equal(mergeProductFlyersWithDefaults([]).length, DEFAULT_PRODUCT_FLYERS.length);
+assert.equal(
+  mergeProductFlyersWithDefaults([
+    {
+      id: "remote-028",
+      title: "Edited Heat Flyer",
+      slug: "irunsvan-028-heat-1-0",
+      product_class: "Everyday Trainer",
+      story: "Edited public copy.",
+      main_image_path: "content/public-products/edited-028.jpg",
+      display_order: 10,
+      published: true,
+    },
+  ])[0].title,
+  "Edited Heat Flyer",
+);
+assert.equal(
+  mergeProductFlyersWithDefaults([
+    {
+      id: "remote-028",
+      title: "Hidden Heat Flyer",
+      slug: "irunsvan-028-heat-1-0",
+      product_class: "Everyday Trainer",
+      story: "Hidden public copy.",
+      main_image_path: "content/public-products/hidden-028.jpg",
+      display_order: 10,
+      published: false,
+    },
+  ]).some((item) => item.slug === "irunsvan-028-heat-1-0"),
+  false,
+);
+assert.equal(
+  mergeProductFlyersWithDefaults([
+    {
+      id: "remote-028",
+      title: "Hidden Heat Flyer",
+      slug: "irunsvan-028-heat-1-0",
+      product_class: "Everyday Trainer",
+      story: "Hidden public copy.",
+      main_image_path: "content/public-products/hidden-028.jpg",
+      display_order: 10,
+      published: false,
+    },
+  ], { includeUnpublished: true }).find((item) => item.slug === "irunsvan-028-heat-1-0").title,
+  "Hidden Heat Flyer",
+);
 assert.deepEqual(
   groupProductFlyersByClass(normalizeProductFlyers(DEFAULT_PRODUCT_FLYERS)).map((group) => [group.productClass, group.items.length]),
   [
