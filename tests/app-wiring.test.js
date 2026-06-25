@@ -171,6 +171,8 @@ assert.equal(appSource.includes("state.publicProductFlyers = state.publicProduct
 assert.equal(appSource.includes("function productFlyersPage("), true, "Public product flyer listing page must exist.");
 assert.equal(appSource.includes("function productFlyerDetailPage("), true, "Public product flyer detail page must exist.");
 assert.equal(appSource.includes('data-route="product-flyer"'), true, "Public product flyer cards must route to public flyer detail pages.");
+assert.equal(appSource.includes(">View shoe</button>"), true, "Public product flyer cards should use shoe language for visitors.");
+assert.equal(appSource.includes(">View flyer</button>"), false, "Public product flyer cards should not use internal flyer language for visitors.");
 assert.equal(styleSource.includes(".product-flyer-grid"), true, "Public product flyer listing must have dedicated styling.");
 assert.equal(styleSource.includes(".product-flyer-category"), true, "Public product flyer category sections must have dedicated styling.");
 assert.equal(productFlyerPageSource.includes("base_price"), false, "Public flyer pages must not expose reseller pricing.");

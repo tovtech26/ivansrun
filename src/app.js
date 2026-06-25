@@ -1804,7 +1804,7 @@ function productFlyerCard(flyer) {
         <p>${escapeHtml(flyer.productClass)}</p>
         <h2>${escapeHtml(flyer.title)}</h2>
         <span>${escapeHtml(flyer.shortDescription || "Irunsvan Africa public product flyer.")}</span>
-        <button type="button" class="button secondary" data-route="product-flyer" data-flyer-slug="${escapeHtml(flyer.slug)}">View flyer</button>
+        <button type="button" class="button secondary" data-route="product-flyer" data-flyer-slug="${escapeHtml(flyer.slug)}">View shoe</button>
       </div>
     </article>
   `;
