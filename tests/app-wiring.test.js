@@ -176,6 +176,8 @@ assert.equal(appSource.includes("function siteProductFlyersPanel("), true, "Publ
 assert.equal(appSource.includes("function siteAboutPanel("), true, "About content must render in a focused Site Controls panel.");
 assert.equal(appSource.includes("function siteHeroThemePanel("), true, "Hero/theme/banner controls must render in a focused Site Controls panel.");
 assert.equal(appSource.includes("function publicProductFlyerImagePreview("), true, "Public product flyer editing must render the current stored images.");
+assert.equal(appSource.includes("${publicProductFlyerImagePreview({"), true, "Site controls must call the defined public flyer image preview renderer.");
+assert.equal(appSource.includes("${productFlyerImagePreview({"), false, "Site controls must not call the old undefined product flyer image preview name.");
 assert.equal(appSource.includes('data-action="remove-public-product-flyer-image"'), true, "Public product flyer editing must expose remove controls for stored images.");
 assert.equal(appSource.includes('data-action="add-public-product-flyer-image"'), true, "Public product flyer editing must expose add controls for new images.");
 assert.equal(appSource.includes("product_flyer_main_image_clear"), true, "Public product flyer edits must be able to clear the main image.");

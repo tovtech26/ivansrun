@@ -3502,14 +3502,14 @@ function siteProductFlyersPanel() {
         ${controlInput("Product Class", "product_flyer_class", productFlyerEdit?.productClass || "")}
         ${controlInput("Display Order", "product_flyer_display_order", String(productFlyerEdit?.displayOrder ?? 0), "number")}
         <div class="public-product-flyer-image-grid">
-          ${productFlyerImagePreview({
+          ${publicProductFlyerImagePreview({
             label: "Main image",
             field: "main",
             flyer: productFlyerEdit || { id: "", title: "", mainImagePath: "", secondaryImagePath: "" },
             imagePath: productFlyerEdit?.mainImagePath || "",
             draftCleared: draft.mainCleared,
           })}
-          ${productFlyerImagePreview({
+          ${publicProductFlyerImagePreview({
             label: "Secondary image",
             field: "secondary",
             flyer: productFlyerEdit || { id: "", title: "", mainImagePath: "", secondaryImagePath: "" },
