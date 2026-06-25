@@ -659,6 +659,14 @@ function readableAdminInviteError(error, fallback = "Unable to claim admin invit
   return raw || fallback;
 }
 
+function readablePublicProductFlyerDatabaseError(error, fallback = "Unable to save public product flyer") {
+  const raw = error instanceof Error ? error.message : String(error || fallback);
+  if (/public_product_flyers/i.test(raw) && /404|could not find|not found|schema cache/i.test(raw)) {
+    return "Public product flyer edits cannot save yet because Supabase is missing the public_product_flyers table. Apply supabase/sql/020_public_product_flyers.sql, then refresh and try again.";
+  }
+  return raw || fallback;
+}
+
 async function monitoredFetch(label, url, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const startedAt = Date.now();
@@ -1191,6 +1199,7 @@ async function loadProtectedData() {
   state.inventoryError = null;
   state.historyError = null;
   state.applicationError = null;
+  if (state.auth.isAdmin) state.adminContentError = null;
   render();
 
   try {
@@ -1257,6 +1266,9 @@ async function loadProtectedData() {
       if (result.status === "fulfilled") {
         data[name] = result.value;
         return;
+      }
+      if (name === "publicProductFlyers") {
+        state.adminContentError = readablePublicProductFlyerDatabaseError(result.reason, "Unable to load public product flyers");
       }
       failures.push(`${name}: ${result.reason instanceof Error ? result.reason.message : "request failed"}`);
     });
@@ -5958,7 +5970,7 @@ async function savePublicProductFlyer(form) {
     );
     state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults([saved, ...state.publicProductFlyers], { includeUnpublished: true });
   } catch (error) {
-    state.adminContentError = error instanceof Error ? error.message : "Unable to save public product flyer";
+    state.adminContentError = readablePublicProductFlyerDatabaseError(error, "Unable to save public product flyer");
   } finally {
     state.publicProductFlyerSavePending = false;
     render();
@@ -6036,7 +6048,7 @@ async function updatePublicProductFlyer(form) {
     }
     state.publicProductFlyerEditingId = null;
   } catch (error) {
-    state.adminContentError = error instanceof Error ? error.message : "Unable to update public product flyer";
+    state.adminContentError = readablePublicProductFlyerDatabaseError(error, "Unable to update public product flyer");
   } finally {
     state.publicProductFlyerSavePending = false;
     render();
@@ -6081,7 +6093,7 @@ async function deletePublicProductFlyer(flyerId) {
       state.selectedProductFlyerSlug = null;
     }
   } catch (error) {
-    state.adminContentError = error instanceof Error ? error.message : "Unable to delete public product flyer";
+    state.adminContentError = readablePublicProductFlyerDatabaseError(error, "Unable to delete public product flyer");
   } finally {
     render();
   }
