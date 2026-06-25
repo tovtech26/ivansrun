@@ -159,6 +159,7 @@ const state = {
   storySavePending: false,
   publicProductFlyerSavePending: false,
   publicProductFlyerEditingId: null,
+  publicProductFlyerImageDrafts: {},
   siteControlSection: "product-flyers",
   aboutSavePending: false,
   importPending: false,
@@ -3384,6 +3385,40 @@ function publicProductFlyerBeingEdited() {
   return (Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : []).find((flyer) => flyer.id === id) || null;
 }
 
+function publicProductFlyerImageDraft(id) {
+  const flyerId = String(id || "").trim();
+  if (!flyerId) return { mainCleared: false, secondaryCleared: false };
+  const draft = state.publicProductFlyerImageDrafts?.[flyerId];
+  return {
+    mainCleared: Boolean(draft?.mainCleared),
+    secondaryCleared: Boolean(draft?.secondaryCleared),
+  };
+}
+
+function publicProductFlyerImagePreview({ label, field, flyer, imagePath, draftCleared }) {
+  const imageUrl = draftCleared ? "" : resolveContentImageUrl(imagePath || "");
+  const hasImage = Boolean(imageUrl);
+  const inputName = `product_flyer_${field}_image`;
+  const clearName = `product_flyer_${field}_image_clear`;
+  return `
+    <div class="public-product-flyer-image-control" data-image-field="${escapeHtml(field)}">
+      <div class="public-product-flyer-image-preview">
+        ${
+          hasImage
+            ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(`${flyer.title} ${label.toLowerCase()}`)}" loading="lazy" />`
+            : `<div class="public-product-flyer-image-empty"><span>${escapeHtml(label)} is empty</span></div>`
+        }
+      </div>
+      <div class="public-product-flyer-image-actions">
+        <button type="button" class="button mini secondary" data-action="remove-public-product-flyer-image" data-image-field="${escapeHtml(field)}" data-flyer-id="${escapeHtml(flyer.id)}">${hasImage ? "Remove image" : "Clear slot"}</button>
+        <button type="button" class="button mini" data-action="add-public-product-flyer-image" data-image-field="${escapeHtml(field)}" data-flyer-id="${escapeHtml(flyer.id)}">${hasImage ? "Replace image" : "Add image"}</button>
+      </div>
+      <input type="hidden" name="${escapeHtml(clearName)}" value="${draftCleared ? "1" : "0"}" />
+      <input class="public-product-flyer-file-input" name="${escapeHtml(inputName)}" type="file" accept="image/*" />
+    </div>
+  `;
+}
+
 function isSeededProductFlyer(flyer) {
   const slug = String(flyer?.slug || "").trim();
   return WebsiteContent.DEFAULT_PRODUCT_FLYERS.some((item) => item.slug === slug);
@@ -3453,6 +3488,7 @@ function siteStoriesPanel() {
 
 function siteProductFlyersPanel() {
   const productFlyerEdit = publicProductFlyerBeingEdited();
+  const draft = publicProductFlyerImageDraft(productFlyerEdit?.id);
   const productFlyerFormTitle = productFlyerEdit ? "Edit Product Flyer" : "Add Product Flyer";
   const productFlyerSubmitLabel = productFlyerEdit ? "Update Product Flyer" : "Save Product Flyer";
   const productFlyerSavingLabel = productFlyerEdit ? "Updating..." : "Saving...";
@@ -3465,10 +3501,22 @@ function siteProductFlyersPanel() {
         ${controlInput("Product Name", "product_flyer_title", productFlyerEdit?.title || "")}
         ${controlInput("Product Class", "product_flyer_class", productFlyerEdit?.productClass || "")}
         ${controlInput("Display Order", "product_flyer_display_order", String(productFlyerEdit?.displayOrder ?? 0), "number")}
-        <label><span>Main Image</span><input name="product_flyer_main_image" type="file" accept="image/*" /></label>
-        ${productFlyerEdit?.mainImagePath ? `<p class="form-note">Current main photo stays unless you choose a replacement.</p>` : ""}
-        <label><span>Secondary Image</span><input name="product_flyer_secondary_image" type="file" accept="image/*" /></label>
-        ${productFlyerEdit?.secondaryImagePath ? `<p class="form-note">Current secondary photo stays unless you choose a replacement.</p>` : ""}
+        <div class="public-product-flyer-image-grid">
+          ${productFlyerImagePreview({
+            label: "Main image",
+            field: "main",
+            flyer: productFlyerEdit || { id: "", title: "", mainImagePath: "", secondaryImagePath: "" },
+            imagePath: productFlyerEdit?.mainImagePath || "",
+            draftCleared: draft.mainCleared,
+          })}
+          ${productFlyerImagePreview({
+            label: "Secondary image",
+            field: "secondary",
+            flyer: productFlyerEdit || { id: "", title: "", mainImagePath: "", secondaryImagePath: "" },
+            imagePath: productFlyerEdit?.secondaryImagePath || "",
+            draftCleared: draft.secondaryCleared,
+          })}
+        </div>
         ${controlTextarea("Short Description", "product_flyer_short_description", productFlyerEdit?.shortDescription || "")}
         ${controlTextarea("Flyer Story", "product_flyer_story", productFlyerEdit?.story || "")}
         <label class="toggle-row"><input name="product_flyer_published" type="checkbox" ${productFlyerEdit?.published ? "checked" : ""} /><span>Publish on public Products page</span></label>
@@ -4893,6 +4941,48 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-action='add-public-product-flyer-image']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const field = button.getAttribute("data-image-field");
+      const flyerId = String(button.getAttribute("data-flyer-id") || state.publicProductFlyerEditingId || "").trim();
+      if (!field) return;
+      if (flyerId) {
+        const draft = publicProductFlyerImageDraft(flyerId);
+        state.publicProductFlyerImageDrafts = {
+          ...(state.publicProductFlyerImageDrafts || {}),
+          [flyerId]: {
+            ...draft,
+            [field === "secondary" ? "secondaryCleared" : "mainCleared"]: false,
+          },
+        };
+        render();
+      }
+      const input = document.querySelector(`.public-product-flyer-image-control[data-image-field="${field}"] input[type="file"]`);
+      if (input) input.click();
+    });
+  });
+
+  document.querySelectorAll("[data-action='remove-public-product-flyer-image']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const field = button.getAttribute("data-image-field");
+      const flyerId = String(button.getAttribute("data-flyer-id") || state.publicProductFlyerEditingId || "").trim();
+      const input = document.querySelector(`.public-product-flyer-image-control[data-image-field="${field}"] input[type="file"]`);
+      if (!field) return;
+      if (flyerId) {
+        const draft = publicProductFlyerImageDraft(flyerId);
+        state.publicProductFlyerImageDrafts = {
+          ...(state.publicProductFlyerImageDrafts || {}),
+          [flyerId]: {
+            ...draft,
+            [field === "secondary" ? "secondaryCleared" : "mainCleared"]: true,
+          },
+        };
+        render();
+      }
+      if (input) input.value = "";
+    });
+  });
+
   document.querySelectorAll("[data-action='cancel-public-product-flyer-edit']").forEach((button) => {
     button.addEventListener("click", async () => {
       await cancelPublicProductFlyerEdit();
@@ -6059,11 +6149,21 @@ async function editPublicProductFlyer(flyerId) {
     return;
   }
   state.publicProductFlyerEditingId = id;
+  state.publicProductFlyerImageDrafts = {
+    ...state.publicProductFlyerImageDrafts,
+    [id]: { mainCleared: false, secondaryCleared: false },
+  };
   state.adminContentError = null;
   render();
 }
 
 async function cancelPublicProductFlyerEdit() {
+  const id = String(state.publicProductFlyerEditingId || "").trim();
+  if (id) {
+    const nextDrafts = { ...(state.publicProductFlyerImageDrafts || {}) };
+    delete nextDrafts[id];
+    state.publicProductFlyerImageDrafts = nextDrafts;
+  }
   state.publicProductFlyerEditingId = null;
   state.adminContentError = null;
   render();
@@ -6080,6 +6180,8 @@ async function updatePublicProductFlyer(form) {
     if (!id || !currentFlyer) throw new Error("Choose a public product flyer before updating.");
     const mainFile = form.elements.namedItem("product_flyer_main_image")?.files?.[0];
     const secondaryFile = form.elements.namedItem("product_flyer_secondary_image")?.files?.[0];
+    const mainCleared = String(data.get("product_flyer_main_image_clear") || "").trim() === "1";
+    const secondaryCleared = String(data.get("product_flyer_secondary_image_clear") || "").trim() === "1";
     const uniquePrefix = new Date().toISOString().replace(/\D/g, "");
     let mainImagePath = currentFlyer.mainImagePath || "";
     let secondaryImagePath = currentFlyer.secondaryImagePath || "";
@@ -6087,13 +6189,16 @@ async function updatePublicProductFlyer(form) {
       const mainRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: mainFile, uniquePrefix });
       await uploadContentImage(mainRecord);
       mainImagePath = mainRecord.storagePath;
+    } else if (mainCleared) {
+      mainImagePath = "";
     }
     if (secondaryFile) {
       const secondaryRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: secondaryFile, uniquePrefix: `${uniquePrefix}-secondary` });
       await uploadContentImage(secondaryRecord);
       secondaryImagePath = secondaryRecord.storagePath;
+    } else if (secondaryCleared) {
+      secondaryImagePath = "";
     }
-    if (!mainImagePath) throw new Error("Choose a main product flyer image before updating.");
     const payloadInput = {
       title: data.get("product_flyer_title"),
       slug: currentFlyer.slug,
@@ -6119,6 +6224,11 @@ async function updatePublicProductFlyer(form) {
       state.selectedProductFlyerSlug = normalizedUpdated?.slug || null;
     }
     state.publicProductFlyerEditingId = null;
+    state.publicProductFlyerImageDrafts = {
+      ...state.publicProductFlyerImageDrafts,
+      [id]: undefined,
+    };
+    delete state.publicProductFlyerImageDrafts[id];
   } catch (error) {
     state.adminContentError = readablePublicProductFlyerDatabaseError(error, "Unable to update public product flyer");
   } finally {
@@ -6160,6 +6270,11 @@ async function deletePublicProductFlyer(flyerId) {
     }
     if (state.publicProductFlyerEditingId === id) {
       state.publicProductFlyerEditingId = null;
+    }
+    if (state.publicProductFlyerImageDrafts?.[id]) {
+      const nextDrafts = { ...state.publicProductFlyerImageDrafts };
+      delete nextDrafts[id];
+      state.publicProductFlyerImageDrafts = nextDrafts;
     }
     if (state.selectedProductFlyerSlug && !state.publicProductFlyers.some((flyer) => flyer.slug === state.selectedProductFlyerSlug)) {
       state.selectedProductFlyerSlug = null;

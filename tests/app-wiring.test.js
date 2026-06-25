@@ -175,6 +175,11 @@ assert.equal(appSource.includes("function siteStoriesPanel("), true, "Stories mu
 assert.equal(appSource.includes("function siteProductFlyersPanel("), true, "Public product flyers must render in a focused Site Controls panel.");
 assert.equal(appSource.includes("function siteAboutPanel("), true, "About content must render in a focused Site Controls panel.");
 assert.equal(appSource.includes("function siteHeroThemePanel("), true, "Hero/theme/banner controls must render in a focused Site Controls panel.");
+assert.equal(appSource.includes("function publicProductFlyerImagePreview("), true, "Public product flyer editing must render the current stored images.");
+assert.equal(appSource.includes('data-action="remove-public-product-flyer-image"'), true, "Public product flyer editing must expose remove controls for stored images.");
+assert.equal(appSource.includes('data-action="add-public-product-flyer-image"'), true, "Public product flyer editing must expose add controls for new images.");
+assert.equal(appSource.includes("product_flyer_main_image_clear"), true, "Public product flyer edits must be able to clear the main image.");
+assert.equal(appSource.includes("product_flyer_secondary_image_clear"), true, "Public product flyer edits must be able to clear the secondary image.");
 assert.equal(appSource.includes('data-form="public-product-flyer"'), true, "Site controls must expose a public product flyer form.");
 assert.equal(appSource.includes("public-product-flyer-admin-card"), true, "Public product flyer editor must have a dedicated full-width admin card class.");
 assert.equal(appSource.includes("async function savePublicProductFlyer("), true, "Public product flyer form must save through a dedicated handler.");

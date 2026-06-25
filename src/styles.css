@@ -979,6 +979,53 @@ body {
   margin: 0;
 }
 
+.public-product-flyer-image-grid {
+  display: grid;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.public-product-flyer-image-control {
+  border: 1px solid rgba(23, 23, 23, 0.08);
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.public-product-flyer-image-preview {
+  background: var(--soft);
+  border-radius: 6px;
+  min-height: 180px;
+  overflow: hidden;
+}
+
+.public-product-flyer-image-preview img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.public-product-flyer-image-empty {
+  align-items: center;
+  color: var(--muted);
+  display: grid;
+  min-height: 180px;
+  place-items: center;
+  text-align: center;
+}
+
+.public-product-flyer-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.public-product-flyer-file-input {
+  display: none;
+}
+
 .public-product-flyer-admin-card {
   grid-column: 1 / -1;
 }
