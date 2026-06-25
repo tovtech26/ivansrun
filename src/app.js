@@ -3432,7 +3432,7 @@ function adminSiteControls() {
             </form>
             ${storyAdminList()}
           </div>
-          <div class="admin-card">
+          <div class="admin-card public-product-flyer-admin-card">
             <div class="panel-toolbar"><h2>Public Product Flyers</h2><span>${state.publicProductFlyers.length} items</span></div>
             <form class="workflow-form" data-form="public-product-flyer">
               <input type="hidden" name="product_flyer_id" value="${escapeHtml(productFlyerEdit?.id || "")}" />

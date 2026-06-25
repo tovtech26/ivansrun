@@ -164,6 +164,7 @@ assert.equal(appSource.includes("async function saveBlogPost("), true, "Story sa
 assert.equal(appSource.includes("async function saveAboutContent("), true, "About saves must have a dedicated handler.");
 assert.equal(appSource.includes("async function uploadContentImage("), true, "Website content images must upload through a dedicated storage helper.");
 assert.equal(appSource.includes('data-form="public-product-flyer"'), true, "Site controls must expose a public product flyer form.");
+assert.equal(appSource.includes("public-product-flyer-admin-card"), true, "Public product flyer editor must have a dedicated full-width admin card class.");
 assert.equal(appSource.includes("async function savePublicProductFlyer("), true, "Public product flyer form must save through a dedicated handler.");
 assert.equal(appSource.includes("function readablePublicProductFlyerDatabaseError("), true, "Missing public flyer table errors must be shown in plain admin-facing language.");
 assert.equal(appSource.includes("state.adminContentError = readablePublicProductFlyerDatabaseError"), true, "Public flyer database failures must surface inside Site Controls.");
@@ -185,6 +186,9 @@ assert.equal(appSource.includes(">View shoe</button>"), true, "Public product fl
 assert.equal(appSource.includes(">View flyer</button>"), false, "Public product flyer cards should not use internal flyer language for visitors.");
 assert.equal(styleSource.includes(".product-flyer-grid"), true, "Public product flyer listing must have dedicated styling.");
 assert.equal(styleSource.includes(".product-flyer-category"), true, "Public product flyer category sections must have dedicated styling.");
+assert.equal(styleSource.includes(".public-product-flyer-admin-card"), true, "Public product flyer editor must have dedicated layout styling.");
+assert.equal(styleSource.includes("grid-column: 1 / -1"), true, "Public product flyer editor must span the Site Controls grid so copy is not clipped.");
+assert.equal(styleSource.includes("overflow-wrap: anywhere"), true, "Admin product flyer copy must wrap instead of clipping inside narrow cards.");
 assert.equal(productFlyerPageSource.includes("base_price"), false, "Public flyer pages must not expose reseller pricing.");
 assert.equal(appSource.includes("Website Content"), true, "Admin page title should reflect content management.");
 assert.equal(appSource.includes('data-form="admin-invite"'), true, "Team page must let admins create private invite links.");

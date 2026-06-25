@@ -916,11 +916,13 @@ body {
 
 .content-admin-copy strong {
   color: var(--ink);
+  overflow-wrap: anywhere;
 }
 
 .content-admin-copy span {
   color: var(--muted);
   font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .content-admin-actions {
@@ -928,6 +930,26 @@ body {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.public-product-flyer-admin-card {
+  grid-column: 1 / -1;
+}
+
+.public-product-flyer-admin-card .content-admin-item {
+  grid-template-columns: 72px minmax(0, 1fr);
+  align-items: start;
+  padding: 14px;
+}
+
+.public-product-flyer-admin-card .content-admin-actions {
+  grid-column: 2;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.public-product-flyer-admin-card .content-admin-list {
+  padding: 0 24px 24px;
 }
 
 @media (max-width: 980px) {
