@@ -1,5 +1,8 @@
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "orders@irunsvan.africa";
+const EMAIL_LOGO_URL =
+  Deno.env.get("ORDER_EMAIL_LOGO_URL") ||
+  "https://raw.githubusercontent.com/tovtech26/ivansrun/main/public/brand/Irunsvan_Blue-removebg-preview.svg";
 const ADMIN_NOTIFICATION_EMAILS = (Deno.env.get("ADMIN_NOTIFICATION_EMAILS") || "")
   .split(",")
   .map((email) => email.trim())
@@ -25,7 +28,8 @@ function fallbackOrderHtml(body: Record<string, unknown>) {
     <div style="margin:0;background:#f4efe6;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;color:#141414;">
       <div style="max-width:640px;margin:0 auto;background:#fffaf2;border:1px solid #ded2bf;border-radius:18px;overflow:hidden;">
         <div style="padding:28px 30px;border-bottom:1px solid #eadfce;">
-          <div style="font-weight:900;letter-spacing:.08em;color:#0057b8;font-size:18px;">IRUNSVAN</div>
+          <img src="${EMAIL_LOGO_URL}" alt="IRUNSVAN" width="112" style="display:block;max-width:112px;height:auto;margin:0 0 10px;">
+          <div style="font-weight:900;letter-spacing:.08em;color:#0057b8;font-size:14px;">IRUNSVAN</div>
           <p style="margin:8px 0 0;color:#6d6255;font-size:13px;letter-spacing:.12em;text-transform:uppercase;">Africa reseller footwear portal</p>
         </div>
         <div style="padding:30px;">

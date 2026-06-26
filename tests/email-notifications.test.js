@@ -17,7 +17,9 @@ assert.deepEqual(submittedPayload.to, ["buyer@example.com", "ops@irunsvan.africa
 assert.equal(submittedPayload.subject, "Your order #RE-123456 is pending approval");
 assert.equal(submittedPayload.template, "order_status");
 assert.equal(submittedPayload.statusLabel, "Pending approval");
+assert.match(submittedPayload.logoUrl, /Irunsvan_Blue-removebg-preview\.svg/);
 assert.match(submittedPayload.html, /IRUNSVAN/i);
+assert.match(submittedPayload.html, /<img src="https:\/\/raw\.githubusercontent\.com\/tovtech26\/ivansrun\/main\/public\/brand\/Irunsvan_Blue-removebg-preview\.svg"/);
 assert.match(submittedPayload.html, /Your order #RE-123456 is pending approval/);
 assert.match(submittedPayload.html, /TOV Sports Distribution/);
 assert.match(submittedPayload.html, /14 pairs/);

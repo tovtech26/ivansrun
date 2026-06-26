@@ -1,5 +1,7 @@
 (function attachEmailNotifications(root) {
   const BRAND_NAME = "IRUNSVAN";
+  const BRAND_LOGO_URL =
+    "https://raw.githubusercontent.com/tovtech26/ivansrun/main/public/brand/Irunsvan_Blue-removebg-preview.svg";
 
   function money(value) {
     const amount = Number(value);
@@ -61,7 +63,8 @@
       <div style="margin:0;background:#f4efe6;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;color:#141414;">
         <div style="max-width:640px;margin:0 auto;background:#fffaf2;border:1px solid #ded2bf;border-radius:18px;overflow:hidden;">
           <div style="padding:28px 30px;border-bottom:1px solid #eadfce;">
-            <div style="font-weight:900;letter-spacing:.08em;color:#0057b8;font-size:18px;">${BRAND_NAME}</div>
+            <img src="${BRAND_LOGO_URL}" alt="${BRAND_NAME}" width="112" style="display:block;max-width:112px;height:auto;margin:0 0 10px;">
+            <div style="font-weight:900;letter-spacing:.08em;color:#0057b8;font-size:14px;">${BRAND_NAME}</div>
             <p style="margin:8px 0 0;color:#6d6255;font-size:13px;letter-spacing:.12em;text-transform:uppercase;">Africa reseller footwear portal</p>
           </div>
           <div style="padding:30px;">
@@ -113,6 +116,7 @@
       subject: statusCopy.subject,
       template: "order_status",
       brandName: BRAND_NAME,
+      logoUrl: BRAND_LOGO_URL,
       statusLabel: statusCopy.label,
       orderCode,
       resellerCompany,
