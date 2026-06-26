@@ -63,6 +63,25 @@
     };
   }
 
+  function supplierOrderFileStem(order) {
+    return `supplier-order-${safeText(order?.id).replace(/[^a-z0-9]/gi, "").toUpperCase().slice(-8) || "ORDER"}`;
+  }
+
+  function downloadBlob({ blob, fileName } = {}) {
+    if (!blob) throw new Error("Download data is not available.");
+    if (!root.document || !root.URL) return false;
+    const link = root.document.createElement("a");
+    const url = root.URL.createObjectURL(blob);
+    link.href = url;
+    link.download = fileName || "download";
+    link.style.display = "none";
+    root.document.body.appendChild(link);
+    link.click();
+    root.document.body.removeChild(link);
+    root.setTimeout(() => root.URL.revokeObjectURL(url), 1000);
+    return true;
+  }
+
   function downloadSupplierXlsx({ order, items = [], inventory = [], variants = [], products = [], companyName = "", XLSX } = {}) {
     if (!XLSX) throw new Error("Spreadsheet library not loaded.");
     const workbookData = buildSupplierWorkbookData({ order, items, inventory, variants, products, companyName });
@@ -80,13 +99,21 @@
     });
     XLSX.utils.book_append_sheet(workbook, summarySheet, "Order Summary");
     XLSX.utils.book_append_sheet(workbook, masterSheet, "Master Format");
-    XLSX.writeFile(workbook, workbookData.fileName);
+    if (typeof Blob !== "undefined" && typeof XLSX.write === "function") {
+      const content = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+      downloadBlob({
+        blob: new Blob([content], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+        fileName: workbookData.fileName,
+      });
+    } else {
+      XLSX.writeFile(workbook, workbookData.fileName);
+    }
     return workbookData;
   }
 
-  function downloadSupplierCsv({ order, items = [], inventory = [], variants = [], products = [] } = {}) {
+  function buildSupplierCsv({ order, items = [], inventory = [], variants = [], products = [] } = {}) {
     const rows = buildSupplierWorkbookData({ order, items, inventory, variants, products }).masterRows;
-    const csv = `\uFEFF${rows
+    return `\uFEFF${rows
       .map((row) =>
         row
           .map((cell) => {
@@ -96,12 +123,12 @@
           .join(","),
       )
       .join("\r\n")}`;
+  }
+
+  function downloadSupplierCsv({ order, items = [], inventory = [], variants = [], products = [] } = {}) {
+    const csv = buildSupplierCsv({ order, items, inventory, variants, products });
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `supplier-order-${safeText(order?.id).replace(/[^a-z0-9]/gi, "").toUpperCase().slice(-8) || "ORDER"}.csv`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    downloadBlob({ blob, fileName: `${supplierOrderFileStem(order)}.csv` });
     return csv;
   }
 
@@ -109,6 +136,8 @@
     MASTER_HEADERS,
     buildSupplierOrderRows,
     buildSupplierWorkbookData,
+    buildSupplierCsv,
+    downloadBlob,
     downloadSupplierXlsx,
     downloadSupplierCsv,
   };

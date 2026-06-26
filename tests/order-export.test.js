@@ -3,6 +3,10 @@ const {
   MASTER_HEADERS,
   buildSupplierOrderRows,
   buildSupplierWorkbookData,
+  buildSupplierCsv,
+  downloadBlob,
+  downloadSupplierCsv,
+  downloadSupplierXlsx,
 } = require("../src/order-export.js");
 
 const order = {
@@ -81,5 +85,83 @@ assert.equal(workbookData.masterRows[1][0], "23005");
 assert.equal(workbookData.masterRows[1][1], "202300500138");
 assert.equal(workbookData.masterRows[1][3], 5);
 assert.equal(workbookData.masterRows[2][1], "202300500139");
+
+const csv = buildSupplierCsv({ order, items, inventory, variants, products });
+assert.equal(csv.startsWith("\uFEFF"), true);
+assert.equal(csv.includes("202300500138"), true);
+assert.equal(csv.includes("\r\n"), true);
+
+const clickedDownloads = [];
+const revokedUrls = [];
+let createdUrlCount = 0;
+global.Blob = class Blob {
+  constructor(parts, options) {
+    this.parts = parts;
+    this.type = options?.type || "";
+  }
+};
+global.URL = {
+  createObjectURL(blob) {
+    createdUrlCount += 1;
+    return `blob:test-${createdUrlCount}-${blob.type}`;
+  },
+  revokeObjectURL(url) {
+    revokedUrls.push(url);
+  },
+};
+global.document = {
+  body: {
+    appendChild(node) {
+      node.appended = true;
+    },
+    removeChild(node) {
+      node.removed = true;
+    },
+  },
+  createElement(tagName) {
+    assert.equal(tagName, "a");
+    return {
+      style: {},
+      click() {
+        clickedDownloads.push({ href: this.href, download: this.download, appended: this.appended });
+      },
+    };
+  },
+};
+
+const originalSetTimeout = global.setTimeout;
+global.setTimeout = (callback) => {
+  callback();
+  return 1;
+};
+
+downloadSupplierCsv({ order, items, inventory, variants, products });
+downloadSupplierCsv({ order, items, inventory, variants, products });
+assert.equal(clickedDownloads.length, 2);
+assert.equal(clickedDownloads[0].appended, true);
+assert.equal(clickedDownloads[0].download, "supplier-order-CC496C4D.csv");
+assert.equal(clickedDownloads[1].download, "supplier-order-CC496C4D.csv");
+assert.equal(new Set(clickedDownloads.map((entry) => entry.href)).size, 2);
+assert.deepEqual(revokedUrls, clickedDownloads.map((entry) => entry.href));
+
+const xlsxWrites = [];
+const fakeXlsx = {
+  utils: {
+    book_new: () => ({ sheets: [] }),
+    aoa_to_sheet: (rows) => ({ rows }),
+    book_append_sheet: (workbook, sheet, name) => workbook.sheets.push({ sheet, name }),
+  },
+  write: (workbook, options) => {
+    xlsxWrites.push({ workbook, options });
+    return new Uint8Array([1, 2, 3]);
+  },
+};
+downloadSupplierXlsx({ order, items, inventory, variants, products, companyName: "TOV Reseller", XLSX: fakeXlsx });
+downloadSupplierXlsx({ order, items, inventory, variants, products, companyName: "TOV Reseller", XLSX: fakeXlsx });
+assert.equal(xlsxWrites.length, 2);
+assert.equal(clickedDownloads.at(-1).download, "supplier-order-CC496C4D.xlsx");
+
+assert.throws(() => downloadBlob({ blob: null, fileName: "bad.csv" }), /Download data is not available/);
+global.setTimeout = originalSetTimeout;
 
 console.log("order-export tests passed");
