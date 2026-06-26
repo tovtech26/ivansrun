@@ -877,7 +877,7 @@ async function buildImportPreviewFromFile(type, file) {
 
 async function sendOrderNotification(details) {
   const payload = EmailNotifications.buildOrderEmailPayload(details);
-  const html = htmlFromIncludes(payload.subject, payload.htmlIncludes);
+  const html = payload.html || htmlFromIncludes(payload.subject, payload.htmlIncludes);
   return invokeAuthedFunction("send-order-email", {
     ...payload,
     eventType: details.eventType,

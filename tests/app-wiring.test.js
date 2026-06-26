@@ -292,10 +292,12 @@ assert.equal(appSource.includes("product_colour_mappings"), true, "Colour Review
 assert.equal(appSource.includes("original_colour"), true, "Colour Review wiring must preserve original_colour keys.");
 assert.equal(indexSource.includes('rel="icon"'), true, "Document head must declare a favicon to avoid localhost favicon 404s.");
 assert.equal(indexSource.includes("Oswald"), true, "Homepage redesign should load the condensed display font.");
-assert.equal(indexSource.includes("irunsvan-order-export-v3"), true, "Index should bump public asset cache keys for the repeatable order export fixes.");
+assert.equal(indexSource.includes("irunsvan-order-email-v1"), true, "Index should bump public asset cache keys for reseller order email updates.");
+assert.equal(indexSource.includes("irunsvan-order-export-v3"), false, "Index must not keep the stale order export cache key after email updates.");
 assert.equal(indexSource.includes("irunsvan-public-flyer-editor-v2"), false, "Index must not keep the stale flyer editor cache key after order export updates.");
 assert.equal(indexSource.includes("irunsvan-home-terra-light-v1"), false, "Index must not keep the stale homepage cache key after flyer editor updates.");
 assert.equal(appSource.includes("object-fit: contain"), false, "Image sizing changes must live in CSS, not inline styles.");
+assert.equal(appSource.includes("payload.html || htmlFromIncludes(payload.subject, payload.htmlIncludes)"), true, "Order emails must preserve the branded reseller-facing HTML template.");
 const oldBrandSlug = "ivan" + "srun";
 const oldBrandName = "Ivan" + "srun";
 assert.equal(indexSource.includes(`${oldBrandSlug}-google-auth-v1`), false, "Index must not keep the stale Google OAuth cache key after Irunsvan brand correction.");
