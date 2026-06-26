@@ -1,5 +1,5 @@
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "applications@irunsvan.africa";
+const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "ramocha@irunsvanafrica.com";
 const ADMIN_NOTIFICATION_EMAILS = (Deno.env.get("ADMIN_NOTIFICATION_EMAILS") || "")
   .split(",")
   .map((email) => email.trim())

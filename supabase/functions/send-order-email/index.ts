@@ -1,5 +1,5 @@
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "orders@irunsvan.africa";
+const EMAIL_FROM = Deno.env.get("EMAIL_FROM") || "ramocha@irunsvanafrica.com";
 const EMAIL_LOGO_URL =
   Deno.env.get("ORDER_EMAIL_LOGO_URL") ||
   "https://raw.githubusercontent.com/tovtech26/ivansrun/main/public/brand/Irunsvan_Blue-removebg-preview.svg";
