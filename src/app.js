@@ -118,6 +118,7 @@ const state = {
   homeFlyerIndex: 0,
   blogPosts: [],
   publicProductFlyers: [],
+  publicProductFlyerImages: [],
   resellerDirectory: [],
   colourMappings: [],
   inventory: [],
@@ -673,6 +674,9 @@ function readablePublicProductFlyerDatabaseError(error, fallback = "Unable to sa
   if (/public_product_flyers/i.test(raw) && /404|could not find|not found|schema cache/i.test(raw)) {
     return "Public product flyer edits cannot save yet because Supabase is missing the public_product_flyers table. Apply supabase/sql/020_public_product_flyers.sql, then refresh and try again.";
   }
+  if (/public_product_flyer_images/i.test(raw) && /404|could not find|not found|schema cache/i.test(raw)) {
+    return "Public product flyer image galleries cannot save yet because Supabase is missing the public_product_flyer_images table. Apply supabase/sql/021_public_product_flyer_images.sql, then refresh and try again.";
+  }
   return raw || fallback;
 }
 
@@ -1134,7 +1138,7 @@ async function loadCatalog() {
   try {
     state.homepageContentLoading = true;
     state.homepageContentError = null;
-    const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows, flyerRows, blogRows, productFlyerRows] = await Promise.all([
+    const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows, flyerRows, blogRows, productFlyerRows, productFlyerImageRows] = await Promise.all([
       fetchOptionalSupabase("products", CatalogData.productSelectQuery()),
       fetchOptionalSupabase("product_variants", CatalogData.variantSelectQuery()),
       fetchOptionalSupabase(
@@ -1150,6 +1154,7 @@ async function loadCatalog() {
       fetchOptionalSupabase("homepage_flyers", "select=id,title,image_path,sort_order,published,created_at&published=eq.true&order=sort_order.asc,created_at.desc&limit=20"),
       fetchOptionalSupabase("blog_posts", "select=id,title,slug,cover_image_path,summary,body,published,published_at,created_at&published=eq.true&order=published_at.desc,created_at.desc&limit=20"),
       fetchOptionalSupabaseResult("public_product_flyers", "select=id,title,slug,product_class,short_description,story,main_image_path,secondary_image_path,display_order,published,created_at,updated_at&published=eq.true&order=display_order.asc,created_at.desc&limit=100"),
+      fetchOptionalSupabaseResult("public_product_flyer_images", "select=id,flyer_id,image_path,image_name,sku_reference,color_name,caption,display_order,is_cover,created_at,updated_at&order=is_cover.desc,display_order.asc,created_at.asc&limit=2000"),
     ]);
     const fallback = CatalogData.fallbackCatalog();
     const catalogRows =
@@ -1162,8 +1167,9 @@ async function loadCatalog() {
     state.resellerDirectory = Array.isArray(directoryRows) ? directoryRows : [];
     state.homepageFlyers = WebsiteContent.normalizeFlyers(flyerRows);
     state.blogPosts = WebsiteContent.normalizeStories(blogRows);
+    state.publicProductFlyerImages = productFlyerImageRows.ok ? WebsiteContent.normalizeProductFlyerImages(productFlyerImageRows.rows) : [];
     state.publicProductFlyers = productFlyerRows.ok
-      ? WebsiteContent.mergeProductFlyersWithDefaults(productFlyerRows.rows)
+      ? WebsiteContent.mergeProductFlyersWithDefaults(attachProductFlyerImages(productFlyerRows.rows, state.publicProductFlyerImages))
       : WebsiteContent.mergeProductFlyersWithDefaults([]);
     if (heroRows.length || themeRows.length || contentRows.length) {
       state.siteContent = remoteSiteContent(heroRows, themeRows, contentRows);
@@ -1258,6 +1264,10 @@ async function loadProtectedData() {
           fetchAuthedSupabase("public_product_flyers", "select=id,title,slug,product_class,short_description,story,main_image_path,secondary_image_path,display_order,published,created_at,updated_at&order=display_order.asc,created_at.desc&limit=200"),
         ],
         [
+          "publicProductFlyerImages",
+          fetchAuthedSupabase("public_product_flyer_images", "select=id,flyer_id,image_path,image_name,sku_reference,color_name,caption,display_order,is_cover,created_at,updated_at&order=is_cover.desc,display_order.asc,created_at.asc&limit=4000"),
+        ],
+        [
           "importJobs",
           fetchAuthedSupabase(
           "import_jobs",
@@ -1276,7 +1286,7 @@ async function loadProtectedData() {
         data[name] = result.value;
         return;
       }
-      if (name === "publicProductFlyers") {
+      if (name === "publicProductFlyers" || name === "publicProductFlyerImages") {
         state.adminContentError = readablePublicProductFlyerDatabaseError(result.reason, "Unable to load public product flyers");
       }
       failures.push(`${name}: ${result.reason instanceof Error ? result.reason.message : "request failed"}`);
@@ -1304,9 +1314,14 @@ async function loadProtectedData() {
       const adminFlyerRows = Array.isArray(data.homepageFlyers) ? data.homepageFlyers : [];
       const adminBlogRows = Array.isArray(data.blogPosts) ? data.blogPosts : [];
       const adminProductFlyerRows = Array.isArray(data.publicProductFlyers) ? data.publicProductFlyers : [];
+      const adminProductFlyerImageRows = Array.isArray(data.publicProductFlyerImages) ? data.publicProductFlyerImages : [];
       state.homepageFlyers = adminFlyerRows.length ? WebsiteContent.normalizeFlyers(adminFlyerRows, { includeUnpublished: true }) : [];
       state.blogPosts = WebsiteContent.normalizeStories(adminBlogRows, { includeUnpublished: true });
-      state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults(adminProductFlyerRows, { includeUnpublished: true });
+      state.publicProductFlyerImages = WebsiteContent.normalizeProductFlyerImages(adminProductFlyerImageRows);
+      state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults(
+        attachProductFlyerImages(adminProductFlyerRows, state.publicProductFlyerImages),
+        { includeUnpublished: true },
+      );
     }
     if (failures.length) {
       const message = `Some protected data could not load: ${failures.join("; ")}`;
@@ -1794,6 +1809,30 @@ function publicProductFlyerItems(options = {}) {
   return WebsiteContent.normalizeProductFlyers(state.publicProductFlyers, options);
 }
 
+function publicProductFlyerImageRowsByFlyerId(rows = []) {
+  return WebsiteContent.normalizeProductFlyerImages(rows, { flyerId: "unassigned" }).reduce((map, image) => {
+    if (!map.has(image.flyerId)) map.set(image.flyerId, []);
+    map.get(image.flyerId).push(image);
+    return map;
+  }, new Map());
+}
+
+function attachProductFlyerImages(flyerRows = [], imageRows = []) {
+  const imagesByFlyerId = publicProductFlyerImageRowsByFlyerId(imageRows);
+  return (Array.isArray(flyerRows) ? flyerRows : []).map((flyer) => ({
+    ...flyer,
+    product_flyer_images: imagesByFlyerId.get(String(flyer.id || "").trim()) || flyer.product_flyer_images || flyer.images || [],
+  }));
+}
+
+function productFlyerGallery(flyer) {
+  return WebsiteContent.productFlyerImagesForFlyer(flyer);
+}
+
+function productFlyerCoverImage(flyer) {
+  return productFlyerGallery(flyer)[0]?.imagePath || flyer.coverImagePath || flyer.mainImagePath || "";
+}
+
 function selectedProductFlyer() {
   const items = publicProductFlyerItems();
   if (!items.length) return null;
@@ -1804,7 +1843,8 @@ function selectedProductFlyer() {
 }
 
 function productFlyerCard(flyer) {
-  const imageUrl = resolveContentImageUrl(flyer.mainImagePath || "");
+  const imageUrl = resolveContentImageUrl(productFlyerCoverImage(flyer));
+  const imageCount = productFlyerGallery(flyer).length;
   return `
     <article class="product-flyer-card">
       <div class="product-flyer-image">
@@ -1818,6 +1858,7 @@ function productFlyerCard(flyer) {
         <p>${escapeHtml(flyer.productClass)}</p>
         <h2>${escapeHtml(flyer.title)}</h2>
         <span>${escapeHtml(flyer.shortDescription || "Irunsvan Africa public product flyer.")}</span>
+        ${imageCount ? `<span>${escapeHtml(`${imageCount} named product ${imageCount === 1 ? "image" : "images"}`)}</span>` : ""}
         <button type="button" class="button secondary" data-route="product-flyer" data-flyer-slug="${escapeHtml(flyer.slug)}">View shoe</button>
       </div>
     </article>
@@ -1887,8 +1928,7 @@ function productFlyerDetailPage() {
       </main>
     `;
   }
-  const mainImage = resolveContentImageUrl(flyer.mainImagePath || "");
-  const secondaryImage = resolveContentImageUrl(flyer.secondaryImagePath || "");
+  const gallery = productFlyerGallery(flyer);
   return `
     <main class="public-home product-flyer-detail-page">
       ${homeBokehBackdrop()}
@@ -1898,14 +1938,23 @@ function productFlyerDetailPage() {
           <article class="product-flyer-detail campaign-surface-shadow">
             <div class="product-flyer-detail-media">
               ${
-                mainImage
-                  ? `<img src="${escapeHtml(mainImage)}" alt="${escapeHtml(flyer.title)}" loading="eager" />`
+                gallery.length
+                  ? gallery
+                      .map((image, index) => {
+                        const imageUrl = resolveContentImageUrl(image.imagePath);
+                        return `
+                          <figure class="product-flyer-gallery-item">
+                            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(`${flyer.title} ${image.imageName}`)}" loading="${index === 0 ? "eager" : "lazy"}" />
+                            <figcaption>
+                              <strong>${escapeHtml(image.imageName)}</strong>
+                              ${image.skuReference || image.colorName ? `<span>${escapeHtml([image.skuReference, image.colorName].filter(Boolean).join(" / "))}</span>` : ""}
+                              ${image.caption ? `<em>${escapeHtml(image.caption)}</em>` : ""}
+                            </figcaption>
+                          </figure>
+                        `;
+                      })
+                      .join("")
                   : `<div class="product-flyer-placeholder">${logo("blue")}</div>`
-              }
-              ${
-                secondaryImage
-                  ? `<img src="${escapeHtml(secondaryImage)}" alt="${escapeHtml(`${flyer.title} detail`)}" loading="lazy" />`
-                  : ""
               }
             </div>
             <div class="product-flyer-detail-copy">
@@ -3369,8 +3418,8 @@ function publicProductFlyerAdminList() {
   if (!items.length) return `<div class="content-empty-state"><p>No public product flyers saved yet.</p></div>`;
   return `<div class="content-admin-list">${items.map((flyer) => contentAdminItem({
     title: flyer.title,
-    imagePath: flyer.mainImagePath,
-    meta: `${flyer.productClass} - ${flyer.published ? "Published" : "Draft"}`,
+    imagePath: productFlyerCoverImage(flyer),
+    meta: `${flyer.productClass} - ${productFlyerGallery(flyer).length} images - ${flyer.published ? "Published" : "Draft"}`,
     published: flyer.published,
     actions: `
       <button type="button" class="button mini" data-action="edit-public-product-flyer" data-flyer-id="${escapeHtml(flyer.id)}">Edit</button>
@@ -3416,6 +3465,82 @@ function publicProductFlyerImagePreview({ label, field, flyer, imagePath, draftC
       <input type="hidden" name="${escapeHtml(clearName)}" value="${draftCleared ? "1" : "0"}" />
       <input class="public-product-flyer-file-input" name="${escapeHtml(inputName)}" type="file" accept="image/*" />
     </div>
+  `;
+}
+
+function isPersistedFlyerImage(image) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(image?.id || ""));
+}
+
+function publicProductFlyerExistingImageControl(flyer, image, index) {
+  const imageUrl = resolveContentImageUrl(image.imagePath);
+  const persisted = isPersistedFlyerImage(image);
+  return `
+    <article class="public-product-flyer-gallery-row">
+      <div class="public-product-flyer-image-preview">
+        ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(image.imageName || flyer.title)}" loading="lazy" />` : `<div class="public-product-flyer-image-empty"><span>No image</span></div>`}
+      </div>
+      <div class="public-product-flyer-gallery-fields">
+        <input type="hidden" name="existing_product_flyer_image_id_${index}" value="${escapeHtml(persisted ? image.id : "")}" />
+        <input type="hidden" name="existing_product_flyer_image_path_${index}" value="${escapeHtml(image.imagePath)}" />
+        ${controlInput("Image Name", `existing_product_flyer_image_name_${index}`, image.imageName || "")}
+        <div class="two-fields">
+          ${controlInput("SKU / Reference", `existing_product_flyer_image_sku_${index}`, image.skuReference || "")}
+          ${controlInput("Color", `existing_product_flyer_image_color_${index}`, image.colorName || "")}
+        </div>
+        ${controlTextarea("Caption", `existing_product_flyer_image_caption_${index}`, image.caption || "")}
+        <div class="two-fields">
+          ${controlInput("Display Order", `existing_product_flyer_image_order_${index}`, String(image.displayOrder ?? index), "number")}
+          <label class="toggle-row"><input name="product_flyer_cover_image" type="radio" value="existing:${index}" ${image.isCover || index === 0 ? "checked" : ""} /><span>Use as cover</span></label>
+        </div>
+        <label class="toggle-row"><input name="existing_product_flyer_image_remove_${index}" type="checkbox" ${persisted ? "" : "disabled"} /><span>${persisted ? "Remove this image" : "Legacy image preview only"}</span></label>
+      </div>
+    </article>
+  `;
+}
+
+function publicProductFlyerNewImageControl(index, displayIndex) {
+  return `
+    <article class="public-product-flyer-gallery-row public-product-flyer-new-row">
+      <div class="public-product-flyer-image-preview">
+        <div class="public-product-flyer-image-empty"><span>Image ${displayIndex}</span></div>
+      </div>
+      <div class="public-product-flyer-gallery-fields">
+        <label><span>Picture File</span><input name="new_product_flyer_image_file_${index}" type="file" accept="image/*" /></label>
+        ${controlInput("Image Name", `new_product_flyer_image_name_${index}`, "")}
+        <div class="two-fields">
+          ${controlInput("SKU / Reference", `new_product_flyer_image_sku_${index}`, "")}
+          ${controlInput("Color", `new_product_flyer_image_color_${index}`, "")}
+        </div>
+        ${controlTextarea("Caption", `new_product_flyer_image_caption_${index}`, "")}
+        <div class="two-fields">
+          ${controlInput("Display Order", `new_product_flyer_image_order_${index}`, String(displayIndex - 1), "number")}
+          <label class="toggle-row"><input name="product_flyer_cover_image" type="radio" value="new:${index}" /><span>Use as cover</span></label>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function publicProductFlyerGalleryControls(flyer) {
+  const gallery = flyer ? productFlyerGallery(flyer) : [];
+  const existingRows = gallery.map((image, index) => publicProductFlyerExistingImageControl(flyer, image, index)).join("");
+  const remaining = Math.max(0, 20 - gallery.length);
+  const newRows = Array.from({ length: remaining }, (_, index) => publicProductFlyerNewImageControl(index, gallery.length + index + 1)).join("");
+  return `
+    <section class="public-product-flyer-gallery-editor">
+      <div class="public-product-flyer-gallery-head">
+        <h3>Product Pictures</h3>
+        <span>${escapeHtml(`${gallery.length}/20 used`)}</span>
+      </div>
+      <p class="form-note">One flyer is one shoe/model. Add up to 20 named pictures for colorways, SKU references, angles, and details.</p>
+      <input type="hidden" name="existing_product_flyer_image_count" value="${escapeHtml(String(gallery.length))}" />
+      <input type="hidden" name="new_product_flyer_image_count" value="${escapeHtml(String(remaining))}" />
+      <div class="public-product-flyer-gallery-list">
+        ${existingRows}
+        ${newRows}
+      </div>
+    </section>
   `;
 }
 
@@ -3488,7 +3613,6 @@ function siteStoriesPanel() {
 
 function siteProductFlyersPanel() {
   const productFlyerEdit = publicProductFlyerBeingEdited();
-  const draft = publicProductFlyerImageDraft(productFlyerEdit?.id);
   const productFlyerFormTitle = productFlyerEdit ? "Edit Product Flyer" : "Add Product Flyer";
   const productFlyerSubmitLabel = productFlyerEdit ? "Update Product Flyer" : "Save Product Flyer";
   const productFlyerSavingLabel = productFlyerEdit ? "Updating..." : "Saving...";
@@ -3501,24 +3625,9 @@ function siteProductFlyersPanel() {
         ${controlInput("Product Name", "product_flyer_title", productFlyerEdit?.title || "")}
         ${controlInput("Product Class", "product_flyer_class", productFlyerEdit?.productClass || "")}
         ${controlInput("Display Order", "product_flyer_display_order", String(productFlyerEdit?.displayOrder ?? 0), "number")}
-        <div class="public-product-flyer-image-grid">
-          ${publicProductFlyerImagePreview({
-            label: "Main image",
-            field: "main",
-            flyer: productFlyerEdit || { id: "", title: "", mainImagePath: "", secondaryImagePath: "" },
-            imagePath: productFlyerEdit?.mainImagePath || "",
-            draftCleared: draft.mainCleared,
-          })}
-          ${publicProductFlyerImagePreview({
-            label: "Secondary image",
-            field: "secondary",
-            flyer: productFlyerEdit || { id: "", title: "", mainImagePath: "", secondaryImagePath: "" },
-            imagePath: productFlyerEdit?.secondaryImagePath || "",
-            draftCleared: draft.secondaryCleared,
-          })}
-        </div>
         ${controlTextarea("Short Description", "product_flyer_short_description", productFlyerEdit?.shortDescription || "")}
         ${controlTextarea("Flyer Story", "product_flyer_story", productFlyerEdit?.story || "")}
+        ${publicProductFlyerGalleryControls(productFlyerEdit)}
         <label class="toggle-row"><input name="product_flyer_published" type="checkbox" ${productFlyerEdit?.published ? "checked" : ""} /><span>Publish on public Products page</span></label>
         <div class="form-actions-row">
           <button class="button primary full" type="submit" ${state.publicProductFlyerSavePending ? "disabled" : ""}>${state.publicProductFlyerSavePending ? productFlyerSavingLabel : productFlyerSubmitLabel}</button>
@@ -6096,24 +6205,114 @@ async function saveBlogPost(form) {
   }
 }
 
+function productFlyerImageDraftsFromForm(form, existingImages = []) {
+  const data = new FormData(form);
+  const existingCount = Number(data.get("existing_product_flyer_image_count") || 0);
+  const newCount = Number(data.get("new_product_flyer_image_count") || 0);
+  const coverTarget = String(data.get("product_flyer_cover_image") || "").trim();
+  const existing = Array.from({ length: existingCount }, (_, index) => {
+    const id = String(data.get(`existing_product_flyer_image_id_${index}`) || "").trim();
+    const source = existingImages[index] || {};
+    const imagePath = String(data.get(`existing_product_flyer_image_path_${index}`) || source.imagePath || "").trim();
+    return {
+      id,
+      index,
+      removed: data.get(`existing_product_flyer_image_remove_${index}`) === "on",
+      persisted: Boolean(id),
+      imagePath,
+      imageName: data.get(`existing_product_flyer_image_name_${index}`) || source.imageName || `Product image ${index + 1}`,
+      skuReference: data.get(`existing_product_flyer_image_sku_${index}`) || "",
+      colorName: data.get(`existing_product_flyer_image_color_${index}`) || "",
+      caption: data.get(`existing_product_flyer_image_caption_${index}`) || "",
+      displayOrder: data.get(`existing_product_flyer_image_order_${index}`) || index,
+      isCover: coverTarget === `existing:${index}`,
+    };
+  }).filter((image) => image.imagePath);
+
+  const additions = Array.from({ length: newCount }, (_, index) => {
+    const file = form.elements.namedItem(`new_product_flyer_image_file_${index}`)?.files?.[0] || null;
+    if (!file) return null;
+    return {
+      index,
+      file,
+      imageName: data.get(`new_product_flyer_image_name_${index}`) || file.name || `Product image ${existing.length + index + 1}`,
+      skuReference: data.get(`new_product_flyer_image_sku_${index}`) || "",
+      colorName: data.get(`new_product_flyer_image_color_${index}`) || "",
+      caption: data.get(`new_product_flyer_image_caption_${index}`) || "",
+      displayOrder: data.get(`new_product_flyer_image_order_${index}`) || existing.length + index,
+      isCover: coverTarget === `new:${index}`,
+    };
+  }).filter(Boolean);
+
+  const finalCount = existing.filter((image) => !image.removed).length + additions.length;
+  if (finalCount > 20) throw new Error("A public product flyer can have at most 20 pictures.");
+  return { existing, additions };
+}
+
+async function uploadProductFlyerImageAdditions(additions = []) {
+  const uniquePrefix = new Date().toISOString().replace(/\D/g, "");
+  const uploaded = [];
+  for (const image of additions) {
+    const record = WebsiteContent.buildContentImageRecord({
+      folder: "public-products",
+      file: image.file,
+      uniquePrefix: `${uniquePrefix}-${image.index}`,
+    });
+    await uploadContentImage(record);
+    uploaded.push({ ...image, imagePath: record.storagePath });
+  }
+  return uploaded;
+}
+
+function finalProductFlyerImages(existing = [], additions = []) {
+  const finalImages = [...existing.filter((image) => !image.removed), ...additions].filter((image) => image.imagePath);
+  const hasCover = finalImages.some((image) => image.isCover);
+  if (!hasCover && finalImages[0]) finalImages[0].isCover = true;
+  return finalImages.sort((left, right) => Number(right.isCover) - Number(left.isCover) || Number(left.displayOrder) - Number(right.displayOrder));
+}
+
+async function persistProductFlyerImages(flyerId, imageDrafts, uploadedAdditions) {
+  const finalImages = finalProductFlyerImages(imageDrafts.existing, uploadedAdditions);
+  await patchAuthedSupabase("public_product_flyer_images", `flyer_id=eq.${encodeURIComponent(flyerId)}`, { is_cover: false }).catch(() => {});
+  for (const image of imageDrafts.existing) {
+    if (!image.persisted) continue;
+    if (image.removed) {
+      await deleteAuthedSupabase("public_product_flyer_images", `id=eq.${encodeURIComponent(image.id)}`);
+      continue;
+    }
+    await updateAuthedSupabase(
+      "public_product_flyer_images",
+      image.id,
+      WebsiteContent.buildProductFlyerImagePayload(
+        { ...image, flyerId, isCover: finalImages.some((entry) => entry.id === image.id && entry.isCover) },
+        state.auth.user?.id || null,
+      ),
+    );
+  }
+  if (uploadedAdditions.length) {
+    await insertAuthedSupabase(
+      "public_product_flyer_images",
+      uploadedAdditions.map((image) =>
+        WebsiteContent.buildProductFlyerImagePayload(
+          { ...image, flyerId, isCover: finalImages.some((entry) => entry.imagePath === image.imagePath && entry.isCover) },
+          state.auth.user?.id || null,
+        ),
+      ),
+    );
+  }
+  return finalImages;
+}
+
 async function savePublicProductFlyer(form) {
   const data = new FormData(form);
   state.publicProductFlyerSavePending = true;
   state.adminContentError = null;
   render();
   try {
-    const mainFile = form.elements.namedItem("product_flyer_main_image")?.files?.[0];
-    const secondaryFile = form.elements.namedItem("product_flyer_secondary_image")?.files?.[0];
-    if (!mainFile) throw new Error("Choose a main product flyer image before saving.");
-    const uniquePrefix = new Date().toISOString().replace(/\D/g, "");
-    const mainRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: mainFile, uniquePrefix });
-    await uploadContentImage(mainRecord);
-    let secondaryImagePath = "";
-    if (secondaryFile) {
-      const secondaryRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: secondaryFile, uniquePrefix: `${uniquePrefix}-secondary` });
-      await uploadContentImage(secondaryRecord);
-      secondaryImagePath = secondaryRecord.storagePath;
-    }
+    const imageDrafts = productFlyerImageDraftsFromForm(form, []);
+    if (!imageDrafts.additions.length) throw new Error("Add at least one product picture before saving.");
+    const uploadedAdditions = await uploadProductFlyerImageAdditions(imageDrafts.additions);
+    const finalImages = finalProductFlyerImages([], uploadedAdditions);
     const [saved] = await insertAuthedSupabase(
       "public_product_flyers",
       WebsiteContent.buildProductFlyerPayload(
@@ -6122,15 +6321,16 @@ async function savePublicProductFlyer(form) {
           productClass: data.get("product_flyer_class"),
           shortDescription: data.get("product_flyer_short_description"),
           story: data.get("product_flyer_story"),
-          mainImagePath: mainRecord.storagePath,
-          secondaryImagePath,
+          mainImagePath: finalImages[0]?.imagePath || "",
+          secondaryImagePath: finalImages[1]?.imagePath || "",
           displayOrder: data.get("product_flyer_display_order"),
           published: data.get("product_flyer_published") === "on",
         },
         state.auth.user?.id || null,
       ),
     );
-    state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults([saved, ...state.publicProductFlyers], { includeUnpublished: true });
+    await persistProductFlyerImages(saved.id, imageDrafts, uploadedAdditions);
+    await loadProtectedData();
   } catch (error) {
     state.adminContentError = readablePublicProductFlyerDatabaseError(error, "Unable to save public product flyer");
   } finally {
@@ -6178,35 +6378,19 @@ async function updatePublicProductFlyer(form) {
   render();
   try {
     if (!id || !currentFlyer) throw new Error("Choose a public product flyer before updating.");
-    const mainFile = form.elements.namedItem("product_flyer_main_image")?.files?.[0];
-    const secondaryFile = form.elements.namedItem("product_flyer_secondary_image")?.files?.[0];
-    const mainCleared = String(data.get("product_flyer_main_image_clear") || "").trim() === "1";
-    const secondaryCleared = String(data.get("product_flyer_secondary_image_clear") || "").trim() === "1";
-    const uniquePrefix = new Date().toISOString().replace(/\D/g, "");
-    let mainImagePath = currentFlyer.mainImagePath || "";
-    let secondaryImagePath = currentFlyer.secondaryImagePath || "";
-    if (mainFile) {
-      const mainRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: mainFile, uniquePrefix });
-      await uploadContentImage(mainRecord);
-      mainImagePath = mainRecord.storagePath;
-    } else if (mainCleared) {
-      mainImagePath = "";
-    }
-    if (secondaryFile) {
-      const secondaryRecord = WebsiteContent.buildContentImageRecord({ folder: "public-products", file: secondaryFile, uniquePrefix: `${uniquePrefix}-secondary` });
-      await uploadContentImage(secondaryRecord);
-      secondaryImagePath = secondaryRecord.storagePath;
-    } else if (secondaryCleared) {
-      secondaryImagePath = "";
-    }
+    const currentGallery = productFlyerGallery(currentFlyer);
+    const imageDrafts = productFlyerImageDraftsFromForm(form, currentGallery);
+    const uploadedAdditions = await uploadProductFlyerImageAdditions(imageDrafts.additions);
+    const finalImages = finalProductFlyerImages(imageDrafts.existing, uploadedAdditions);
+    if (!finalImages.length) throw new Error("Keep at least one product picture on this flyer.");
     const payloadInput = {
       title: data.get("product_flyer_title"),
       slug: currentFlyer.slug,
       productClass: data.get("product_flyer_class"),
       shortDescription: data.get("product_flyer_short_description"),
       story: data.get("product_flyer_story"),
-      mainImagePath,
-      secondaryImagePath,
+      mainImagePath: finalImages[0]?.imagePath || "",
+      secondaryImagePath: finalImages[1]?.imagePath || "",
       displayOrder: data.get("product_flyer_display_order"),
       published: data.get("product_flyer_published") === "on",
     };
@@ -6215,10 +6399,8 @@ async function updatePublicProductFlyer(form) {
       : await updateAuthedSupabase("public_product_flyers", id,
           WebsiteContent.buildProductFlyerUpdatePayload(payloadInput, state.auth.user?.id || null),
         );
-    state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults(
-      [updated, ...state.publicProductFlyers.filter((flyer) => flyer.slug !== currentFlyer.slug)],
-      { includeUnpublished: true },
-    );
+    await persistProductFlyerImages(updated.id, imageDrafts, uploadedAdditions);
+    await loadProtectedData();
     if (state.selectedProductFlyerSlug === currentFlyer.slug) {
       const normalizedUpdated = WebsiteContent.normalizeProductFlyers([updated], { includeUnpublished: true })[0];
       state.selectedProductFlyerSlug = normalizedUpdated?.slug || null;

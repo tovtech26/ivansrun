@@ -221,22 +221,89 @@
 
   function normalizeProductFlyers(rows = [], options = {}) {
     return (Array.isArray(rows) ? rows : [])
-      .map((row) => ({
-        id: safeText(row.id),
-        title: safeText(row.title),
-        slug: safeText(row.slug) || buildProductFlyerSlug(row.title),
-        productClass: safeText(row.product_class || row.productClass),
-        shortDescription: safeText(row.short_description || row.shortDescription),
-        story: safeText(row.story),
-        mainImagePath: safeText(row.main_image_path || row.mainImagePath),
-        secondaryImagePath: safeText(row.secondary_image_path || row.secondaryImagePath),
-        displayOrder: safeInteger(row.display_order ?? row.displayOrder, 0),
-        published: row.published !== false,
+      .map((row) => {
+        const images = normalizeProductFlyerImages(row.product_flyer_images || row.productFlyerImages || row.images || [], {
+          flyerId: safeText(row.id),
+        });
+        const legacyMain = safeText(row.main_image_path || row.mainImagePath);
+        const legacySecondary = safeText(row.secondary_image_path || row.secondaryImagePath);
+        const legacyImages = images.length
+          ? []
+          : [
+              legacyMain
+                ? {
+                    id: `${safeText(row.id)}:main`,
+                    flyerId: safeText(row.id),
+                    imagePath: legacyMain,
+                    imageName: "Main image",
+                    skuReference: "",
+                    colorName: "",
+                    caption: "",
+                    displayOrder: 0,
+                    isCover: true,
+                  }
+                : null,
+              legacySecondary
+                ? {
+                    id: `${safeText(row.id)}:secondary`,
+                    flyerId: safeText(row.id),
+                    imagePath: legacySecondary,
+                    imageName: "Secondary image",
+                    skuReference: "",
+                    colorName: "",
+                    caption: "",
+                    displayOrder: 1,
+                    isCover: false,
+                  }
+                : null,
+            ].filter(Boolean);
+        const gallery = images.length ? images : legacyImages;
+        return {
+          id: safeText(row.id),
+          title: safeText(row.title),
+          slug: safeText(row.slug) || buildProductFlyerSlug(row.title),
+          productClass: safeText(row.product_class || row.productClass),
+          shortDescription: safeText(row.short_description || row.shortDescription),
+          story: safeText(row.story),
+          mainImagePath: legacyMain,
+          secondaryImagePath: legacySecondary,
+          coverImagePath: gallery.find((image) => image.isCover)?.imagePath || gallery[0]?.imagePath || legacyMain,
+          images: gallery,
+          displayOrder: safeInteger(row.display_order ?? row.displayOrder, 0),
+          published: row.published !== false,
+          createdAt: safeText(row.created_at || row.createdAt),
+          updatedAt: safeText(row.updated_at || row.updatedAt),
+        };
+      })
+      .filter((row) => row.id && row.title && row.slug && row.productClass && (options.includeUnpublished === true || row.published))
+      .sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title));
+  }
+
+  function normalizeProductFlyerImages(rows = [], options = {}) {
+    const fallbackFlyerId = safeText(options.flyerId);
+    return (Array.isArray(rows) ? rows : [])
+      .map((row, index) => ({
+        id: safeText(row.id) || `${fallbackFlyerId || "flyer-image"}:${index}`,
+        flyerId: safeText(row.flyer_id || row.flyerId) || fallbackFlyerId,
+        imagePath: safeText(row.image_path || row.imagePath),
+        imageName: safeText(row.image_name || row.imageName) || `Product image ${index + 1}`,
+        skuReference: safeText(row.sku_reference || row.skuReference),
+        colorName: safeText(row.color_name || row.colorName),
+        caption: safeText(row.caption),
+        displayOrder: safeInteger(row.display_order ?? row.displayOrder, index),
+        isCover: safeBool(row.is_cover ?? row.isCover),
         createdAt: safeText(row.created_at || row.createdAt),
         updatedAt: safeText(row.updated_at || row.updatedAt),
       }))
-      .filter((row) => row.id && row.title && row.slug && row.productClass && (options.includeUnpublished === true || row.published))
-      .sort((left, right) => left.displayOrder - right.displayOrder || left.title.localeCompare(right.title));
+      .filter((row) => row.flyerId && row.imagePath)
+      .sort((left, right) => Number(right.isCover) - Number(left.isCover) || left.displayOrder - right.displayOrder || left.imageName.localeCompare(right.imageName))
+      .slice(0, 20);
+  }
+
+  function productFlyerImagesForFlyer(flyer = {}) {
+    return normalizeProductFlyerImages(flyer.images || flyer.product_flyer_images || flyer.productFlyerImages || [], {
+      flyerId: flyer.id,
+    });
   }
 
   function mergeProductFlyersWithDefaults(rows = [], options = {}) {
@@ -337,6 +404,21 @@
     };
   }
 
+  function buildProductFlyerImagePayload(input = {}, adminUserId = null) {
+    return {
+      flyer_id: safeText(input.flyerId || input.flyer_id),
+      image_path: safeText(input.imagePath || input.image_path),
+      image_name: safeText(input.imageName || input.image_name) || "Product image",
+      sku_reference: safeText(input.skuReference || input.sku_reference) || null,
+      color_name: safeText(input.colorName || input.color_name) || null,
+      caption: safeText(input.caption) || null,
+      display_order: safeInteger(input.displayOrder ?? input.display_order, 0),
+      is_cover: safeBool(input.isCover ?? input.is_cover),
+      created_by: adminUserId,
+      updated_by: adminUserId,
+    };
+  }
+
   const api = {
     CONTENT_IMAGE_BUCKET,
     DEFAULT_HOME_FLYERS,
@@ -347,6 +429,8 @@
     normalizeFlyers,
     normalizeStories,
     normalizeProductFlyers,
+    normalizeProductFlyerImages,
+    productFlyerImagesForFlyer,
     mergeProductFlyersWithDefaults,
     groupProductFlyersByClass,
     buildContentImageRecord,
@@ -354,6 +438,7 @@
     buildStoryPayload,
     buildProductFlyerPayload,
     buildProductFlyerUpdatePayload,
+    buildProductFlyerImagePayload,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

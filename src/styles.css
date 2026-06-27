@@ -715,6 +715,37 @@ body {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.product-flyer-gallery-item {
+  background: var(--home-panel-alt);
+  display: grid;
+  margin: 0;
+  min-height: 300px;
+}
+
+.product-flyer-gallery-item img {
+  min-height: 260px;
+}
+
+.product-flyer-gallery-item figcaption {
+  border-top: 1px solid var(--home-line);
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+}
+
+.product-flyer-gallery-item figcaption strong {
+  color: var(--home-ink);
+  font-size: 14px;
+}
+
+.product-flyer-gallery-item figcaption span,
+.product-flyer-gallery-item figcaption em {
+  color: var(--home-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
 .product-flyer-detail-media img:only-child,
 .product-flyer-detail-media .product-flyer-placeholder:only-child {
   grid-column: 1 / -1;
@@ -1020,6 +1051,62 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.public-product-flyer-gallery-editor {
+  border: 1px solid rgba(23, 23, 23, 0.08);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.public-product-flyer-gallery-head {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.public-product-flyer-gallery-head h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.public-product-flyer-gallery-head span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.public-product-flyer-gallery-list {
+  display: grid;
+  gap: 12px;
+}
+
+.public-product-flyer-gallery-row {
+  border: 1px solid rgba(23, 23, 23, 0.08);
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 170px minmax(0, 1fr);
+  padding: 12px;
+}
+
+.public-product-flyer-gallery-row .public-product-flyer-image-preview {
+  min-height: 150px;
+}
+
+.public-product-flyer-gallery-row .public-product-flyer-image-empty {
+  min-height: 150px;
+}
+
+.public-product-flyer-gallery-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.public-product-flyer-gallery-fields textarea {
+  min-height: 72px;
 }
 
 .public-product-flyer-file-input {

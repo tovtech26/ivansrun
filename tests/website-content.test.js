@@ -15,6 +15,9 @@ const {
   buildStoryPayload,
   buildProductFlyerPayload,
   buildProductFlyerUpdatePayload,
+  normalizeProductFlyerImages,
+  productFlyerImagesForFlyer,
+  buildProductFlyerImagePayload,
 } = require("../src/website-content.js");
 
 assert.equal(buildStorySlug("Summer Drop: Botswana Launch!"), "summer-drop-botswana-launch");
@@ -155,6 +158,107 @@ assert.deepEqual(
   ["first", "second"],
 );
 assert.equal(normalizeProductFlyers([{ id: "draft", title: "Draft", slug: "draft", product_class: "Running", story: "Draft", published: false }], { includeUnpublished: true }).length, 1);
+
+const normalizedFlyerImages = normalizeProductFlyerImages([
+  {
+    id: "img-2",
+    flyer_id: "flyer-1",
+    image_path: "content/public-products/side.jpg",
+    image_name: "Side view",
+    sku_reference: "IRUNSVAN-026-BLK",
+    color_name: "Black / White",
+    caption: "Outer profile",
+    display_order: 2,
+    is_cover: false,
+  },
+  {
+    id: "img-1",
+    flyer_id: "flyer-1",
+    image_path: "content/public-products/cover.jpg",
+    image_name: "Cover angle",
+    sku_reference: "IRUNSVAN-026-BLK",
+    color_name: "Black / White",
+    caption: "Main product photo",
+    display_order: 4,
+    is_cover: true,
+  },
+  ...Array.from({ length: 25 }, (_, index) => ({
+    id: `extra-${index}`,
+    flyer_id: "flyer-1",
+    image_path: `content/public-products/extra-${index}.jpg`,
+    image_name: `Extra ${index}`,
+    display_order: 10 + index,
+    is_cover: false,
+  })),
+  { id: "bad", flyer_id: "", image_path: "", image_name: "No image" },
+]);
+assert.equal(normalizedFlyerImages.length, 20);
+assert.equal(normalizedFlyerImages[0].imageName, "Cover angle");
+assert.equal(normalizedFlyerImages[0].isCover, true);
+assert.equal(normalizedFlyerImages[1].skuReference, "IRUNSVAN-026-BLK");
+assert.equal(normalizedFlyerImages[1].colorName, "Black / White");
+
+const flyerWithGallery = normalizeProductFlyers([
+  {
+    id: "flyer-1",
+    title: "IRUNSVAN 026 Running Shoe",
+    slug: "irunsvan-026-running-shoe",
+    product_class: "Everyday Trainer",
+    story: "Same shoe, multiple SKU pictures.",
+    main_image_path: "content/public-products/legacy-main.jpg",
+    secondary_image_path: "content/public-products/legacy-side.jpg",
+    product_flyer_images: normalizedFlyerImages,
+    published: true,
+  },
+])[0];
+assert.equal(flyerWithGallery.images.length, 20);
+assert.equal(flyerWithGallery.coverImagePath, "content/public-products/cover.jpg");
+assert.equal(productFlyerImagesForFlyer(flyerWithGallery)[0].imageName, "Cover angle");
+
+const flyerWithLegacyImages = normalizeProductFlyers([
+  {
+    id: "flyer-legacy",
+    title: "IRUNSVAN Legacy",
+    slug: "irunsvan-legacy",
+    product_class: "Everyday Trainer",
+    story: "Legacy image fallback.",
+    main_image_path: "content/public-products/main.jpg",
+    secondary_image_path: "content/public-products/secondary.jpg",
+    published: true,
+  },
+])[0];
+assert.deepEqual(
+  productFlyerImagesForFlyer(flyerWithLegacyImages).map((image) => image.imageName),
+  ["Main image", "Secondary image"],
+);
+
+assert.deepEqual(
+  buildProductFlyerImagePayload(
+    {
+      flyerId: "flyer-1",
+      imagePath: "content/public-products/026-black.jpg",
+      imageName: "Black colorway side view",
+      skuReference: "IRUNSVAN-026-BLK",
+      colorName: "Black / White",
+      caption: "Same shoe, black SKU.",
+      displayOrder: "3",
+      isCover: true,
+    },
+    "admin-1",
+  ),
+  {
+    flyer_id: "flyer-1",
+    image_path: "content/public-products/026-black.jpg",
+    image_name: "Black colorway side view",
+    sku_reference: "IRUNSVAN-026-BLK",
+    color_name: "Black / White",
+    caption: "Same shoe, black SKU.",
+    display_order: 3,
+    is_cover: true,
+    created_by: "admin-1",
+    updated_by: "admin-1",
+  },
+);
 
 const file = { name: "My Flyer.JPG", type: "image/jpeg" };
 assert.deepEqual(buildContentImageRecord({ folder: "flyers", file, uniquePrefix: "20260619" }), {
