@@ -57,7 +57,7 @@ assert.deepEqual(variants[0], {
 
 const review = matchInventoryToVariants({
   inventoryRows: [
-    { model_code: "125", original_colour: "珍珠白", size: "38", stock_quantity: 40, source_sku: "2023001002138" },
+    { model_code: "125", original_colour: "珍珠白", size: "38", stock_quantity: 40, source_sku: "IRUNSVAN-125-PEARL-WHITE-38" },
     { model_code: "125", original_colour: "不存在", size: "38", stock_quantity: 7, source_sku: "bad-color" },
     { model_code: "999", original_colour: "珍珠白", size: "38", stock_quantity: 3, source_sku: "bad-product" },
   ],
@@ -68,7 +68,7 @@ const review = matchInventoryToVariants({
 
 assert.equal(review.matches.length, 1);
 assert.deepEqual(review.matches[0], {
-  sourceSku: "2023001002138",
+  sourceSku: "IRUNSVAN-125-PEARL-WHITE-38",
   productId: "product-125",
   productName: "IRUNSVAN 125 Flying GT3.0",
   variantId: "variant-1",
@@ -80,10 +80,10 @@ assert.deepEqual(review.matches[0], {
   previousStock: 10,
   nextStock: 40,
   changed: true,
-  matchType: "model_colour_size",
-  warnings: ["sku_mismatch"],
+  matchType: "sku",
+  warnings: [],
 });
-assert.deepEqual(review.exceptions.map((exception) => exception.code), ["missing_variant_sku", "missing_product"]);
+assert.deepEqual(review.exceptions.map((exception) => exception.code), ["missing_variant_sku", "missing_variant_sku"]);
 assert.deepEqual(buildStockReviewSummary(review), {
   matchedRows: 1,
   exceptionRows: 2,

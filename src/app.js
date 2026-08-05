@@ -64,6 +64,8 @@ const OperationsProducts = window.IrunsvanOperationsProducts;
 const WebsiteContent = window.IrunsvanWebsiteContent;
 const OrderExport = window.IrunsvanOrderExport;
 const SITE_CONTENT_STORAGE_KEY = "irunsvan_site_content";
+const PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT = 20;
+const PUBLIC_PRODUCT_FLYER_EMPTY_IMAGE_SLOTS = 3;
 const SERVER_MONITOR_ENABLED =
   typeof window !== "undefined" &&
   (["localhost", "127.0.0.1", ""].includes(window.location.hostname) ||
@@ -73,6 +75,7 @@ const IMPORT_LIBRARY_URLS = {
   jszip: "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
 };
 const importLibraryLoads = {};
+let resellerSearchRenderTimer = null;
 
 function readStoredSiteContent() {
   try {
@@ -155,6 +158,8 @@ const state = {
   signupConfirmationEmail: null,
   orderSubmitPending: false,
   applicationSubmitPending: false,
+  applicationActionPendingId: null,
+  applicationActionNotice: null,
   siteSavePending: false,
   flyerSavePending: false,
   storySavePending: false,
@@ -204,8 +209,13 @@ const state = {
   importError: null,
   stockResetError: null,
   stockResetSaved: false,
+  stockAdjustmentPendingId: null,
+  stockAdjustmentSaved: null,
+  stockAdjustmentError: null,
   importPreview: null,
   resellerSearch: "",
+  resellerSearchSuggestionsOpen: false,
+  resellerSearchSuggestionIndex: 0,
   resellerNotes: "",
   resellerDraft: {},
   resellerQuickOrderProductId: null,
@@ -452,12 +462,12 @@ async function fetchSupabase(table, query) {
 }
 
 async function fetchAuthedSupabase(table, query) {
-  const session = SupabaseClient.readStoredSession();
+  const session = await requireAuthedSession();
   return fetchSupabaseRows("authed", table, query, SupabaseClient.headers(SUPABASE_KEY, session?.access_token));
 }
 
-function requireAuthedSession() {
-  const session = SupabaseClient.readStoredSession();
+async function requireAuthedSession() {
+  const session = await SupabaseClient.getValidSession({ url: SUPABASE_URL, key: SUPABASE_KEY });
   if (!session?.access_token) {
     throw new Error("Sign in with a real Supabase account to use admin or reseller actions.");
   }
@@ -465,7 +475,7 @@ function requireAuthedSession() {
 }
 
 async function insertAuthedSupabase(table, payload) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(`insert:${table}`, `${SUPABASE_URL}/rest/v1/${table}`, {
     method: "POST",
     headers: {
@@ -480,7 +490,7 @@ async function insertAuthedSupabase(table, payload) {
 }
 
 async function upsertAuthedSupabase(table, payload, conflictColumn) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(`upsert:${table}`, `${SUPABASE_URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflictColumn)}`, {
     method: "POST",
     headers: {
@@ -495,7 +505,7 @@ async function upsertAuthedSupabase(table, payload, conflictColumn) {
 }
 
 async function updateAuthedSupabase(table, id, payload) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(`update:${table}`, `${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: {
@@ -510,7 +520,7 @@ async function updateAuthedSupabase(table, id, payload) {
 }
 
 async function deleteAuthedSupabase(table, filters) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(`delete:${table}`, `${SUPABASE_URL}/rest/v1/${table}?${filters}`, {
     method: "DELETE",
     headers: {
@@ -523,7 +533,7 @@ async function deleteAuthedSupabase(table, filters) {
 }
 
 async function uploadProductImage(record) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(
     `storage:${ProductPersistence.PRODUCT_IMAGE_BUCKET}`,
     `${SUPABASE_URL}/storage/v1/object/${ProductPersistence.PRODUCT_IMAGE_BUCKET}/${record.storagePath}`,
@@ -541,7 +551,7 @@ async function uploadProductImage(record) {
 }
 
 async function uploadContentImage(record) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(
     `storage:${WebsiteContent.CONTENT_IMAGE_BUCKET}`,
     `${SUPABASE_URL}/storage/v1/object/${WebsiteContent.CONTENT_IMAGE_BUCKET}/${record.storagePath}`,
@@ -560,7 +570,7 @@ async function uploadContentImage(record) {
 }
 
 async function invokeAuthedFunction(functionName, payload) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(`function:${functionName}`, `${SUPABASE_URL}/functions/v1/${functionName}`, {
     method: "POST",
     headers: {
@@ -574,7 +584,7 @@ async function invokeAuthedFunction(functionName, payload) {
 }
 
 async function invokeAuthedRpc(functionName, payload) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(`rpc:${functionName}`, `${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
     method: "POST",
     headers: {
@@ -610,7 +620,7 @@ function htmlFromIncludes(title, values) {
 }
 
 async function patchAuthedSupabase(table, filters, payload) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(`patch:${table}`, `${SUPABASE_URL}/rest/v1/${table}?${filters}`, {
     method: "PATCH",
     headers: {
@@ -625,7 +635,7 @@ async function patchAuthedSupabase(table, filters, payload) {
 }
 
 async function patchAuthedSupabaseMinimal(table, filters, payload) {
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   const response = await monitoredFetch(`patch:${table}`, `${SUPABASE_URL}/rest/v1/${table}?${filters}`, {
     method: "PATCH",
     headers: {
@@ -786,34 +796,6 @@ async function buildImportPreviewFromFile(type, file) {
     }
     const parsedMaster = ImportParser.parseMasterInventoryRows(rows);
     if (parsedMaster.rows.length) {
-      if (!state.variants.length) {
-        const seed = CatalogSeedBuilder.buildCatalogSeed({
-          inventoryRows: parsedMaster.rows,
-          selectedModelCodes: state.products.map((product) => product.model_code),
-          selectedProducts: state.products,
-          imageLibrary: selectedProductImageLibrary(),
-        });
-        return AdminImports.buildImportPreview({
-          type: "catalog_seed_inventory",
-          filename: file.name,
-          rowsTotal: rows.length,
-          processedRows: seed.variants.length,
-          errors: [
-            ...parsedMaster.errors,
-            ...seed.warnings.map((warning) => ({
-              row: warning.model_code,
-              code: warning.code,
-              sku: warning.original_colour,
-            })),
-          ],
-          products: seed.products,
-          variants: seed.variants,
-          colourMappings: seed.colourMappings,
-          inventoryRows: seed.inventorySeedRows,
-          seedSummary: seed.summary,
-        });
-      }
-
       const stockReview = ProductCatalogManager.matchInventoryToVariants({
         inventoryRows: parsedMaster.rows,
         products: state.products,
@@ -891,7 +873,7 @@ async function sendOrderNotification(details) {
 
 async function sendApplicationNotification(details) {
   const payload = EmailNotifications.buildApplicationEmailPayload(details);
-  const html = htmlFromIncludes(payload.subject, payload.htmlIncludes);
+  const html = payload.html || htmlFromIncludes(payload.subject, payload.htmlIncludes);
   return invokeAuthedFunction("send-application-email", {
     ...payload,
     eventType: details.eventType,
@@ -912,6 +894,20 @@ async function fetchOptionalSupabaseResult(table, query) {
     return { ok: true, rows: await fetchSupabase(table, query) };
   } catch (error) {
     return { ok: false, rows: [], error };
+  }
+}
+
+async function fetchOrderRequests() {
+  const workflowQuery = "select=id,reseller_id,status,notes,admin_notes,approved_at,paid_at,supplier_submitted_at,processing_at,shipped_at,fulfilled_at,expected_fulfillment_date,invoice_number,payment_reference,payment_note,supplier_exported_at,created_at,updated_at&order=created_at.desc&limit=100";
+  try {
+    return await fetchAuthedSupabase("order_requests", workflowQuery);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/column|schema cache|does not exist|42703/i.test(message)) throw error;
+    return fetchAuthedSupabase(
+      "order_requests",
+      "select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100",
+    );
   }
 }
 
@@ -958,12 +954,63 @@ function inventoryRows() {
 }
 
 function filteredInventoryRows() {
-  const search = String(state.resellerSearch || "").trim().toLowerCase();
-  const rows = Orders.availableInventoryRows(inventoryRows());
-  if (!search) return rows;
-  return rows.filter((row) =>
-    [row.productName, row.productSku, row.sku, row.colour, row.size].some((value) => String(value || "").toLowerCase().includes(search)),
-  );
+  return Orders.filterInventoryRows(inventoryRows(), state.resellerSearch);
+}
+
+function resellerSearchSuggestions() {
+  return Orders.buildInventorySearchSuggestions(inventoryRows(), state.resellerSearch, 6);
+}
+
+function resellerSearchControl() {
+  const suggestions = resellerSearchSuggestions();
+  const showSuggestions = state.resellerSearchSuggestionsOpen && Boolean(String(state.resellerSearch || "").trim());
+  return `
+    <div class="search-combobox">
+      <label class="compact-search" for="reseller-search-input">
+        <span>Search</span>
+        <input
+          id="reseller-search-input"
+          name="reseller-search"
+          type="search"
+          value="${escapeHtml(state.resellerSearch)}"
+          placeholder="Search products, models or SKUs"
+          autocomplete="off"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-controls="reseller-search-suggestions"
+          aria-expanded="${showSuggestions && suggestions.length ? "true" : "false"}"
+        />
+      </label>
+      ${
+        showSuggestions
+          ? `<div class="search-suggestions" id="reseller-search-suggestions" role="listbox">
+              ${
+                suggestions.length
+                  ? suggestions
+                      .map(
+                        (suggestion, index) => `
+                          <button
+                            type="button"
+                            role="option"
+                            class="search-suggestion${index === state.resellerSearchSuggestionIndex ? " active" : ""}"
+                            aria-selected="${index === state.resellerSearchSuggestionIndex ? "true" : "false"}"
+                            data-action="open-search-suggestion"
+                            data-product-id="${escapeHtml(suggestion.productId)}"
+                          >
+                            <strong>${escapeHtml(suggestion.productName)}</strong>
+                            <span>${escapeHtml(`${suggestion.productSku || "Model"} · ${suggestion.matchedSku || "SKU"}`)}</span>
+                            <span>${escapeHtml(`${suggestion.colour || "Colour not set"}${suggestion.size ? ` · Size ${suggestion.size}` : ""} · ${suggestion.stockQuantity} in stock`)}</span>
+                          </button>
+                        `,
+                      )
+                      .join("")
+                  : `<p class="search-suggestion-empty">No matching products.</p>`
+              }
+            </div>`
+          : ""
+      }
+    </div>
+  `;
 }
 
 function adminProductModels() {
@@ -1238,10 +1285,7 @@ async function loadProtectedData() {
         ["inventory", fetchAuthedSupabase("inventory", "select=id,variant_id,sku,style_code,stock_quantity,updated_at&order=sku.asc&limit=5000")],
         [
           "orderRequests",
-          fetchAuthedSupabase(
-            "order_requests",
-            "select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100",
-          ),
+          fetchOrderRequests(),
         ],
         [
           "orderRequestItems",
@@ -2229,7 +2273,7 @@ function selectorGroup(title, values) {
   return `
     <div class="selector-group">
       <p class="filter-title">${escapeHtml(title)}</p>
-      <div>${values.map((value, index) => `<button class="${index === 0 ? "selected" : ""}">${escapeHtml(value)}</button>`).join("")}</div>
+      <div>${values.map((value, index) => `<span class="selector-chip ${index === 0 ? "selected" : ""}">${escapeHtml(value)}</span>`).join("")}</div>
     </div>
   `;
 }
@@ -2600,7 +2644,7 @@ function resellerPortal() {
           <div class="panel-toolbar">
             <h2>Shop Products</h2>
             <div class="toolbar-actions">
-              <label class="compact-search"><span>Search</span><input name="reseller-search" value="${escapeHtml(state.resellerSearch)}" placeholder="Search products, colours, sizes" /></label>
+              ${resellerSearchControl()}
             </div>
           </div>
           ${state.inventoryError ? `<p class="notice error">${escapeHtml(state.inventoryError)}</p>` : ""}
@@ -3477,7 +3521,7 @@ function publicProductFlyerExistingImageControl(flyer, image, index) {
   const persisted = isPersistedFlyerImage(image);
   return `
     <article class="public-product-flyer-gallery-row">
-      <div class="public-product-flyer-image-preview">
+      <div class="public-product-flyer-image-preview" data-product-flyer-image-preview>
         ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(image.imageName || flyer.title)}" loading="lazy" />` : `<div class="public-product-flyer-image-empty"><span>No image</span></div>`}
       </div>
       <div class="public-product-flyer-gallery-fields">
@@ -3489,11 +3533,12 @@ function publicProductFlyerExistingImageControl(flyer, image, index) {
           ${controlInput("Color", `existing_product_flyer_image_color_${index}`, image.colorName || "")}
         </div>
         ${controlTextarea("Caption", `existing_product_flyer_image_caption_${index}`, image.caption || "")}
+        <label><span>Replace Picture File</span><input name="existing_product_flyer_image_file_${index}" type="file" accept="image/*" /></label>
         <div class="two-fields">
           ${controlInput("Display Order", `existing_product_flyer_image_order_${index}`, String(image.displayOrder ?? index), "number")}
           <label class="toggle-row"><input name="product_flyer_cover_image" type="radio" value="existing:${index}" ${image.isCover || index === 0 ? "checked" : ""} /><span>Use as cover</span></label>
         </div>
-        <label class="toggle-row"><input name="existing_product_flyer_image_remove_${index}" type="checkbox" ${persisted ? "" : "disabled"} /><span>${persisted ? "Remove this image" : "Legacy image preview only"}</span></label>
+        <label class="toggle-row"><input name="existing_product_flyer_image_remove_${index}" type="checkbox" /><span>Remove this image</span></label>
       </div>
     </article>
   `;
@@ -3502,7 +3547,7 @@ function publicProductFlyerExistingImageControl(flyer, image, index) {
 function publicProductFlyerNewImageControl(index, displayIndex) {
   return `
     <article class="public-product-flyer-gallery-row public-product-flyer-new-row">
-      <div class="public-product-flyer-image-preview">
+      <div class="public-product-flyer-image-preview" data-product-flyer-image-preview>
         <div class="public-product-flyer-image-empty"><span>Image ${displayIndex}</span></div>
       </div>
       <div class="public-product-flyer-gallery-fields">
@@ -3522,20 +3567,44 @@ function publicProductFlyerNewImageControl(index, displayIndex) {
   `;
 }
 
+function previewSelectedProductFlyerImage(input) {
+  const file = input?.files?.[0];
+  const row = input?.closest?.(".public-product-flyer-gallery-row");
+  const preview = row?.querySelector?.("[data-product-flyer-image-preview]");
+  if (!file || !row || !preview || typeof URL === "undefined" || !URL.createObjectURL) return;
+  if (row.dataset.previewUrl) {
+    URL.revokeObjectURL(row.dataset.previewUrl);
+    delete row.dataset.previewUrl;
+  }
+  const removeInput = row.querySelector("input[name^='existing_product_flyer_image_remove_']");
+  if (removeInput) removeInput.checked = false;
+  const objectUrl = URL.createObjectURL(file);
+  row.dataset.previewUrl = objectUrl;
+  row.classList.remove("is-marked-for-removal");
+  preview.innerHTML = `<img src="${escapeHtml(objectUrl)}" alt="${escapeHtml(file.name || "Selected product image")}" />`;
+}
+
 function publicProductFlyerGalleryControls(flyer) {
   const gallery = flyer ? productFlyerGallery(flyer) : [];
   const existingRows = gallery.map((image, index) => publicProductFlyerExistingImageControl(flyer, image, index)).join("");
-  const remaining = Math.max(0, 20 - gallery.length);
-  const newRows = Array.from({ length: remaining }, (_, index) => publicProductFlyerNewImageControl(index, gallery.length + index + 1)).join("");
+  const remaining = Math.max(0, PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT - gallery.length);
+  const visibleNewSlots = Math.min(remaining, PUBLIC_PRODUCT_FLYER_EMPTY_IMAGE_SLOTS);
+  const newRows = Array.from({ length: visibleNewSlots }, (_, index) => publicProductFlyerNewImageControl(index, gallery.length + index + 1)).join("");
+  const slotNote =
+    remaining === 0
+      ? `This flyer is at the ${PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT}-picture limit.`
+      : remaining > visibleNewSlots
+        ? `Showing ${visibleNewSlots} upload slots. Save these pictures, then reopen the flyer to add more up to ${PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT}.`
+        : "This flyer has room for the remaining product pictures.";
   return `
     <section class="public-product-flyer-gallery-editor">
       <div class="public-product-flyer-gallery-head">
         <h3>Product Pictures</h3>
-        <span>${escapeHtml(`${gallery.length}/20 used`)}</span>
+        <span>${escapeHtml(`${gallery.length}/${PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT} used`)}</span>
       </div>
-      <p class="form-note">One flyer is one shoe/model. Add up to 20 named pictures for colorways, SKU references, angles, and details.</p>
+      <p class="form-note">One flyer is one shoe/model. Add named pictures for colorways, SKU references, angles, and details. ${escapeHtml(slotNote)}</p>
       <input type="hidden" name="existing_product_flyer_image_count" value="${escapeHtml(String(gallery.length))}" />
-      <input type="hidden" name="new_product_flyer_image_count" value="${escapeHtml(String(remaining))}" />
+      <input type="hidden" name="new_product_flyer_image_count" value="${escapeHtml(String(visibleNewSlots))}" />
       <div class="public-product-flyer-gallery-list">
         ${existingRows}
         ${newRows}
@@ -3862,8 +3931,35 @@ function adminProductCard(model) {
             : `<div class="warning-row good"><span>Ready for reseller ordering</span></div>`
         }
         ${stockMatrixPreview(model.stockMatrix)}
+        ${adminStockEditors(model.id)}
       </div>
     </article>
+  `;
+}
+
+function adminStockEditors(productId) {
+  const rows = inventoryRows().filter((row) => row.productId === productId);
+  if (!rows.length) return "";
+  return `
+    <details class="admin-stock-details manual-stock-details">
+      <summary><span>Manual stock corrections</span><strong>${escapeHtml(String(rows.length))} SKU rows</strong></summary>
+      ${state.stockAdjustmentSaved ? `<p class="notice success">${escapeHtml(state.stockAdjustmentSaved)}</p>` : ""}
+      ${state.stockAdjustmentError ? `<p class="notice error">${escapeHtml(state.stockAdjustmentError)}</p>` : ""}
+      <div class="manual-stock-list">
+        ${rows
+          .map(
+            (row) => `
+              <div class="manual-stock-row" data-stock-adjustment="${escapeHtml(row.inventoryId)}">
+                <div><strong>${escapeHtml(row.sku)}</strong><span>${escapeHtml(`${row.colour || "Colour not set"}${row.size ? ` · Size ${row.size}` : ""}`)}</span></div>
+                <label><span>Stock</span><input name="manual_stock_quantity" type="number" min="0" step="1" value="${escapeHtml(String(row.stockQuantity))}" /></label>
+                <label><span>Reason</span><input name="manual_stock_reason" placeholder="Optional correction note" /></label>
+                <button class="button mini" data-action="save-stock-adjustment" data-inventory-id="${escapeHtml(row.inventoryId)}" ${state.stockAdjustmentPendingId ? "disabled" : ""}>${state.stockAdjustmentPendingId === row.inventoryId ? "Saving..." : "Save"}</button>
+              </div>
+            `,
+          )
+          .join("")}
+      </div>
+    </details>
   `;
 }
 
@@ -4274,6 +4370,22 @@ function adminRequestsCompletedPage() {
   return adminOrderWorkspacePage("Completed", "Shipped and fulfilled orders stay here for operational lookup.", [...buckets.shipped, ...buckets.fulfilled]);
 }
 
+function applicationActionFeedback() {
+  if (state.applicationError) return `<p class="notice error">${escapeHtml(state.applicationError)}</p>`;
+  if (!state.applicationActionNotice) return "";
+  return `<p class="notice ${escapeHtml(state.applicationActionNotice.type)}">${escapeHtml(state.applicationActionNotice.message)}</p>`;
+}
+
+function applicationStatusActions(application) {
+  const pending = state.applicationActionPendingId === application.id;
+  const anyPending = Boolean(state.applicationActionPendingId);
+  return `
+    ${statusPill(application.status)}
+    <button class="button mini" data-action="application-status" data-application-id="${escapeHtml(application.id)}" data-user-id="${escapeHtml(application.user_id)}" data-status="approved" ${anyPending ? "disabled" : ""}>${pending ? "Saving..." : "Approve"}</button>
+    <button class="button mini secondary" data-action="application-status" data-application-id="${escapeHtml(application.id)}" data-user-id="${escapeHtml(application.user_id)}" data-status="rejected" ${anyPending ? "disabled" : ""}>Reject</button>
+  `;
+}
+
 function adminApplications() {
   return `
     <main class="admin-layout">
@@ -4283,6 +4395,7 @@ function adminApplications() {
         <section class="admin-panels">
           <div class="admin-card">
             <div class="panel-toolbar"><h2>Reseller Applications</h2><span>${state.resellerApplicationsData.length} applications</span></div>
+            ${applicationActionFeedback()}
             <div class="approval-stack">
               ${
                 state.resellerApplicationsData.length
@@ -4297,9 +4410,7 @@ function adminApplications() {
                           <p>${escapeHtml(application.message || "No reseller notes provided.")}</p>
                         </div>
                         <div class="approval-actions">
-                          ${statusPill(application.status)}
-                          <button class="button mini" data-action="application-status" data-application-id="${escapeHtml(application.id)}" data-user-id="${escapeHtml(application.user_id)}" data-status="approved">Approve</button>
-                          <button class="button mini secondary" data-action="application-status" data-application-id="${escapeHtml(application.id)}" data-user-id="${escapeHtml(application.user_id)}" data-status="rejected">Reject</button>
+                          ${applicationStatusActions(application)}
                         </div>
                       </article>
                     `,
@@ -4325,6 +4436,7 @@ function adminApprovals() {
         <section class="admin-panels">
           <div class="admin-card">
             <div class="panel-toolbar"><h2>Reseller Applications</h2><span>${state.resellerApplicationsData.length} applications</span></div>
+            ${applicationActionFeedback()}
             <div class="approval-stack">
               ${
                 state.resellerApplicationsData.length
@@ -4339,9 +4451,7 @@ function adminApprovals() {
                           <p>${escapeHtml(application.message || "No reseller notes provided.")}</p>
                         </div>
                         <div class="approval-actions">
-                          ${statusPill(application.status)}
-                          <button class="button mini" data-action="application-status" data-application-id="${escapeHtml(application.id)}" data-user-id="${escapeHtml(application.user_id)}" data-status="approved">Approve</button>
-                          <button class="button mini secondary" data-action="application-status" data-application-id="${escapeHtml(application.id)}" data-user-id="${escapeHtml(application.user_id)}" data-status="rejected">Reject</button>
+                          ${applicationStatusActions(application)}
                         </div>
                       </article>
                     `,
@@ -4398,7 +4508,7 @@ function adminImports() {
         <header class="admin-topbar"><div><h1>Inventory</h1><p>Upload the master inventory file, review matched stock changes, then publish availability for resellers.</p></div></header>
         <section class="import-panel">
           <div class="upload-grid">
-            ${uploadBox("Upload Master Inventory", "Builds the catalog from the master file or refreshes stock for products that are already set up.", "inventory_xlsx", ".xlsx,.xls,.csv")}
+            ${uploadBox("Upload Master Inventory", "Resets stock for products already sold on this website, then applies exact manufacturer SKU matches.", "inventory_xlsx", ".xlsx,.xls,.csv")}
             ${uploadBox("Scan Media Pack", "Finds product folders and images so products can be reviewed and added later.", "media_pack_zip", ".zip")}
           </div>
           <form class="stock-reset-panel" data-form="stock-reset">
@@ -4766,8 +4876,7 @@ function summaryRow(label, value, strong = false, muted = false) {
 function pager(label) {
   return `
     <div class="pager">
-      <span>${escapeHtml(label)}</span>
-      <div><button disabled>Prev</button><button class="active">1</button></div>
+      <span class="pager-count">${escapeHtml(label)}</span>
     </div>
   `;
 }
@@ -4880,6 +4989,17 @@ function routeView() {
     privacy: () => infoPage("privacy"),
   };
   return (views[state.route] || publicHomePage)();
+}
+
+function renderResellerSearchResults() {
+  window.clearTimeout(resellerSearchRenderTimer);
+  resellerSearchRenderTimer = null;
+  const cursorPosition = String(state.resellerSearch || "").length;
+  render();
+  const input = document.querySelector("[name='reseller-search']");
+  if (!input) return;
+  input.focus({ preventScroll: true });
+  if (typeof input.setSelectionRange === "function") input.setSelectionRange(cursorPosition, cursorPosition);
 }
 
 function bindEvents() {
@@ -5092,6 +5212,19 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll('input[name^="existing_product_flyer_image_file_"], input[name^="new_product_flyer_image_file_"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      previewSelectedProductFlyerImage(input);
+    });
+  });
+
+  document.querySelectorAll("input[name^='existing_product_flyer_image_remove_']").forEach((input) => {
+    input.addEventListener("change", () => {
+      const row = input.closest(".public-product-flyer-gallery-row");
+      if (row) row.classList.toggle("is-marked-for-removal", input.checked);
+    });
+  });
+
   document.querySelectorAll("[data-action='cancel-public-product-flyer-edit']").forEach((button) => {
     button.addEventListener("click", async () => {
       await cancelPublicProductFlyerEdit();
@@ -5122,6 +5255,7 @@ function bindEvents() {
         const flyerId = String(new FormData(form).get("product_flyer_id") || "").trim();
         if (flyerId) await updatePublicProductFlyer(form);
         else await savePublicProductFlyer(form);
+        return;
       }
       if (formName === "about-content") await saveAboutContent(form);
       if (formName === "site-controls") await saveSiteControls(form);
@@ -5161,7 +5295,55 @@ function bindEvents() {
   document.querySelectorAll("[name='reseller-search']").forEach((input) => {
     input.addEventListener("input", () => {
       state.resellerSearch = input.value;
-      render();
+      state.resellerSearchSuggestionsOpen = true;
+      state.resellerSearchSuggestionIndex = 0;
+      window.clearTimeout(resellerSearchRenderTimer);
+      resellerSearchRenderTimer = window.setTimeout(() => renderResellerSearchResults(), 120);
+    });
+    input.addEventListener("keydown", (event) => {
+      const suggestions = resellerSearchSuggestions();
+      if (event.key === "ArrowDown" && suggestions.length) {
+        event.preventDefault();
+        state.resellerSearchSuggestionsOpen = true;
+        state.resellerSearchSuggestionIndex = Math.min(suggestions.length - 1, state.resellerSearchSuggestionIndex + 1);
+        renderResellerSearchResults();
+      }
+      if (event.key === "ArrowUp" && suggestions.length) {
+        event.preventDefault();
+        state.resellerSearchSuggestionsOpen = true;
+        state.resellerSearchSuggestionIndex = Math.max(0, state.resellerSearchSuggestionIndex - 1);
+        renderResellerSearchResults();
+      }
+      if (event.key === "Enter" && suggestions.length) {
+        event.preventDefault();
+        const suggestion = suggestions[state.resellerSearchSuggestionIndex] || suggestions[0];
+        state.resellerSearchSuggestionsOpen = false;
+        window.clearTimeout(resellerSearchRenderTimer);
+        setRoute("reseller-product", { productId: suggestion.productId });
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        state.resellerSearchSuggestionsOpen = false;
+        renderResellerSearchResults();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-action='save-stock-adjustment']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const row = button.closest("[data-stock-adjustment]");
+      await handleManualStockAdjustment(
+        button.getAttribute("data-inventory-id"),
+        row?.querySelector("[name='manual_stock_quantity']")?.value,
+        row?.querySelector("[name='manual_stock_reason']")?.value,
+      );
+    });
+  });
+
+  document.querySelectorAll("[data-action='open-search-suggestion']").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.resellerSearchSuggestionsOpen = false;
+      setRoute("reseller-product", { productId: button.getAttribute("data-product-id") });
     });
   });
 
@@ -5453,7 +5635,7 @@ async function handleLogin(form) {
       return;
     }
     if (adminOnly && !state.auth.isAdmin) {
-      await SupabaseClient.signOut();
+      await SupabaseClient.signOut({ url: SUPABASE_URL, key: SUPABASE_KEY });
       state.auth = Auth.normalizeAuthState();
       state.authError = "This account does not have admin access.";
       setRoute("admin-login", {}, { replaceHistory: true, scroll: false });
@@ -5554,7 +5736,7 @@ async function handleAccountPasswordSave(form) {
   const data = new FormData(form);
   const password = String(data.get("password") || "");
   const passwordConfirm = String(data.get("password_confirm") || "");
-  const session = requireAuthedSession();
+  const session = await requireAuthedSession();
   state.accountPasswordSavePending = true;
   state.accountPasswordSaved = false;
   state.accountPasswordError = null;
@@ -5711,7 +5893,7 @@ async function claimAdminInvite(token) {
     state.adminInviteError = readableAdminInviteError(error);
     state.adminInviteClaimPending = false;
     if (state.auth.isAuthenticated) {
-      await SupabaseClient.signOut();
+      await SupabaseClient.signOut({ url: SUPABASE_URL, key: SUPABASE_KEY });
       state.auth = Auth.normalizeAuthState();
     }
     render();
@@ -5749,7 +5931,7 @@ function handleGoogleLogin() {
 }
 
 async function handleLogout() {
-  await SupabaseClient.signOut();
+  await SupabaseClient.signOut({ url: SUPABASE_URL, key: SUPABASE_KEY });
   state.auth = Auth.normalizeAuthState();
   state.authError = null;
   state.loginSubmitted = false;
@@ -5812,9 +5994,13 @@ async function handleOrderSubmit(form) {
       items: draftItems,
       notes: state.resellerNotes,
     });
-    const [createdRequest] = await insertAuthedSupabase("order_requests", payload.orderRequest);
-    const itemsPayload = payload.orderItems.map((item) => ({ ...item, order_request_id: createdRequest.id }));
-    await insertAuthedSupabase("order_request_items", itemsPayload);
+    const result = await invokeAuthedRpc("submit_order_request", {
+      p_items: payload.orderItems.map((item) => ({ variant_id: item.variant_id, quantity: item.quantity })),
+      p_notes: payload.orderRequest.notes,
+    });
+    const createdRequest = result?.order;
+    const savedItems = Array.isArray(result?.items) ? result.items : [];
+    if (!createdRequest?.id || !savedItems.length) throw new Error("The order transaction did not return a complete order.");
     state.orderConfirmation = {
       id: createdRequest.id,
       code: formatRequestCode(createdRequest.id),
@@ -5823,7 +6009,7 @@ async function handleOrderSubmit(form) {
       totalUnits: payload.orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
       subtotal: payload.orderItems.reduce((sum, item) => sum + Number(item.base_price || 0) * Number(item.quantity || 0), 0),
       notes: payload.orderRequest.notes || "",
-      items: payload.orderItems,
+      items: savedItems,
     };
     state.resellerDraft = {};
     state.resellerNotes = "";
@@ -5937,34 +6123,10 @@ async function handleOrderStatusUpdate(orderId, status) {
       `Updated from admin dashboard on ${new Date().toLocaleString()}`,
       orderRequest,
     );
-    const shouldAdjustInventory = status === "awaiting_payment" && currentStatus !== "awaiting_payment";
-    const inventoryAdjustments = shouldAdjustInventory
-      ? AdminOrders.buildApprovalInventoryAdjustments({ orderId, items: approvalItems, inventory: state.inventory })
-      : [];
-    await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, patch);
-    if (shouldAdjustInventory) {
-      const appliedAdjustments = [];
-      try {
-        for (const adjustment of inventoryAdjustments) {
-          await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
-            stock_quantity: adjustment.nextStock,
-            source: "order_reserved",
-          });
-          appliedAdjustments.push(adjustment);
-        }
-      } catch (inventoryError) {
-        for (const adjustment of appliedAdjustments.reverse()) {
-          await patchAuthedSupabase("inventory", `id=eq.${encodeURIComponent(adjustment.id)}`, {
-            stock_quantity: adjustment.previousStock,
-            source: "order_reserve_revert",
-          }).catch(() => {});
-        }
-        await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, {
-          status: currentStatus,
-          admin_notes: orderRequest?.admin_notes || null,
-        }).catch(() => {});
-        throw inventoryError;
-      }
+    if (status === "awaiting_payment" && currentStatus !== "awaiting_payment") {
+      await invokeAuthedRpc("approve_order_request", { p_order_id: orderId });
+    } else {
+      await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, patch);
     }
     if (orderRequest?.reseller_id) {
       const [profile] = await fetchAuthedSupabase(
@@ -5977,9 +6139,9 @@ async function handleOrderStatusUpdate(orderId, status) {
         orderCode: formatRequestCode(orderId),
         resellerCompany: profile?.company_name || "Irunsvan reseller",
         resellerEmail: profile?.email || "",
-        totalSkus: 0,
-        totalUnits: 0,
-        subtotal: 0,
+        totalSkus: approvalItems.length,
+        totalUnits: approvalItems.reduce((total, item) => total + Number(item.quantity || 0), 0),
+        subtotal: approvalItems.reduce((total, item) => total + Number(item.quantity || 0) * Number(item.base_price || 0), 0),
         notes: patch.admin_notes || "",
       }).catch(() => {});
     }
@@ -6017,9 +6179,13 @@ async function handleOrderExport(orderId, format) {
         ...payload,
         XLSX: window.XLSX,
       });
-      return;
+    } else {
+      OrderExport.downloadSupplierCsv(payload);
     }
-    OrderExport.downloadSupplierCsv(payload);
+    await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, {
+      supplier_exported_at: new Date().toISOString(),
+    });
+    await loadProtectedData();
   } catch (error) {
     state.historyError = error instanceof Error ? error.message : "Unable to export order";
     render();
@@ -6065,32 +6231,72 @@ async function handleStockReset(form) {
   }
 }
 
-async function handleApplicationStatusUpdate(applicationId, userId, status) {
+async function handleManualStockAdjustment(inventoryId, stockQuantity, reason) {
+  const quantity = Number(stockQuantity);
+  state.stockAdjustmentSaved = null;
+  state.stockAdjustmentError = null;
+  if (!Number.isInteger(quantity) || quantity < 0) {
+    state.stockAdjustmentError = "Stock quantity must be a whole number of zero or more.";
+    render();
+    return;
+  }
+
+  state.stockAdjustmentPendingId = inventoryId;
+  render();
   try {
-    const application = state.resellerApplicationsData.find((entry) => entry.id === applicationId);
-    const update = Applications.buildApplicationApprovalUpdate({
-      status,
-      adminUserId: state.auth.user?.id,
+    const updated = await invokeAuthedRpc("adjust_inventory_stock", {
+      p_inventory_id: inventoryId,
+      p_stock_quantity: quantity,
+      p_reason: String(reason || "").trim() || null,
     });
-    await patchAuthedSupabase("reseller_applications", `id=eq.${encodeURIComponent(applicationId)}`, {
-      ...update.applicationPatch,
-      reviewed_at: new Date().toISOString(),
-    });
-    await patchAuthedSupabase("profiles", `id=eq.${encodeURIComponent(userId)}`, update.profilePatch);
-    if (application?.email) {
-      sendApplicationNotification({
-        eventType: `application_${status}`,
-        adminEmails: [application.email],
-        companyName: application.company_name,
-        fullName: application.full_name,
-        email: application.email,
-        country: application.country || "",
-        message: application.message || "",
-      }).catch(() => {});
-    }
+    state.inventory = state.inventory.map((row) => (row.id === inventoryId ? { ...row, ...updated } : row));
+    state.stockAdjustmentSaved = `${updated?.sku || "Inventory"} updated to ${quantity}.`;
     await loadProtectedData();
   } catch (error) {
+    state.stockAdjustmentError = error instanceof Error ? error.message : "Unable to adjust stock";
+  } finally {
+    state.stockAdjustmentPendingId = null;
+    render();
+  }
+}
+
+async function handleApplicationStatusUpdate(applicationId, userId, status) {
+  state.applicationActionPendingId = applicationId;
+  state.applicationActionNotice = null;
+  state.applicationError = null;
+  render();
+  try {
+    const application = state.resellerApplicationsData.find((entry) => entry.id === applicationId);
+    Applications.buildApplicationApprovalUpdate({ status, adminUserId: state.auth.user?.id });
+    await invokeAuthedRpc("review_reseller_application", {
+      p_application_id: applicationId,
+      p_status: status,
+    });
+    let emailError = application?.email ? null : "The reseller application has no email address";
+    if (application?.email) {
+      try {
+        const result = await sendApplicationNotification({
+          eventType: `application_${status}`,
+          adminEmails: [],
+          companyName: application.company_name,
+          fullName: application.full_name,
+          email: application.email,
+          country: application.country || "",
+          message: application.message || "",
+        });
+        if (!result?.ok) throw new Error(result?.reason || "Email delivery was not confirmed");
+      } catch (error) {
+        emailError = error instanceof Error ? error.message : "Email delivery failed";
+      }
+    }
+    await loadProtectedData();
+    state.applicationActionNotice = emailError
+      ? { type: "warning", message: `Application ${status}, but the confirmation email failed: ${emailError}` }
+      : { type: "success", message: `Application ${status}. Confirmation email sent to ${application?.email || "the reseller"}.` };
+  } catch (error) {
     state.applicationError = error instanceof Error ? error.message : "Unable to update reseller application";
+  } finally {
+    state.applicationActionPendingId = null;
     render();
   }
 }
@@ -6214,11 +6420,13 @@ function productFlyerImageDraftsFromForm(form, existingImages = []) {
     const id = String(data.get(`existing_product_flyer_image_id_${index}`) || "").trim();
     const source = existingImages[index] || {};
     const imagePath = String(data.get(`existing_product_flyer_image_path_${index}`) || source.imagePath || "").trim();
+    const replacementFile = form.elements.namedItem(`existing_product_flyer_image_file_${index}`)?.files?.[0] || null;
     return {
       id,
       index,
       removed: data.get(`existing_product_flyer_image_remove_${index}`) === "on",
       persisted: Boolean(id),
+      replacementFile,
       imagePath,
       imageName: data.get(`existing_product_flyer_image_name_${index}`) || source.imageName || `Product image ${index + 1}`,
       skuReference: data.get(`existing_product_flyer_image_sku_${index}`) || "",
@@ -6245,8 +6453,31 @@ function productFlyerImageDraftsFromForm(form, existingImages = []) {
   }).filter(Boolean);
 
   const finalCount = existing.filter((image) => !image.removed).length + additions.length;
-  if (finalCount > 20) throw new Error("A public product flyer can have at most 20 pictures.");
+  if (finalCount > PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT) throw new Error(`A public product flyer can have at most ${PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT} pictures.`);
   return { existing, additions };
+}
+
+async function uploadProductFlyerImageReplacements(existing = []) {
+  const uniquePrefix = new Date().toISOString().replace(/\D/g, "");
+  const replaced = [];
+  for (const image of existing) {
+    if (!image.replacementFile || image.removed) {
+      replaced.push(image);
+      continue;
+    }
+    const record = WebsiteContent.buildContentImageRecord({
+      folder: "public-products",
+      file: image.replacementFile,
+      uniquePrefix: `${uniquePrefix}-replace-${image.index}`,
+    });
+    await uploadContentImage(record);
+    replaced.push({
+      ...image,
+      imagePath: record.storagePath,
+      imageName: image.imageName || image.replacementFile.name || `Product image ${image.index + 1}`,
+    });
+  }
+  return replaced;
 }
 
 async function uploadProductFlyerImageAdditions(additions = []) {
@@ -6273,7 +6504,7 @@ function finalProductFlyerImages(existing = [], additions = []) {
 
 async function persistProductFlyerImages(flyerId, imageDrafts, uploadedAdditions) {
   const finalImages = finalProductFlyerImages(imageDrafts.existing, uploadedAdditions);
-  await patchAuthedSupabase("public_product_flyer_images", `flyer_id=eq.${encodeURIComponent(flyerId)}`, { is_cover: false }).catch(() => {});
+  await patchAuthedSupabase("public_product_flyer_images", `flyer_id=eq.${encodeURIComponent(flyerId)}`, { is_cover: false });
   for (const image of imageDrafts.existing) {
     if (!image.persisted) continue;
     if (image.removed) {
@@ -6283,16 +6514,18 @@ async function persistProductFlyerImages(flyerId, imageDrafts, uploadedAdditions
     await updateAuthedSupabase(
       "public_product_flyer_images",
       image.id,
-      WebsiteContent.buildProductFlyerImagePayload(
+      WebsiteContent.buildProductFlyerImageUpdatePayload(
         { ...image, flyerId, isCover: finalImages.some((entry) => entry.id === image.id && entry.isCover) },
         state.auth.user?.id || null,
       ),
     );
   }
-  if (uploadedAdditions.length) {
+  const legacyAdditions = imageDrafts.existing.filter((image) => !image.persisted && !image.removed);
+  const insertions = [...legacyAdditions, ...uploadedAdditions];
+  if (insertions.length) {
     await insertAuthedSupabase(
       "public_product_flyer_images",
-      uploadedAdditions.map((image) =>
+      insertions.map((image) =>
         WebsiteContent.buildProductFlyerImagePayload(
           { ...image, flyerId, isCover: finalImages.some((entry) => entry.imagePath === image.imagePath && entry.isCover) },
           state.auth.user?.id || null,
@@ -6380,8 +6613,10 @@ async function updatePublicProductFlyer(form) {
     if (!id || !currentFlyer) throw new Error("Choose a public product flyer before updating.");
     const currentGallery = productFlyerGallery(currentFlyer);
     const imageDrafts = productFlyerImageDraftsFromForm(form, currentGallery);
+    const existingWithReplacements = await uploadProductFlyerImageReplacements(imageDrafts.existing);
+    const preparedDrafts = { ...imageDrafts, existing: existingWithReplacements };
     const uploadedAdditions = await uploadProductFlyerImageAdditions(imageDrafts.additions);
-    const finalImages = finalProductFlyerImages(imageDrafts.existing, uploadedAdditions);
+    const finalImages = finalProductFlyerImages(preparedDrafts.existing, uploadedAdditions);
     if (!finalImages.length) throw new Error("Keep at least one product picture on this flyer.");
     const payloadInput = {
       title: data.get("product_flyer_title"),
@@ -6399,7 +6634,7 @@ async function updatePublicProductFlyer(form) {
       : await updateAuthedSupabase("public_product_flyers", id,
           WebsiteContent.buildProductFlyerUpdatePayload(payloadInput, state.auth.user?.id || null),
         );
-    await persistProductFlyerImages(updated.id, imageDrafts, uploadedAdditions);
+    await persistProductFlyerImages(updated.id, preparedDrafts, uploadedAdditions);
     await loadProtectedData();
     if (state.selectedProductFlyerSlug === currentFlyer.slug) {
       const normalizedUpdated = WebsiteContent.normalizeProductFlyers([updated], { includeUnpublished: true })[0];
@@ -6784,6 +7019,25 @@ async function handleImportCommit() {
 
   let importJobId = null;
   try {
+    if (state.importPreview.type === "inventory_xlsx") {
+      const issueCount = (state.importPreview.errors?.length || 0) + (state.importPreview.stockExceptions?.length || 0);
+      await invokeAuthedRpc("reset_inventory_from_import", {
+        p_rows: state.importPreview.inventoryRows.map((row) => ({
+          sku: row.source_sku || row.sku,
+          style_code: row.source_style_code || row.style_code || null,
+          stock_quantity: Number(row.stock_quantity || 0),
+        })),
+        p_filename: state.importPreview.filename,
+        p_rows_total: state.importPreview.rowsTotal,
+        p_issue_count: issueCount,
+      });
+      state.importPreview = null;
+      state.resellerDraft = {};
+      await loadCatalog();
+      await loadProtectedData();
+      return;
+    }
+
     const [job] = await insertAuthedSupabase(
       "import_jobs",
       AdminImports.buildImportJobStart({
@@ -6812,87 +7066,6 @@ async function handleImportCommit() {
           published: true,
       }));
       await upsertAuthedSupabase("product_variants", variantPayload, "sku");
-    }
-
-    if (state.importPreview.type === "catalog_seed_inventory") {
-      const productRows = await upsertAuthedSupabase(
-        "products",
-        state.importPreview.products.map((product) => ProductPersistence.buildProductUpsertPayload(product)),
-        "sku",
-      );
-      const productIdsBySku = new Map(productRows.map((row) => [row.sku, row.id]));
-
-      const colourMappingPayload = state.importPreview.colourMappings
-        .map((mapping) => ({
-          ...mapping,
-          product_id: productIdsBySku.get(`IRUNSVAN-${mapping.model_code}`),
-        }))
-        .filter((mapping) => mapping.product_id);
-      let savedColourMappings = [];
-      if (colourMappingPayload.length) {
-        savedColourMappings = await upsertAuthedSupabase(
-          "product_colour_mappings",
-          ProductPersistence.buildColourMappingUpsertPayloads(colourMappingPayload),
-          "product_id,original_colour,color_code",
-        );
-      }
-
-      const variantPayload = state.importPreview.variants
-        .filter((variant) => productIdsBySku.has(variant.product_sku))
-        .flatMap((variant) => ProductPersistence.buildVariantUpsertPayloads([variant], productIdsBySku.get(variant.product_sku)));
-      const savedVariantRows = await upsertAuthedSupabase("product_variants", variantPayload, "sku");
-
-      const variantIdsBySku = new Map(savedVariantRows.map((row) => [row.sku, row.id]));
-      const inventoryPayload = state.importPreview.inventoryRows
-        .filter((row) => variantIdsBySku.has(row.sku))
-        .map((row) => ({
-          variant_id: variantIdsBySku.get(row.sku),
-          sku: row.sku,
-          style_code: row.style_code,
-          stock_quantity: row.stock_quantity,
-          source: row.source,
-        }));
-      const savedInventoryRows = inventoryPayload.length ? await upsertAuthedSupabase("inventory", inventoryPayload, "sku") : [];
-
-      productRows.forEach((product) => {
-        const productVariants = savedVariantRows.filter((variant) => variant.product_id === product.id);
-        applySavedProductToState(product, productVariants);
-      });
-      applySavedColourMappingsToState(savedColourMappings);
-      applySavedInventoryToState(savedInventoryRows);
-    }
-
-    if (state.importPreview.type === "inventory_xlsx") {
-      if (state.importPreview.publishPlan?.rows?.length) {
-        const inventoryPayload = state.importPreview.publishPlan.rows.map((row) => ({
-          id: row.id,
-          variant_id: row.variant_id,
-          sku: row.sku,
-          style_code: row.style_code,
-          stock_quantity: row.stock_quantity,
-          source: row.source,
-        }));
-        await upsertAuthedSupabase("inventory", inventoryPayload, "sku");
-      } else {
-      const skus = state.importPreview.inventoryRows.map((row) => row.sku);
-      const variantRows = skus.length
-        ? await fetchAuthedSupabase(
-            "product_variants",
-            `select=id,sku&sku=in.(${skus.map((sku) => `"${sku.replaceAll('"', "")}"`).join(",")})&limit=${skus.length}`,
-          )
-        : [];
-      const variantIdsBySku = new Map(variantRows.map((row) => [row.sku, row.id]));
-      const inventoryPayload = state.importPreview.inventoryRows
-        .filter((row) => variantIdsBySku.has(row.sku))
-        .map((row) => ({
-          variant_id: variantIdsBySku.get(row.sku),
-          sku: row.sku,
-          style_code: row.style_code,
-          stock_quantity: row.stock_quantity,
-          source: row.source,
-        }));
-      await upsertAuthedSupabase("inventory", inventoryPayload, "sku");
-      }
     }
 
     if (importJobId) {
@@ -7122,7 +7295,7 @@ async function initializeApp() {
       return;
     }
     if (loginRouteHint === "admin-login" && !state.auth.isAdmin) {
-      await SupabaseClient.signOut();
+      await SupabaseClient.signOut({ url: SUPABASE_URL, key: SUPABASE_KEY });
       state.auth = Auth.normalizeAuthState();
       state.authError = "This account does not have admin access.";
       setRoute("admin-login", {}, { replaceHistory: true, scroll: false });

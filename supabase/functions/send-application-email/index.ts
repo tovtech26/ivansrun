@@ -20,7 +20,7 @@ Deno.serve(async (request) => {
 
   if (!RESEND_API_KEY || !recipients.length) {
     return new Response(JSON.stringify({ ok: false, reason: "Email secrets not configured" }), {
-      status: 200,
+      status: 503,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
@@ -40,7 +40,13 @@ Deno.serve(async (request) => {
   });
 
   const data = await response.json();
-  return new Response(JSON.stringify(data), {
+  if (!response.ok) {
+    return new Response(JSON.stringify({ ok: false, reason: data?.message || "Email provider rejected the message" }), {
+      status: 502,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+  return new Response(JSON.stringify({ ok: true, id: data?.id || null }), {
     status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });

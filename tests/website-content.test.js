@@ -18,6 +18,7 @@ const {
   normalizeProductFlyerImages,
   productFlyerImagesForFlyer,
   buildProductFlyerImagePayload,
+  buildProductFlyerImageUpdatePayload,
 } = require("../src/website-content.js");
 
 assert.equal(buildStorySlug("Summer Drop: Botswana Launch!"), "summer-drop-botswana-launch");
@@ -257,6 +258,33 @@ assert.deepEqual(
     is_cover: true,
     created_by: "admin-1",
     updated_by: "admin-1",
+  },
+);
+
+assert.deepEqual(
+  buildProductFlyerImageUpdatePayload(
+    {
+      flyerId: "flyer-1",
+      imagePath: "content/public-products/026-black-updated.jpg",
+      imageName: "Black colorway updated",
+      skuReference: "IRUNSVAN-026-BLK-NEW",
+      colorName: "Black",
+      caption: "Updated admin image copy.",
+      displayOrder: "5",
+      isCover: false,
+    },
+    "admin-2",
+  ),
+  {
+    flyer_id: "flyer-1",
+    image_path: "content/public-products/026-black-updated.jpg",
+    image_name: "Black colorway updated",
+    sku_reference: "IRUNSVAN-026-BLK-NEW",
+    color_name: "Black",
+    caption: "Updated admin image copy.",
+    display_order: 5,
+    is_cover: false,
+    updated_by: "admin-2",
   },
 );
 

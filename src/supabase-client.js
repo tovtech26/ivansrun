@@ -40,8 +40,17 @@
     }
   }
 
+  function normalizeSession(session, nowMs = Date.now()) {
+    if (!session || typeof session !== "object") return session;
+    const normalized = { ...session };
+    if (!normalized.expires_at && Number(normalized.expires_in) > 0) {
+      normalized.expires_at = Math.floor(nowMs / 1000) + Number(normalized.expires_in);
+    }
+    return normalized;
+  }
+
   function writeStoredSession(session) {
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(normalizeSession(session)));
   }
 
   function clearStoredSession() {
@@ -220,11 +229,44 @@
     return body;
   }
 
-  async function restoreAuthState({ url, key }) {
+  function sessionExpiresSoon(session, skewSeconds = 60, nowMs = Date.now()) {
+    if (!session?.access_token) return true;
+    const expiresAt = Number(session.expires_at || 0);
+    if (!expiresAt) return Boolean(session.refresh_token && Number(session.expires_in || 0) > 0);
+    return expiresAt <= Math.floor(nowMs / 1000) + Number(skewSeconds || 0);
+  }
+
+  async function refreshSession({ url, key, session }) {
+    if (!session?.refresh_token) throw new Error("Stored session is expired. Sign in again.");
+    const response = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: {
+        apikey: key,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(authErrorMessage(body, "Unable to refresh session"));
+    const refreshed = normalizeSession({ ...session, ...body });
+    writeStoredSession(refreshed);
+    return refreshed;
+  }
+
+  async function getValidSession({ url, key, skewSeconds = 60 }) {
     const session = readStoredSession();
+    if (!session?.access_token) return null;
+    if (!sessionExpiresSoon(session, skewSeconds)) return session;
+    return refreshSession({ url, key, session });
+  }
+
+  async function restoreAuthState({ url, key }) {
+    let session = readStoredSession();
     if (!session?.access_token) return { session: null, user: null, profile: null };
 
     try {
+      session = await getValidSession({ url, key });
+      if (!session?.access_token) return { session: null, user: null, profile: null };
       const user = await fetchCurrentUser({ url, key, accessToken: session.access_token });
       if (!user?.id) {
         clearStoredSession();
@@ -238,8 +280,22 @@
     }
   }
 
-  async function signOut() {
-    clearStoredSession();
+  async function signOut({ url, key, scope = "local" } = {}) {
+    const session = readStoredSession();
+    try {
+      if (url && key && session?.access_token) {
+        const logoutUrl = new URL(`${url}/auth/v1/logout`);
+        logoutUrl.searchParams.set("scope", scope || "local");
+        await fetch(logoutUrl.toString(), {
+          method: "POST",
+          headers: headers(key, session.access_token),
+        });
+      }
+    } catch {
+      // Local sign-out must still complete if the revoke request cannot reach Supabase.
+    } finally {
+      clearStoredSession();
+    }
   }
 
   const api = {
@@ -249,6 +305,7 @@
     readStoredSession,
     writeStoredSession,
     clearStoredSession,
+    normalizeSession,
     buildOAuthUrl,
     authErrorMessage,
     signInWithOAuth,
@@ -262,6 +319,9 @@
     fetchProfile,
     requestPasswordReset,
     updatePassword,
+    sessionExpiresSoon,
+    refreshSession,
+    getValidSession,
     restoreAuthState,
     signOut,
   };

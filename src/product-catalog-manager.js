@@ -136,18 +136,11 @@
   }
 
   function matchInventoryToVariants({ inventoryRows = [], products = [], variants = [], inventory = [] } = {}) {
-    const productsByModel = new Map(products.map((product) => [normalizeModel(product.model_code || product.sku), product]));
     const variantsBySku = new Map(
       variants
         .filter((variant) => safeText(variant.sku))
         .map((variant) => [safeText(variant.sku), variant]),
     );
-    const variantsByProductId = variants.reduce((map, variant) => {
-      const list = map.get(variant.product_id) || [];
-      list.push(variant);
-      map.set(variant.product_id, list);
-      return map;
-    }, new Map());
     const inventoryByVariantId = new Map(inventory.map((row) => [row.variant_id, row]));
     const matches = [];
     const exceptions = [];
@@ -158,7 +151,7 @@
       const skuVariant = sourceSku ? variantsBySku.get(sourceSku) : null;
 
       if (skuVariant) {
-        const product = products.find((entry) => entry.id === skuVariant.product_id) || productsByModel.get(modelCode) || null;
+        const product = products.find((entry) => entry.id === skuVariant.product_id) || null;
         const previousStock = Math.max(0, safeNumber(inventoryByVariantId.get(skuVariant.id)?.stock_quantity, 0));
         const nextStock = Math.max(0, safeNumber(row.stock_quantity, 0));
         matches.push({
@@ -180,44 +173,13 @@
         return;
       }
 
-      const product = productsByModel.get(modelCode);
-      if (!product) {
-        exceptions.push({ row: index + 1, code: "missing_product", sourceSku: sourceSku || null, modelCode });
-        return;
-      }
-
-      const productVariants = variantsByProductId.get(product.id) || [];
-      const colourMatches = productVariants.filter(
-        (variant) => safeText(variant.original_colour || variant.colour) === safeText(row.original_colour) || safeText(variant.colour) === safeText(row.original_colour),
-      );
-      if (!colourMatches.length) {
-        exceptions.push({ row: index + 1, code: sourceSku ? "missing_variant_sku" : "missing_colour", sourceSku: sourceSku || null, modelCode, originalColour: row.original_colour });
-        return;
-      }
-
-      const variant = colourMatches.find((candidate) => safeText(candidate.size) === safeText(row.size));
-      if (!variant) {
-        exceptions.push({ row: index + 1, code: "missing_size", sourceSku: sourceSku || null, modelCode, originalColour: row.original_colour, size: row.size });
-        return;
-      }
-
-      const previousStock = Math.max(0, safeNumber(inventoryByVariantId.get(variant.id)?.stock_quantity, 0));
-      const nextStock = Math.max(0, safeNumber(row.stock_quantity, 0));
-      matches.push({
+      exceptions.push({
+        row: index + 1,
+        code: "missing_variant_sku",
         sourceSku: sourceSku || null,
-        productId: product.id,
-        productName: product.name,
-        variantId: variant.id,
-        variantSku: variant.sku,
         modelCode,
-        colour: variant.colour || row.original_colour,
-        originalColour: variant.original_colour || row.original_colour,
-        size: variant.size || row.size,
-        previousStock,
-        nextStock,
-        changed: previousStock !== nextStock,
-        matchType: "model_colour_size",
-        warnings: sourceSku ? ["sku_mismatch"] : [],
+        originalColour: row.original_colour,
+        size: row.size,
       });
     });
 

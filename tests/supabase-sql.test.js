@@ -15,6 +15,8 @@ const orderWorkflowSql = readFileSync(join(__dirname, "..", "supabase", "sql", "
 const publicProductFlyersSql = readFileSync(join(__dirname, "..", "supabase", "sql", "020_public_product_flyers.sql"), "utf8");
 const publicProductFlyerImagesSql = readFileSync(join(__dirname, "..", "supabase", "sql", "021_public_product_flyer_images.sql"), "utf8");
 const publicProductFlyerImageAdvisorFixesSql = readFileSync(join(__dirname, "..", "supabase", "sql", "022_public_product_flyer_image_advisor_fixes.sql"), "utf8");
+const transactionalWorkflowSql = readFileSync(join(__dirname, "..", "supabase", "sql", "023_transactional_order_and_application_workflows.sql"), "utf8");
+const inventoryResetSql = readFileSync(join(__dirname, "..", "supabase", "sql", "024_atomic_inventory_reset_and_adjustments.sql"), "utf8");
 
 assert.match(pricePrivacySql, /create or replace view public\.reseller_products\s+with \(security_invoker = true\)/i);
 assert.match(pricePrivacySql, /create or replace view public\.reseller_product_variants\s+with \(security_invoker = true\)/i);
@@ -156,5 +158,28 @@ assert.match(orderWorkflowSql, /alter table public\.order_requests[\s\S]*add col
 assert.match(orderWorkflowSql, /alter table public\.order_requests[\s\S]*add column if not exists expected_fulfillment_date date/i);
 assert.match(orderWorkflowSql, /alter table public\.order_requests[\s\S]*add column if not exists processing_at timestamptz/i);
 assert.match(orderWorkflowSql, /alter table public\.order_requests[\s\S]*add column if not exists supplier_exported_at timestamptz/i);
+
+assert.match(transactionalWorkflowSql, /create or replace function private\.submit_order_request/i);
+assert.match(transactionalWorkflowSql, /create or replace function private\.approve_order_request/i);
+assert.match(transactionalWorkflowSql, /create or replace function private\.review_reseller_application/i);
+assert.match(transactionalWorkflowSql, /security definer[\s\S]*set search_path = ''/i);
+assert.match(transactionalWorkflowSql, /for update/i);
+assert.match(transactionalWorkflowSql, /lock table public\.inventory in share row exclusive mode/i);
+assert.match(transactionalWorkflowSql, /grant execute on function public\.submit_order_request\(jsonb, text\) to authenticated/i);
+assert.match(transactionalWorkflowSql, /revoke all on function public\.submit_order_request\(jsonb, text\) from public, anon, authenticated, service_role/i);
+assert.match(transactionalWorkflowSql, /notify pgrst, 'reload schema'/i);
+
+assert.match(inventoryResetSql, /create table if not exists public\.inventory_adjustments/i);
+assert.match(inventoryResetSql, /alter table public\.inventory_adjustments enable row level security/i);
+assert.match(inventoryResetSql, /create or replace function private\.reset_inventory_from_import/i);
+assert.match(inventoryResetSql, /update public\.inventory[\s\S]*stock_quantity = 0[\s\S]*source = 'master_inventory:absent'/i);
+assert.match(inventoryResetSql, /lock table public\.inventory in share row exclusive mode/i);
+assert.match(inventoryResetSql, /from jsonb_to_recordset\(p_rows\)/i);
+assert.match(inventoryResetSql, /where imported\.sku = inventory\.sku/i);
+assert.match(inventoryResetSql, /create or replace function private\.adjust_inventory_stock/i);
+assert.match(inventoryResetSql, /for update/i);
+assert.match(inventoryResetSql, /grant execute on function public\.reset_inventory_from_import\(jsonb, text, integer, integer\) to authenticated/i);
+assert.match(inventoryResetSql, /grant execute on function public\.adjust_inventory_stock\(uuid, integer, text\) to authenticated/i);
+assert.match(inventoryResetSql, /notify pgrst, 'reload schema'/i);
 
 console.log("supabase-sql tests passed");

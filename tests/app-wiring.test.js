@@ -11,10 +11,20 @@ const supabaseClientSource = readFileSync(join(__dirname, "..", "src", "supabase
 const createTestAdminsSource = readFileSync(join(__dirname, "..", "scripts", "create-test-admins.js"), "utf8");
 const resellerProductCardSource = appSource.match(/function resellerProductCard\([\s\S]*?\n}\n\nfunction resellerColourGroups/)?.[0] || "";
 const productFlyerPageSource = appSource.match(/function productFlyersPage\([\s\S]*?\n}\n\nfunction productFlyerDetailPage/)?.[0] || "";
+function sourceBetween(start, end) {
+  const startIndex = appSource.indexOf(start);
+  if (startIndex < 0) return "";
+  const endIndex = appSource.indexOf(end, startIndex);
+  return endIndex < 0 ? appSource.slice(startIndex) : appSource.slice(startIndex, endIndex);
+}
+const selectorGroupSource = sourceBetween("function selectorGroup(", "function filterGroup");
+const pagerSource = sourceBetween("function pager(", "function catalogPager");
 
 assert.equal(appSource.includes("<button>View all</button>"), false, "View all buttons must navigate or trigger an action.");
 assert.equal(appSource.includes('<button class="button mini">Approve</button>'), false, "Approve buttons must use real approval actions.");
 assert.equal(appSource.includes('<button class="button mini secondary">Reject</button>'), false, "Reject buttons must use real rejection actions.");
+assert.equal(appSource.includes("function applicationActionFeedback()"), true, "Application approvals must show a visible success or failure result.");
+assert.equal(appSource.includes("if (!result?.ok) throw new Error"), true, "Application approval must not silently accept an unconfirmed email response.");
 assert.equal(appSource.includes('<button class="button secondary">View Template</button>'), false, "Email template buttons must open a real preview.");
 assert.equal(appSource.includes("Saved only in this browser"), false, "Product saves must not fall back to browser-only data.");
 assert.equal(appSource.includes("Product draft is visible locally"), false, "Product saves must fail loudly instead of creating local-only products.");
@@ -87,6 +97,8 @@ assert.equal(appSource.includes("selectedOrderId:"), true, "App state must track
 assert.equal(appSource.includes('orderId: button.getAttribute("data-order-id")'), true, "Route buttons must pass order IDs.");
 assert.equal(appSource.includes("const restored = await SupabaseClient.restoreAuthState({ url: SUPABASE_URL, key: SUPABASE_KEY });"), true, "Startup must restore real Supabase sessions before protected data loading.");
 assert.equal(supabaseClientSource.includes("if (!session?.access_token) return { session: null, user: null, profile: null };"), true, "Auth restore must not create protected access without a real Supabase session.");
+assert.equal(appSource.includes("async function requireAuthedSession()"), true, "Protected mutations must be able to refresh Supabase sessions before using stored tokens.");
+assert.equal(appSource.includes("await SupabaseClient.getValidSession({ url: SUPABASE_URL, key: SUPABASE_KEY })"), true, "Protected Supabase calls must refresh expired sessions before authenticated REST requests.");
 assert.equal(appSource.includes("Sign in as a test reseller"), false, "Reseller portal must not mention test-session login paths.");
 assert.equal(appSource.includes("function requireAuthedSession()"), true, "Protected mutations must require a real Supabase session.");
 assert.equal(appSource.includes("throw new Error(\"Sign in with a real Supabase account to use admin or reseller actions.\");"), true, "Protected mutations must fail with a clear local-dev auth message.");
@@ -179,10 +191,15 @@ assert.equal(appSource.includes("function publicProductFlyerGalleryControls("), 
 assert.equal(appSource.includes("${publicProductFlyerGalleryControls(productFlyerEdit)}"), true, "Site controls must call the public flyer gallery editor.");
 assert.equal(appSource.includes("${productFlyerImagePreview({"), false, "Site controls must not call the old undefined product flyer image preview name.");
 assert.equal(appSource.includes("new_product_flyer_image_file_"), true, "Public product flyer editing must expose upload rows for new gallery images.");
+assert.equal(appSource.includes("existing_product_flyer_image_file_"), true, "Public product flyer editing must let admins replace existing gallery images.");
+assert.equal(appSource.includes("data-product-flyer-image-preview"), true, "Public flyer image upload rows must expose a live preview target.");
+assert.equal(appSource.includes("function previewSelectedProductFlyerImage("), true, "Public flyer image uploads must update the preview as soon as a file is selected.");
+assert.equal(appSource.includes('input[name^="existing_product_flyer_image_file_"], input[name^="new_product_flyer_image_file_"]'), true, "Public flyer image preview binding must cover replacement and new image uploads.");
 assert.equal(appSource.includes("existing_product_flyer_image_name_"), true, "Public product flyer editing must let admins name existing gallery images.");
 assert.equal(appSource.includes("existing_product_flyer_image_sku_"), true, "Public product flyer editing must let admins assign SKU/reference text per image.");
 assert.equal(appSource.includes("product_flyer_cover_image"), true, "Public product flyer editing must let admins choose the cover image.");
-assert.equal(appSource.includes("20 pictures"), true, "Public product flyer editing must communicate the 20-picture limit.");
+assert.equal(appSource.includes("Legacy image preview only"), false, "Public flyer main images must not be locked as preview-only legacy images.");
+assert.equal(appSource.includes("PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT"), true, "Public product flyer editing must communicate the shared 20-picture limit.");
 assert.equal(appSource.includes('data-form="public-product-flyer"'), true, "Site controls must expose a public product flyer form.");
 assert.equal(appSource.includes("public-product-flyer-admin-card"), true, "Public product flyer editor must have a dedicated full-width admin card class.");
 assert.equal(appSource.includes("async function savePublicProductFlyer("), true, "Public product flyer form must save through a dedicated handler.");
@@ -203,6 +220,15 @@ assert.equal(appSource.includes('fetchOptionalSupabaseResult("public_product_fly
 assert.equal(appSource.includes('fetchAuthedSupabase("public_product_flyer_images"'), true, "Admin bootstrap must fetch all public flyer image rows.");
 assert.equal(appSource.includes('insertAuthedSupabase(\n      "public_product_flyer_images"'), true, "Public product flyer saves must insert named gallery image rows.");
 assert.equal(appSource.includes('updateAuthedSupabase(\n      "public_product_flyer_images"'), true, "Public product flyer edits must update named gallery image rows.");
+assert.equal(appSource.includes("PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT = 20"), true, "Public flyer images must keep the 20-picture per-shoe allowance.");
+assert.equal(appSource.includes("PUBLIC_PRODUCT_FLYER_EMPTY_IMAGE_SLOTS = 3"), true, "Public flyer editor must avoid rendering all 20 empty upload rows at once.");
+assert.equal(appSource.includes("Math.min(remaining, PUBLIC_PRODUCT_FLYER_EMPTY_IMAGE_SLOTS)"), true, "Public flyer editor must cap visible empty upload slots.");
+assert.equal(appSource.includes("WebsiteContent.buildProductFlyerImageUpdatePayload"), true, "Public flyer image edits must use an update payload that preserves creator metadata.");
+assert.equal(appSource.includes('if (formName === "public-product-flyer") {'), true, "Public product flyer form must have a dedicated submit branch.");
+assert.equal(appSource.includes("return;\n      }\n      if (formName === \"about-content\")"), true, "Public product flyer submit must not fall through to the global rerender that can wipe file previews.");
+assert.equal(styleSource.includes(".public-product-flyer-gallery-row {\n    grid-template-columns: 1fr;"), true, "Public flyer gallery rows must collapse on mobile instead of squeezing inputs.");
+assert.equal(styleSource.includes("aspect-ratio: 1 / 1"), true, "Public flyer editor previews must use stable square image boxes.");
+assert.equal(styleSource.includes("object-fit: contain"), true, "Public flyer editor previews must show the whole uploaded shoe image.");
 assert.equal(appSource.includes("function productFlyersPage("), true, "Public product flyer listing page must exist.");
 assert.equal(appSource.includes("function productFlyerDetailPage("), true, "Public product flyer detail page must exist.");
 assert.equal(appSource.includes('data-route="product-flyer"'), true, "Public product flyer cards must route to public flyer detail pages.");
@@ -215,6 +241,7 @@ assert.equal(styleSource.includes(".public-product-flyer-gallery-row"), true, "P
 assert.equal(styleSource.includes(".public-product-flyer-admin-card"), true, "Public product flyer editor must have dedicated layout styling.");
 assert.equal(styleSource.includes("grid-column: 1 / -1"), true, "Public product flyer editor must span the Site Controls grid so copy is not clipped.");
 assert.equal(styleSource.includes("overflow-wrap: anywhere"), true, "Admin product flyer copy must wrap instead of clipping inside narrow cards.");
+assert.match(styleSource, /\.gallery-thumb img\s*\{[\s\S]*object-fit:\s*contain/i, "Product detail gallery thumbnails must show the whole shoe image instead of cropping it.");
 assert.equal(styleSource.includes(".site-controls-workspace"), true, "Site Controls must use a submenu workspace layout.");
 assert.equal(styleSource.includes(".site-controls-panel"), true, "Site Controls focused panels must have dedicated styling.");
 assert.equal(productFlyerPageSource.includes("base_price"), false, "Public flyer pages must not expose reseller pricing.");
@@ -238,6 +265,10 @@ assert.equal(appSource.includes("state.catalogImageSelection"), true, "Catalogue
 assert.equal(resellerProductCardSource.includes("canOrder"), false, "Reseller browse cards must not reference detail-only ordering state.");
 assert.equal(appSource.includes("Orders.availableInventoryRows(inventoryRows())"), true, "Reseller shop must only show rows that are actually available to order.");
 assert.equal(appSource.includes("Orders.visibleShopProductGroups(rows"), true, "Reseller shop must group SKU rows into product cards before rendering.");
+assert.equal(appSource.includes("Orders.buildInventorySearchSuggestions"), true, "Reseller search must provide model and SKU suggestions.");
+assert.equal(appSource.includes("renderResellerSearchResults()"), true, "Reseller search rerenders must restore input focus.");
+assert.equal(appSource.includes("input.focus({ preventScroll: true })"), true, "Reseller search must keep keyboard focus after results update.");
+assert.equal(appSource.includes("data-action=\"open-search-suggestion\""), true, "Reseller search suggestions must open the selected product.");
 assert.equal(appSource.includes("productLimit: Math.max(24, state.products.length || 21)"), true, "Reseller shop must show all source-backed products while still limiting per-product choices.");
 assert.equal(appSource.includes("function resellerBulkOrderMatrix("), true, "Reseller shop must use a bulk size matrix for wholesale ordering.");
 assert.equal(appSource.includes("data-action=\"select-reseller-colour\""), true, "Reseller shop must let buyers choose colours visually before ordering sizes.");
@@ -251,6 +282,14 @@ assert.equal(appSource.includes("builder-colour-order-card"), true, "Reseller pr
 assert.equal(appSource.includes("builder-colour-order-list"), true, "Reseller product ordering must list color cards as the main order form.");
 assert.equal(appSource.includes("builder-size-row"), true, "Reseller product ordering must use form-style size quantity rows.");
 assert.equal(appSource.includes("setRoute(\"request-confirmation\")"), true, "Order submission must navigate to the confirmation page.");
+assert.equal(appSource.includes('invokeAuthedRpc("submit_order_request"'), true, "Order submission must create the order and its items in one database transaction.");
+assert.equal(appSource.includes('invokeAuthedRpc("approve_order_request"'), true, "Order approval must reserve stock in one database transaction.");
+assert.equal(appSource.includes('invokeAuthedRpc("review_reseller_application"'), true, "Reseller review must update the application and profile atomically.");
+assert.equal(appSource.includes('invokeAuthedRpc("reset_inventory_from_import"'), true, "Inventory imports must reset and replace stock in one database transaction.");
+assert.equal(appSource.includes('invokeAuthedRpc("adjust_inventory_stock"'), true, "Manual stock corrections must use the audited database workflow.");
+assert.equal(appSource.includes('data-action="save-stock-adjustment"'), true, "Admin product rows must expose manual stock correction controls.");
+assert.equal(appSource.includes('type: "catalog_seed_inventory"'), false, "Inventory uploads must not create or seed products.");
+assert.equal(styleSource.includes(".manual-stock-row"), true, "Manual stock controls must have responsive layout styles.");
 assert.equal(appSource.includes("loadProtectedDataInBackground();"), true, "Order submission must not block confirmation routing on protected data refresh.");
 assert.equal(appSource.includes("adminOrderActionButtons(record)"), true, "Admin request cards must render workflow-driven action buttons.");
 assert.equal(appSource.includes('<p class="mono">SKU:'), false, "Reseller order summary must not expose backend SKU labels.");
@@ -277,8 +316,8 @@ assert.equal(appSource.includes('patchAuthedSupabaseMinimal("inventory", "id=not
 assert.equal(appSource.includes("source: \"manual_stock_reset\""), true, "Stock reset must mark inventory rows with a reset source.");
 assert.equal(appSource.includes("async function depleteSubmittedOrderStock("), false, "Order submission must not deplete stock immediately.");
 assert.equal(appSource.includes("source: \"order_submitted\""), false, "Submitted orders must not change inventory immediately.");
-assert.equal(appSource.includes("AdminOrders.buildApprovalInventoryAdjustments"), true, "Admin approval must allocate stock from the actual request items.");
-assert.equal(appSource.includes("source: \"order_reserved\""), true, "Supply approval must reserve stock against inventory rows.");
+assert.equal(appSource.includes("AdminOrders.buildApprovalInventoryAdjustments"), false, "Admin approval must not reserve stock through sequential browser updates.");
+assert.equal(appSource.includes('invokeAuthedRpc("approve_order_request"'), true, "Supply approval must reserve stock through the transactional database workflow.");
 assert.equal(appSource.includes("\"current-orders\": currentOrdersPage"), true, "Reseller route map must expose a dedicated current orders page.");
 assert.equal(appSource.includes("\"expected-orders\": expectedOrdersPage"), true, "Reseller route map must expose a dedicated expected orders page.");
 assert.equal(appSource.includes("fulfillment: fulfillmentStatusPage"), true, "Reseller route map must expose a fulfillment status page.");
@@ -286,14 +325,23 @@ assert.equal(appSource.includes("order: orderDetailPage"), true, "Route map must
 assert.equal(appSource.includes("function orderDetailPage()"), true, "Order detail page must exist.");
 assert.equal(appSource.includes('data-action="download-order-xlsx"'), true, "Order detail must expose supplier XLSX export.");
 assert.equal(appSource.includes('data-action="download-order-csv"'), true, "Order detail must expose supplier CSV export.");
-assert.equal(appSource.includes('"select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100"'), true, "Order request fetch must stay backward-compatible until the migration is applied.");
+const orderRequestSelect = appSource.match(/const workflowQuery = "([^"]+)"/)?.[1] || "";
+assert.equal(orderRequestSelect.includes("supplier_exported_at"), true, "Order request fetch must include supplier_exported_at so export status survives refresh.");
+["approved_at", "paid_at", "supplier_submitted_at", "processing_at", "shipped_at", "fulfilled_at", "expected_fulfillment_date", "invoice_number", "payment_reference", "payment_note"].forEach((column) => {
+  assert.equal(orderRequestSelect.includes(column), true, `Order request fetch must include workflow column ${column}.`);
+});
+assert.equal(appSource.includes('"select=id,reseller_id,status,notes,admin_notes,created_at,updated_at&order=created_at.desc&limit=100"'), true, "Order request loading must retain a backward-compatible fallback when workflow columns are not deployed yet.");
 assert.equal(appSource.includes("Stock updates only after approval."), true, "Reseller messaging must match approval-based stock deduction.");
 assert.equal(appSource.includes("Price pending"), true, "Reseller shop must show pending price instead of a false zero price.");
 assert.equal(appSource.includes('<div><button disabled>Prev</button><button class="active">1</button><button>2</button><button>3</button><button>Next</button></div>'), false, "Catalog pager must not be static fake controls.");
+assert.equal(pagerSource.includes("<button"), false, "Reseller shop summary must not render fake pager buttons.");
+assert.equal(pagerSource.includes("pager-count"), true, "Reseller shop summary should render as a simple count row when there is no real pagination.");
 assert.equal(appSource.includes("data-action=\"catalog-page\""), true, "Catalog pager buttons must have real page actions.");
 assert.equal(appSource.includes("data-action=\"select-gallery-image\""), true, "Product detail thumbnails must be wired as selectable gallery buttons.");
 assert.equal(appSource.includes("[data-product-detail-main] .product-visual"), true, "Product detail thumbnail clicks must target the main product visual.");
 assert.equal(appSource.includes("photo.setAttribute(\"src\", imageUrl);"), true, "Product detail thumbnail clicks must update the main product photo.");
+assert.equal(selectorGroupSource.includes("<button"), false, "Public detail colour and size values must not render as dead buttons.");
+assert.equal(selectorGroupSource.includes("selector-chip"), true, "Public detail colour and size values should render as non-interactive chips.");
 assert.equal(appSource.includes("Colour Review"), true, "Admin products page must include the Colour Review section.");
 assert.equal(appSource.includes("product_colour_mappings"), true, "Colour Review must save against product_colour_mappings.");
 assert.equal(appSource.includes("original_colour"), true, "Colour Review wiring must preserve original_colour keys.");

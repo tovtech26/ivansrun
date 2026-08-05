@@ -142,15 +142,47 @@
   }
 
   function buildApplicationEmailPayload({ eventType, adminEmails = [], companyName, fullName, email, country, message }) {
-    const subject =
-      eventType === "application_submitted"
-        ? `New reseller application from ${companyName}`
-        : `Reseller application update for ${companyName}`;
+    const status = eventType === "application_approved" ? "approved" : eventType === "application_rejected" ? "not approved" : "submitted";
+    const subject = eventType === "application_submitted"
+      ? `New reseller application from ${companyName}`
+      : eventType === "application_approved"
+        ? "Your Irunsvan reseller account has been approved"
+        : "Update on your Irunsvan reseller application";
+    const to = eventType === "application_submitted" ? uniqueEmails(adminEmails) : uniqueEmails([email, ...adminEmails]);
+    const title = eventType === "application_approved"
+      ? "Your reseller account is approved"
+      : eventType === "application_rejected"
+        ? "Your reseller application has been reviewed"
+        : `New reseller application from ${companyName}`;
+    const body = eventType === "application_approved"
+      ? "You can now sign in to view live wholesale stock and submit order requests."
+      : eventType === "application_rejected"
+        ? "Your application was not approved at this time. Contact the Irunsvan team if you need more information."
+        : `${fullName} submitted a reseller application for ${companyName}.`;
+    const htmlIncludes = [companyName, fullName, email, country || "", message || "", status];
 
     return {
-      to: adminEmails,
+      to,
       subject,
-      htmlIncludes: [companyName, fullName, email, country || "", message || ""],
+      template: "reseller_application_status",
+      status,
+      htmlIncludes,
+      html: `
+        <div style="margin:0;background:#f4efe6;padding:32px 16px;font-family:Arial,Helvetica,sans-serif;color:#141414;">
+          <div style="max-width:640px;margin:0 auto;background:#fffaf2;border:1px solid #ded2bf;overflow:hidden;">
+            <div style="padding:26px 30px;border-bottom:1px solid #eadfce;">
+              <img src="${BRAND_LOGO_URL}" alt="${BRAND_NAME}" width="112" style="display:block;max-width:112px;height:auto;margin:0 0 10px;">
+              <strong style="color:#0057b8;letter-spacing:.08em;">${BRAND_NAME}</strong>
+            </div>
+            <div style="padding:30px;">
+              <h1 style="margin:0 0 14px;font-size:26px;line-height:1.2;">${escapeHtml(title)}</h1>
+              <p style="margin:0 0 22px;color:#4b4339;line-height:1.7;">${escapeHtml(body)}</p>
+              <p style="margin:0 0 8px;"><strong>${escapeHtml(companyName)}</strong></p>
+              <p style="margin:0;color:#6d6255;">${escapeHtml(fullName)} · ${escapeHtml(email)}${country ? ` · ${escapeHtml(country)}` : ""}</p>
+            </div>
+          </div>
+        </div>
+      `,
     };
   }
 

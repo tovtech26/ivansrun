@@ -2,6 +2,8 @@ const assert = require("node:assert/strict");
 const {
   buildInventoryRows,
   availableInventoryRows,
+  filterInventoryRows,
+  buildInventorySearchSuggestions,
   visibleShopProductGroups,
   updateDraftQuantity,
   draftItems,
@@ -86,6 +88,23 @@ assert.deepEqual(
   ]).map((row) => row.variantId),
   ["variant-1", "variant-2"],
 );
+
+assert.deepEqual(filterInventoryRows(rows, "202300100139").map((row) => row.variantId), ["variant-2"]);
+assert.deepEqual(filterInventoryRows(rows, "bright orange").map((row) => row.variantId), ["variant-1", "variant-2"]);
+assert.deepEqual(filterInventoryRows(rows, "39").map((row) => row.variantId), ["variant-2"]);
+
+assert.deepEqual(buildInventorySearchSuggestions(rows, "202300100139"), [
+  {
+    productId: "product-1",
+    productName: "IRUNSVAN 001 Running Shoe",
+    productSku: "IRUNSVAN-001",
+    matchedSku: "202300100139",
+    colour: "Bright Orange / Ocean Blue",
+    size: "39",
+    stockQuantity: 3,
+    rank: 0,
+  },
+]);
 
 assert.deepEqual(
   visibleShopProductGroups([

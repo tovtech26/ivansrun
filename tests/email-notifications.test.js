@@ -65,8 +65,33 @@ assert.deepEqual(
   {
     to: ["ops@irunsvan.africa"],
     subject: "New reseller application from TOV Sports Distribution",
-    htmlIncludes: ["TOV Sports Distribution", "Buyer Name", "buyer@example.com", "Botswana", "We resell across Southern Africa."],
+    template: "reseller_application_status",
+    status: "submitted",
+    htmlIncludes: ["TOV Sports Distribution", "Buyer Name", "buyer@example.com", "Botswana", "We resell across Southern Africa.", "submitted"],
+    html: buildApplicationEmailPayload({
+      eventType: "application_submitted",
+      adminEmails: ["ops@irunsvan.africa"],
+      companyName: "TOV Sports Distribution",
+      fullName: "Buyer Name",
+      email: "buyer@example.com",
+      country: "Botswana",
+      message: "We resell across Southern Africa.",
+    }).html,
   },
 );
+
+const approvedApplication = buildApplicationEmailPayload({
+  eventType: "application_approved",
+  adminEmails: [],
+  companyName: "TOV Sports Distribution",
+  fullName: "Buyer Name",
+  email: "buyer@example.com",
+  country: "Botswana",
+  message: "",
+});
+assert.deepEqual(approvedApplication.to, ["buyer@example.com"]);
+assert.equal(approvedApplication.subject, "Your Irunsvan reseller account has been approved");
+assert.equal(approvedApplication.status, "approved");
+assert.match(approvedApplication.html, /reseller account is approved/i);
 
 console.log("email-notifications tests passed");

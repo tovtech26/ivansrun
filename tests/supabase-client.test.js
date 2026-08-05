@@ -1,13 +1,32 @@
 const assert = require("node:assert/strict");
+
+const storage = new Map();
+global.localStorage = {
+  getItem: (key) => (storage.has(key) ? storage.get(key) : null),
+  setItem: (key, value) => {
+    storage.set(key, String(value));
+  },
+  removeItem: (key) => {
+    storage.delete(key);
+  },
+};
+
 const {
   authErrorMessage,
   buildOAuthUrl,
+  clearStoredSession,
+  getValidSession,
   oauthResultFromSearch,
   oauthSessionFromHash,
+  readStoredSession,
   requestPasswordReset,
+  refreshSession,
   signInWithPassword,
   signUpWithPassword,
+  signOut,
+  sessionExpiresSoon,
   updatePassword,
+  writeStoredSession,
 } = require("../src/supabase-client.js");
 
 const authUrl = buildOAuthUrl({
@@ -58,5 +77,74 @@ assert.equal(typeof requestPasswordReset, "function");
 assert.equal(typeof signInWithPassword, "function");
 assert.equal(typeof signUpWithPassword, "function");
 assert.equal(typeof updatePassword, "function");
+assert.equal(sessionExpiresSoon({ access_token: "token", expires_at: 100 }, 60, 50_000), true);
+assert.equal(sessionExpiresSoon({ access_token: "token", expires_at: 500 }, 60, 50_000), false);
+assert.equal(sessionExpiresSoon({ access_token: "token" }, 60, 50_000), false);
 
-console.log("supabase-client tests passed");
+(async () => {
+  const originalFetch = global.fetch;
+  try {
+    const requests = [];
+    global.fetch = async (url, options = {}) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        json: async () => ({
+          access_token: "new-token",
+          refresh_token: "new-refresh",
+          expires_in: 3600,
+          expires_at: 9999999999,
+          token_type: "bearer",
+        }),
+      };
+    };
+
+    const refreshed = await refreshSession({
+      url: "https://example.supabase.co",
+      key: "anon-key",
+      session: { access_token: "old-token", refresh_token: "old-refresh", expires_at: 1 },
+    });
+    assert.equal(refreshed.access_token, "new-token");
+    assert.equal(JSON.parse(requests[0].options.body).refresh_token, "old-refresh");
+    assert.equal(requests[0].url, "https://example.supabase.co/auth/v1/token?grant_type=refresh_token");
+
+    clearStoredSession();
+    writeStoredSession({ access_token: "stored-token", refresh_token: "stored-refresh", expires_at: 1 });
+    const validSession = await getValidSession({ url: "https://example.supabase.co", key: "anon-key" });
+    assert.equal(validSession.access_token, "new-token");
+    assert.equal(readStoredSession().refresh_token, "new-refresh");
+
+    requests.length = 0;
+    clearStoredSession();
+    localStorage.setItem(
+      "irunsvan_auth_session",
+      JSON.stringify({ access_token: "legacy-token", refresh_token: "legacy-refresh", expires_in: 3600 }),
+    );
+    const legacyValidSession = await getValidSession({ url: "https://example.supabase.co", key: "anon-key" });
+    assert.equal(legacyValidSession.access_token, "new-token");
+    assert.equal(JSON.parse(requests[0].options.body).refresh_token, "legacy-refresh");
+
+    requests.length = 0;
+    writeStoredSession({ access_token: "logout-token", refresh_token: "logout-refresh", expires_at: 9999999999 });
+    await signOut({ url: "https://example.supabase.co", key: "anon-key" });
+    assert.equal(readStoredSession(), null);
+    assert.equal(requests[0].url, "https://example.supabase.co/auth/v1/logout?scope=local");
+    assert.equal(requests[0].options.method, "POST");
+    assert.equal(requests[0].options.headers.Authorization, "Bearer logout-token");
+
+    global.fetch = async () => {
+      throw new Error("network down");
+    };
+    writeStoredSession({ access_token: "offline-token", refresh_token: "offline-refresh", expires_at: 9999999999 });
+    await signOut({ url: "https://example.supabase.co", key: "anon-key" });
+    assert.equal(readStoredSession(), null);
+  } finally {
+    global.fetch = originalFetch;
+    clearStoredSession();
+  }
+
+  console.log("supabase-client tests passed");
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

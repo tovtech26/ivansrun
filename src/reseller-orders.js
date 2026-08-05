@@ -42,6 +42,57 @@
     return rows.filter((row) => safeNumber(row?.stockQuantity, 0) > 0);
   }
 
+  function searchableInventoryValue(row = {}) {
+    return [row.productName, row.productSku, row.sku, row.colour, row.size]
+      .map((value) => String(value || "").toLowerCase())
+      .join(" ");
+  }
+
+  function filterInventoryRows(rows = [], search = "") {
+    const query = String(search || "").trim().toLowerCase();
+    const availableRows = availableInventoryRows(rows);
+    if (!query) return availableRows;
+    return availableRows.filter((row) => searchableInventoryValue(row).includes(query));
+  }
+
+  function searchMatchRank(row = {}, search = "") {
+    const query = String(search || "").trim().toLowerCase();
+    if (!query) return Number.MAX_SAFE_INTEGER;
+    const values = [row.productSku, row.sku, row.productName, row.colour, row.size]
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean);
+    if (values.some((value) => value === query)) return 0;
+    if (values.some((value) => value.startsWith(query))) return 1;
+    return values.some((value) => value.includes(query)) ? 2 : Number.MAX_SAFE_INTEGER;
+  }
+
+  function buildInventorySearchSuggestions(rows = [], search = "", limit = 6) {
+    const query = String(search || "").trim();
+    if (!query) return [];
+    const suggestionsByProduct = new Map();
+
+    filterInventoryRows(rows, query).forEach((row) => {
+      const key = row.productId || row.productSku || row.productName;
+      const rank = searchMatchRank(row, query);
+      const current = suggestionsByProduct.get(key);
+      if (current && current.rank <= rank) return;
+      suggestionsByProduct.set(key, {
+        productId: row.productId,
+        productName: row.productName,
+        productSku: row.productSku,
+        matchedSku: row.sku,
+        colour: row.colour,
+        size: row.size,
+        stockQuantity: Math.max(0, safeNumber(row.stockQuantity, 0)),
+        rank,
+      });
+    });
+
+    return [...suggestionsByProduct.values()]
+      .sort((left, right) => left.rank - right.rank || String(left.productSku || left.productName).localeCompare(String(right.productSku || right.productName)))
+      .slice(0, Math.max(0, Number(limit) || 0));
+  }
+
   function visibleShopProductGroups(rows = [], { productLimit = 24, optionLimit = 8 } = {}) {
     const groupsByProduct = availableInventoryRows(rows).reduce((map, row) => {
       const key = row.productId || row.productSku || row.productName;
@@ -177,6 +228,8 @@
   const api = {
     buildInventoryRows,
     availableInventoryRows,
+    filterInventoryRows,
+    buildInventorySearchSuggestions,
     visibleShopProductGroups,
     updateDraftQuantity,
     draftItems,
