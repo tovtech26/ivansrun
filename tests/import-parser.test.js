@@ -112,6 +112,13 @@ assert.deepEqual(parsedChineseCsvMaster.rows, [
 ]);
 assert.equal(parsedChineseCsvMaster.errors.length, 0);
 
+const skuOnlyStockRow = parseMasterInventoryRows([
+  { sku: "GZ0010001", stock: "19" },
+]);
+assert.equal(skuOnlyStockRow.rows.length, 1, "A valid exact SKU and stock value must not be discarded when optional style, colour, or size metadata is missing.");
+assert.equal(skuOnlyStockRow.rows[0].source_sku, "GZ0010001");
+assert.equal(skuOnlyStockRow.rows[0].stock_quantity, 19);
+
 const actualChineseMasterRows = [
   { 款式编码: "2503", 商品编码: "202425030137", 颜色及规格: "绿野仙踪/青橙;37", 库存: "25" },
   { 款式编码: "23028", 商品编码: "202302800138", 颜色及规格: "亮桔色/海蓝;38", 库存: "117" },

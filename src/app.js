@@ -160,9 +160,13 @@ const state = {
   applicationSubmitPending: false,
   applicationActionPendingId: null,
   applicationActionNotice: null,
+  workflowAction: null,
+  workflowActionError: null,
   siteSavePending: false,
   flyerSavePending: false,
+  homepageFlyerEditingId: null,
   storySavePending: false,
+  storyEditingId: null,
   publicProductFlyerSavePending: false,
   publicProductFlyerEditingId: null,
   publicProductFlyerImageDrafts: {},
@@ -203,6 +207,7 @@ const state = {
   teamInviteCreatePending: false,
   teamInviteError: null,
   adminContentError: null,
+  adminContentNotice: null,
   mobileNavOpen: false,
   catalogFiltersOpen: false,
   navigationDepth: 0,
@@ -215,7 +220,7 @@ const state = {
   importPreview: null,
   resellerSearch: "",
   resellerSearchSuggestionsOpen: false,
-  resellerSearchSuggestionIndex: 0,
+  resellerSearchSuggestionIndex: -1,
   resellerNotes: "",
   resellerDraft: {},
   resellerQuickOrderProductId: null,
@@ -679,6 +684,38 @@ function readableAdminInviteError(error, fallback = "Unable to claim admin invit
   return raw || fallback;
 }
 
+async function deleteProductImages(storagePaths = []) {
+  const paths = storagePaths.filter(Boolean);
+  if (!paths.length) return;
+  const session = await requireAuthedSession();
+  const response = await monitoredFetch(
+    `storage-delete:${ProductPersistence.PRODUCT_IMAGE_BUCKET}`,
+    `${SUPABASE_URL}/storage/v1/object/${ProductPersistence.PRODUCT_IMAGE_BUCKET}`,
+    {
+      method: "DELETE",
+      headers: { ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token), "Content-Type": "application/json" },
+      body: JSON.stringify({ prefixes: paths }),
+    },
+  );
+  if (!response.ok) throw await buildResponseError("image cleanup failed", response);
+}
+
+async function deleteContentImages(storagePaths = []) {
+  const paths = storagePaths.filter((path) => String(path || "").trim() && !/^https?:\/\//i.test(String(path)));
+  if (!paths.length) return;
+  const session = await requireAuthedSession();
+  const response = await monitoredFetch(
+    `storage-delete:${WebsiteContent.CONTENT_IMAGE_BUCKET}`,
+    `${SUPABASE_URL}/storage/v1/object/${WebsiteContent.CONTENT_IMAGE_BUCKET}`,
+    {
+      method: "DELETE",
+      headers: { ...SupabaseClient.headers(SUPABASE_KEY, session?.access_token), "Content-Type": "application/json" },
+      body: JSON.stringify({ prefixes: paths }),
+    },
+  );
+  if (!response.ok) throw await buildResponseError("content image cleanup failed", response);
+}
+
 function readablePublicProductFlyerDatabaseError(error, fallback = "Unable to save public product flyer") {
   const raw = error instanceof Error ? error.message : String(error || fallback);
   if (/public_product_flyers/i.test(raw) && /404|could not find|not found|schema cache/i.test(raw)) {
@@ -731,12 +768,11 @@ async function monitoredFetch(label, url, options = {}) {
 
 async function publishActiveSiteContent(siteContent) {
   const payloads = SitePublish.buildSitePublishPayloads(siteContent, state.auth.user?.id || null);
-  await patchAuthedSupabase("hero_sections", "active=eq.true", { active: false });
-  await patchAuthedSupabase("site_themes", "active=eq.true", { active: false });
-  await patchAuthedSupabase("site_content", "active=eq.true", { active: false });
-  await insertAuthedSupabase("hero_sections", payloads.heroRow);
-  await insertAuthedSupabase("site_themes", payloads.themeRow);
-  await insertAuthedSupabase("site_content", payloads.contentRow);
+  return invokeAuthedRpc("publish_site_controls", {
+    p_hero: payloads.heroRow,
+    p_theme: payloads.themeRow,
+    p_content: payloads.contentRow,
+  });
 }
 
 function loadExternalScript(key, src, globalName) {
@@ -861,23 +897,17 @@ async function buildImportPreviewFromFile(type, file) {
   throw new Error("Unsupported import type");
 }
 
-async function sendOrderNotification(details) {
-  const payload = EmailNotifications.buildOrderEmailPayload(details);
-  const html = payload.html || htmlFromIncludes(payload.subject, payload.htmlIncludes);
+async function sendOrderNotification(details = {}) {
   return invokeAuthedFunction("send-order-email", {
-    ...payload,
-    eventType: details.eventType,
-    html,
+    aggregateId: details.aggregateId || details.orderId || null,
+    notificationIds: details.notificationIds || [],
   });
 }
 
-async function sendApplicationNotification(details) {
-  const payload = EmailNotifications.buildApplicationEmailPayload(details);
-  const html = payload.html || htmlFromIncludes(payload.subject, payload.htmlIncludes);
+async function sendApplicationNotification(details = {}) {
   return invokeAuthedFunction("send-application-email", {
-    ...payload,
-    eventType: details.eventType,
-    html,
+    aggregateId: details.aggregateId || details.applicationId || null,
+    notificationIds: details.notificationIds || [],
   });
 }
 
@@ -898,7 +928,7 @@ async function fetchOptionalSupabaseResult(table, query) {
 }
 
 async function fetchOrderRequests() {
-  const workflowQuery = "select=id,reseller_id,status,notes,admin_notes,approved_at,paid_at,supplier_submitted_at,processing_at,shipped_at,fulfilled_at,expected_fulfillment_date,invoice_number,payment_reference,payment_note,supplier_exported_at,created_at,updated_at&order=created_at.desc&limit=100";
+  const workflowQuery = "select=id,reseller_id,status,notes,admin_notes,approved_at,paid_at,supplier_submitted_at,processing_at,shipped_at,fulfilled_at,expected_fulfillment_date,invoice_number,payment_reference,payment_note,rejection_reason,rejected_at,cancelled_at,supplier_exported_at,created_at,updated_at&order=created_at.desc&limit=5000";
   try {
     return await fetchAuthedSupabase("order_requests", workflowQuery);
   } catch (error) {
@@ -1270,7 +1300,7 @@ async function loadProtectedData() {
         "applications",
         fetchAuthedSupabase(
         "reseller_applications",
-        "select=id,user_id,email,full_name,company_name,phone,country,message,status,reviewed_by,reviewed_at,created_at&order=created_at.desc&limit=200",
+        "select=id,user_id,email,full_name,company_name,phone,country,message,status,reviewed_by,reviewed_at,review_notes,created_at&order=created_at.desc&limit=1000",
         ),
       ],
     ];
@@ -1279,8 +1309,8 @@ async function loadProtectedData() {
       tasks.push(
         ["products", fetchAuthedSupabase(CatalogData.protectedProductSource(), CatalogData.protectedProductSelectQuery())],
         ["variants", fetchAuthedSupabase(CatalogData.protectedVariantSource(), CatalogData.protectedVariantSelectQuery())],
-        ["productPrices", fetchAuthedSupabase(CatalogData.protectedProductPriceSource(), CatalogData.protectedProductPriceSelectQuery())],
-        ["variantPrices", fetchAuthedSupabase(CatalogData.protectedVariantPriceSource(), CatalogData.protectedVariantPriceSelectQuery())],
+        ["productPrices", invokeAuthedRpc("get_authorized_product_prices", {})],
+        ["variantPrices", invokeAuthedRpc("get_authorized_variant_prices", {})],
         ["colourMappings", fetchAuthedSupabase(CatalogData.protectedColourMappingSource(), CatalogData.protectedColourMappingSelectQuery())],
         ["inventory", fetchAuthedSupabase("inventory", "select=id,variant_id,sku,style_code,stock_quantity,updated_at&order=sku.asc&limit=5000")],
         [
@@ -1291,7 +1321,7 @@ async function loadProtectedData() {
           "orderRequestItems",
           fetchAuthedSupabase(
           "order_request_items",
-          "select=id,order_request_id,variant_id,sku,product_name,colour,size,quantity,base_price,base_currency,created_at&order=created_at.desc&limit=1000",
+          "select=id,order_request_id,variant_id,sku,product_name,colour,size,quantity,base_price,base_currency,created_at&order=created_at.desc&limit=5000",
           ),
         ],
       );
@@ -1586,11 +1616,9 @@ function mobileDrawerItems() {
     }
       return [
         ["Request Products", "reseller", ["reseller", "reseller-product"]],
-        ["Product", "reseller-product", ["reseller-product"]],
         ["My Orders", "history", ["history", "request-confirmation", "current-orders", "expected-orders", "fulfillment", "order"]],
         ["Account", "account", ["account"]],
         ["Public Products", "product-flyers", ["product-flyers", "product-flyer"]],
-        ["Become a Reseller", "apply", ["apply"]],
     ];
   }
   if (state.auth.isAuthenticated) {
@@ -1704,7 +1732,7 @@ function homeBokehBackdrop() {
 }
 
 function flyerCarousel(flyers) {
-  const items = WebsiteContent.normalizeFlyers(flyers);
+  const items = WebsiteContent.normalizeFlyers(flyers, { includeUnpublished: state.auth.isAdmin });
   const selectedIndex = ((Number(state.homeFlyerIndex || 0) % items.length) + items.length) % items.length;
   const selected = items[selectedIndex];
   const heroTitle = String(selected.title || "Blue Motion Protocol")
@@ -1841,7 +1869,7 @@ function aboutSection(about = WebsiteContent.DEFAULT_ABOUT_CONTENT) {
 }
 
 function selectedStory() {
-  const items = WebsiteContent.normalizeStories(state.blogPosts);
+  const items = WebsiteContent.normalizeStories(state.blogPosts, { includeUnpublished: state.auth.isAdmin });
   if (!items.length) return null;
   if (state.selectedStorySlug) {
     return items.find((story) => story.slug === state.selectedStorySlug) || null;
@@ -2531,6 +2559,7 @@ function findResellerPage() {
 
 function accountPage() {
   const application = latestOwnApplication();
+  const directoryListed = state.resellerDirectory.some((entry) => entry.id === state.auth.user?.id);
   return `
     <main class="portal-page">
       <section class="portal-header">
@@ -2558,6 +2587,12 @@ function accountPage() {
           ${controlInput("Full Name", "full_name", state.auth.profile?.full_name || "")}
           ${controlInput("Company Name", "company_name", state.auth.profile?.company_name || "")}
           ${controlInput("Phone", "phone", state.auth.profile?.phone || "")}
+          ${state.auth.isReseller ? controlInput("Directory country or region", "directory_country", application?.country || currentUserCountry()) : ""}
+          ${
+            state.auth.isReseller
+              ? `<label class="checkbox-control"><input name="directory_listed" type="checkbox" ${directoryListed ? "checked" : ""} /><span>Show this business in the public reseller directory</span></label>`
+              : ""
+          }
           <button class="button primary full" ${state.accountProfileSavePending ? "disabled" : ""}>${state.accountProfileSavePending ? "Saving..." : "Save Account Details"}</button>
         </form>
         <form class="workflow-form" data-form="account-password">
@@ -3427,10 +3462,15 @@ function adminTeam() {
   `;
 }
 
-function contentAdminItem({ title, imagePath, meta, published, actions = "" }) {
+function contentAdminItem({ title, imagePath, meta, published, actions = "", itemAction = "", itemId = "" }) {
   const imageUrl = resolveContentImageUrl(imagePath || "");
+  const actionable = Boolean(itemAction && itemId);
   return `
-    <article class="content-admin-item">
+    <article class="content-admin-item${actionable ? " content-admin-item-actionable" : ""}"${
+      actionable
+        ? ` data-action="${escapeHtml(itemAction)}" data-content-id="${escapeHtml(itemId)}" role="button" tabindex="0" aria-label="Edit ${escapeHtml(title || "content item")}"`
+        : ""
+    }>
       ${
         imageUrl
           ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title || "Content image")}" loading="lazy" />`
@@ -3448,13 +3488,37 @@ function contentAdminItem({ title, imagePath, meta, published, actions = "" }) {
 function flyerAdminList() {
   const items = Array.isArray(state.homepageFlyers) ? state.homepageFlyers : [];
   if (!items.length) return `<div class="content-empty-state"><p>No flyer images uploaded yet.</p></div>`;
-  return `<div class="content-admin-list">${items.map((flyer) => contentAdminItem({ title: flyer.title, imagePath: flyer.imagePath, meta: `${flyer.sortOrder} order • ${flyer.published ? "Published" : "Draft"}`, published: flyer.published })).join("")}</div>`;
+  return `<div class="content-admin-list">${items.map((flyer) => contentAdminItem({
+    title: flyer.title,
+    imagePath: flyer.imagePath,
+    meta: `${flyer.sortOrder} order • ${flyer.published ? "Published" : "Draft"}`,
+    published: flyer.published,
+    itemAction: "edit-homepage-flyer",
+    itemId: flyer.id,
+    actions: `
+      <button type="button" class="button mini" data-action="edit-homepage-flyer" data-content-id="${escapeHtml(flyer.id)}">Edit</button>
+      <button type="button" class="button mini secondary" data-action="preview-homepage-flyer" data-content-id="${escapeHtml(flyer.id)}">Preview</button>
+      <button type="button" class="button mini secondary" data-action="delete-homepage-flyer" data-content-id="${escapeHtml(flyer.id)}">Delete</button>
+    `,
+  })).join("")}</div>`;
 }
 
 function storyAdminList() {
   const items = Array.isArray(state.blogPosts) ? state.blogPosts : [];
   if (!items.length) return `<div class="content-empty-state"><p>No stories saved yet.</p></div>`;
-  return `<div class="content-admin-list">${items.map((story) => contentAdminItem({ title: story.title, imagePath: story.coverImagePath, meta: `${story.published ? "Published" : "Draft"}${story.publishedAt ? ` • ${new Date(story.publishedAt).toLocaleDateString()}` : ""}`, published: story.published })).join("")}</div>`;
+  return `<div class="content-admin-list">${items.map((story) => contentAdminItem({
+    title: story.title,
+    imagePath: story.coverImagePath,
+    meta: `${story.published ? "Published" : "Draft"}${story.publishedAt ? ` • ${new Date(story.publishedAt).toLocaleDateString()}` : ""}`,
+    published: story.published,
+    itemAction: "edit-blog-post",
+    itemId: story.id,
+    actions: `
+      <button type="button" class="button mini" data-action="edit-blog-post" data-content-id="${escapeHtml(story.id)}">Edit</button>
+      <button type="button" class="button mini secondary" data-route="story" data-story-slug="${escapeHtml(story.slug)}">Preview</button>
+      <button type="button" class="button mini secondary" data-action="delete-blog-post" data-content-id="${escapeHtml(story.id)}">Delete</button>
+    `,
+  })).join("")}</div>`;
 }
 
 function publicProductFlyerAdminList() {
@@ -3465,11 +3529,23 @@ function publicProductFlyerAdminList() {
     imagePath: productFlyerCoverImage(flyer),
     meta: `${flyer.productClass} - ${productFlyerGallery(flyer).length} images - ${flyer.published ? "Published" : "Draft"}`,
     published: flyer.published,
+    itemAction: "edit-public-product-flyer",
+    itemId: flyer.id,
     actions: `
       <button type="button" class="button mini" data-action="edit-public-product-flyer" data-flyer-id="${escapeHtml(flyer.id)}">Edit</button>
       <button type="button" class="button mini secondary" data-action="delete-public-product-flyer" data-flyer-id="${escapeHtml(flyer.id)}">Delete</button>
     `,
   })).join("")}</div>`;
+}
+
+function homepageFlyerBeingEdited() {
+  const id = String(state.homepageFlyerEditingId || "").trim();
+  return id ? state.homepageFlyers.find((flyer) => flyer.id === id) || null : null;
+}
+
+function storyBeingEdited() {
+  const id = String(state.storyEditingId || "").trim();
+  return id ? state.blogPosts.find((story) => story.id === id) || null : null;
 }
 
 function publicProductFlyerBeingEdited() {
@@ -3648,15 +3724,22 @@ function siteControlsSubnav() {
 }
 
 function siteHomepageFlyersPanel() {
+  const flyerEdit = homepageFlyerBeingEdited();
   return `
     <div class="admin-card site-controls-card">
       <div class="panel-toolbar"><h2>Homepage Flyers</h2><span>${state.homepageFlyers.length} items</span></div>
       <form class="workflow-form" data-form="homepage-flyer">
-        ${controlInput("Flyer Title", "flyer_title", "")}
-        ${controlInput("Display Order", "flyer_sort_order", "0", "number")}
-        <label><span>Flyer Image</span><input name="flyer_image" type="file" accept="image/*" /></label>
-        <label class="toggle-row"><input name="flyer_published" type="checkbox" checked /><span>Publish now</span></label>
-        <button class="button primary full" type="submit" ${state.flyerSavePending ? "disabled" : ""}>${state.flyerSavePending ? "Saving..." : "Save Flyer"}</button>
+        <input type="hidden" name="flyer_id" value="${escapeHtml(flyerEdit?.id || "")}" />
+        <div class="form-section-title">${flyerEdit ? "Edit Homepage Flyer" : "Add Homepage Flyer"}</div>
+        ${controlInput("Flyer Title", "flyer_title", flyerEdit?.title || "")}
+        ${controlInput("Display Order", "flyer_sort_order", String(flyerEdit?.sortOrder ?? 0), "number")}
+        ${flyerEdit?.imagePath ? `<div class="content-editor-current-image"><img src="${escapeHtml(resolveContentImageUrl(flyerEdit.imagePath))}" alt="${escapeHtml(flyerEdit.title)}" /><span>Current image</span></div>` : ""}
+        <label><span>${flyerEdit ? "Replace Flyer Image" : "Flyer Image"}</span><input name="flyer_image" type="file" accept="image/*" ${flyerEdit ? "" : "required"} /></label>
+        <label class="toggle-row"><input name="flyer_published" type="checkbox" ${flyerEdit ? (flyerEdit.published ? "checked" : "") : "checked"} /><span>Publish on the homepage</span></label>
+        <div class="form-actions-row">
+          <button class="button primary full" type="submit" ${state.flyerSavePending ? "disabled" : ""}>${state.flyerSavePending ? (flyerEdit ? "Updating..." : "Saving...") : flyerEdit ? "Update Flyer" : "Save Flyer"}</button>
+          ${flyerEdit ? `<button class="button secondary full" type="button" data-action="cancel-homepage-flyer-edit">Cancel Edit</button>` : ""}
+        </div>
       </form>
       ${flyerAdminList()}
     </div>
@@ -3664,16 +3747,23 @@ function siteHomepageFlyersPanel() {
 }
 
 function siteStoriesPanel() {
+  const storyEdit = storyBeingEdited();
   return `
     <div class="admin-card site-controls-card">
       <div class="panel-toolbar"><h2>Stories</h2><span>${state.blogPosts.length} items</span></div>
       <form class="workflow-form" data-form="blog-post">
-        ${controlInput("Story Title", "story_title", "")}
-        <label><span>Cover Image</span><input name="story_cover_image" type="file" accept="image/*" /></label>
-        ${controlTextarea("Summary", "story_summary", "")}
-        ${controlTextarea("Story Body", "story_body", "")}
-        <label class="toggle-row"><input name="story_published" type="checkbox" /><span>Publish now</span></label>
-        <button class="button primary full" type="submit" ${state.storySavePending ? "disabled" : ""}>${state.storySavePending ? "Saving..." : "Save Story"}</button>
+        <input type="hidden" name="story_id" value="${escapeHtml(storyEdit?.id || "")}" />
+        <div class="form-section-title">${storyEdit ? "Edit Story" : "Add Story"}</div>
+        ${controlInput("Story Title", "story_title", storyEdit?.title || "")}
+        ${storyEdit?.coverImagePath ? `<div class="content-editor-current-image"><img src="${escapeHtml(resolveContentImageUrl(storyEdit.coverImagePath))}" alt="${escapeHtml(storyEdit.title)}" /><span>Current cover</span></div>` : ""}
+        <label><span>${storyEdit ? "Replace Cover Image" : "Cover Image"}</span><input name="story_cover_image" type="file" accept="image/*" /></label>
+        ${controlTextarea("Summary", "story_summary", storyEdit?.summary || "")}
+        ${controlTextarea("Story Body", "story_body", storyEdit?.body || "")}
+        <label class="toggle-row"><input name="story_published" type="checkbox" ${storyEdit?.published ? "checked" : ""} /><span>Publish on the public site</span></label>
+        <div class="form-actions-row">
+          <button class="button primary full" type="submit" ${state.storySavePending ? "disabled" : ""}>${state.storySavePending ? (storyEdit ? "Updating..." : "Saving...") : storyEdit ? "Update Story" : "Save Story"}</button>
+          ${storyEdit ? `<button class="button secondary full" type="button" data-action="cancel-blog-post-edit">Cancel Edit</button>` : ""}
+        </div>
       </form>
       ${storyAdminList()}
     </div>
@@ -3763,8 +3853,8 @@ function siteHeroThemePanel(site, hero, theme) {
           <h2>${escapeHtml(hero.title)}</h2>
           <p>${escapeHtml(hero.copy)}</p>
           <div class="hero-actions">
-            <button class="button primary${hero.electricity ? " charge-button" : ""}">${escapeHtml(hero.primaryCta)} <span class="button-mark" aria-hidden="true">&nearr;</span></button>
-            <button class="button ghost${hero.electricity ? " charge-button subdued" : ""}">${escapeHtml(hero.secondaryCta)} <span class="button-mark" aria-hidden="true">&rarr;</span></button>
+            <button type="button" class="button primary${hero.electricity ? " charge-button" : ""}" disabled aria-label="Primary button preview">${escapeHtml(hero.primaryCta)} <span class="button-mark" aria-hidden="true">&nearr;</span></button>
+            <button type="button" class="button ghost${hero.electricity ? " charge-button subdued" : ""}" disabled aria-label="Secondary button preview">${escapeHtml(hero.secondaryCta)} <span class="button-mark" aria-hidden="true">&rarr;</span></button>
           </div>
         </div>
       </aside>
@@ -3795,6 +3885,7 @@ function adminSiteControls() {
         </header>
         ${state.siteSaved ? `<p class="notice success">Site controls published to Supabase. The public site now reads the active hero, theme, and banner from the database.</p>` : ""}
         ${state.siteSaveError ? `<p class="notice error">${escapeHtml(state.siteSaveError)}</p>` : ""}
+        ${state.adminContentNotice ? `<p class="notice success">${escapeHtml(state.adminContentNotice)}</p>` : ""}
         ${state.adminContentError ? `<p class="notice error">${escapeHtml(state.adminContentError)}</p>` : ""}
         <section class="site-controls-workspace">
           ${siteControlsSubnav()}
@@ -4083,10 +4174,64 @@ function adminOrderActionButtons(record) {
     .join("");
 }
 
+function workflowActionDialog() {
+  const action = state.workflowAction;
+  if (!action) return "";
+  const isApplication = action.kind === "application";
+  const statusLabel = String(action.status || "update").replaceAll("_", " ");
+  const needsReason = action.status === "rejected" || action.status === "cancelled";
+  const needsPayment = action.status === "paid";
+  const needsDate = action.status === "awaiting_payment";
+  return `
+    <div class="workflow-dialog-backdrop" role="presentation" data-action="close-workflow-action">
+      <section class="workflow-dialog" role="dialog" aria-modal="true" aria-labelledby="workflow-action-title" data-workflow-dialog>
+        <div class="panel-toolbar">
+          <h2 id="workflow-action-title">Confirm ${escapeHtml(statusLabel)}</h2>
+          <button type="button" class="button mini secondary" data-action="close-workflow-action">Close</button>
+        </div>
+        <p>Review these details before the change is saved and the notification is queued.</p>
+        ${state.workflowActionError ? `<p class="notice error">${escapeHtml(state.workflowActionError)}</p>` : ""}
+        <form class="workflow-form compact-workflow-form" data-form="workflow-action">
+          ${needsDate ? controlInput("Expected fulfillment date", "expected_fulfillment_date", "", "date") : ""}
+          ${needsPayment ? controlInput("Payment reference", "payment_reference", "") : ""}
+          ${!isApplication && action.status === "submitted_to_supplier" ? controlInput("Invoice number", "invoice_number", "") : ""}
+          ${needsReason ? controlTextarea(isApplication ? "Rejection reason" : "Reason", "rejection_reason", "") : ""}
+          ${controlTextarea("Admin note", "admin_notes", "")}
+          <button class="button primary full">Confirm ${escapeHtml(statusLabel)}</button>
+        </form>
+      </section>
+    </div>`;
+}
+
 function requestImpactSummary(record) {
   const totalItems = Number(record.totalItems || 0);
   const totalUnits = Number(record.totalUnits || 0);
   return `${totalItems} ${totalItems === 1 ? "SKU line" : "SKU lines"} · ${totalUnits} ${totalUnits === 1 ? "pair" : "pairs"}`;
+}
+
+function orderOperationalDetails(record) {
+  const details = [
+    ["Expected fulfillment", record.expectedFulfillmentDate ? formatOrderDate(record.expectedFulfillmentDate) : ""],
+    ["Invoice", record.invoiceNumber],
+    ["Payment reference", record.paymentReference],
+    ["Decision reason", record.rejectionReason],
+  ].filter(([, value]) => Boolean(value));
+  if (!details.length) return "";
+  return `<div class="request-item-list operational-order-details">
+    ${details
+      .map(
+        ([label, value]) => `<div class="request-item-row"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`,
+      )
+      .join("")}
+  </div>`;
+}
+
+function orderWaitingNotice(record) {
+  const status = record.normalizedStatus || AdminOrders.normalizeOrderStatus(record.status);
+  if (!["submitted", "awaiting_payment"].includes(status) || !record.createdAt) return "";
+  const ageDays = Math.floor((Date.now() - new Date(record.createdAt).getTime()) / 86400000);
+  if (!Number.isFinite(ageDays) || ageDays < 7) return "";
+  return `<p class="notice">Waiting ${escapeHtml(String(ageDays))} days — follow up before this request goes stale.</p>`;
 }
 
 function invoiceNumberFor(record) {
@@ -4239,6 +4384,8 @@ function orderDetailPage() {
             <strong>${money(record.subtotal)}</strong>
           </div>
           <p class="request-note">${escapeHtml(record.adminNotes || record.notes || "No notes have been added yet.")}</p>
+          ${orderOperationalDetails(record)}
+          ${orderWaitingNotice(record)}
           ${state.auth.isAdmin ? `<div class="approval-actions">${adminOrderActionButtons(record)}</div>` : ""}
         </section>
         <section class="admin-card">
@@ -4331,6 +4478,8 @@ function adminOrderWorkspacePage(title, copy, records = [], emptyCopy = "No orde
                               ${adminRequestItemList(record)}
                               <p class="request-note">${escapeHtml(record.notes || "No reseller notes provided.")}</p>
                               ${record.adminNotes ? `<p class="request-note">${escapeHtml("Admin note: " + record.adminNotes)}</p>` : ""}
+                              ${orderOperationalDetails(record)}
+                              ${orderWaitingNotice(record)}
                             </div>
                             <div class="approval-actions">
                               <button class="button mini secondary" data-route="order" data-order-id="${escapeHtml(record.id)}">Open Order</button>
@@ -4838,19 +4987,20 @@ function emailCard(template, title, copy) {
 
 function infoPage(route) {
   const pages = {
-    about: ["About Irunsvan Africa", "High-performance footwear built around a reseller-ready operating model.", "Irunsvan Africa combines public product discovery with private wholesale inventory workflows for approved business buyers."],
-    contact: ["Contact", "Reach the Irunsvan Africa team for product, reseller, and order questions.", "Use the reseller application for wholesale access. General support requests are handled by the Irunsvan Africa operations team."],
-    terms: ["Terms", "Clear operating terms for browsing, reseller requests, approval, and order confirmation.", "Order requests are not final purchases until reviewed and confirmed by admin."],
-    privacy: ["Privacy", "Customer, reseller, and admin data is handled through protected account and inventory workflows.", "Public visitors can browse products without an account. Exact stock and order workflows require approved access."],
+    about: ["About Irunsvan Africa", "High-performance footwear built around a reseller-ready operating model.", ["Irunsvan Africa combines public product discovery with private wholesale inventory workflows for approved business buyers."]],
+    contact: ["Contact", "Reach the Irunsvan Africa team for product, reseller, and order questions.", ["Email ramocha@irunsvanafrica.com for account, product, stock, or order support.", "For wholesale access, submit the reseller application while signed in. Include your company, country, and working contact details so the operations team can review the request."]],
+    terms: ["Terms", "Operating terms for browsing, reseller access, and order requests.", ["Product availability, pricing, and stock can change. An order request is not a completed sale until Irunsvan Africa reviews it and confirms supply.", "Approved resellers are responsible for keeping account and business details accurate and for protecting their login credentials.", "Payment, fulfillment, shipping, cancellation, and rejection details are recorded against each order and shown in the reseller portal.", "These operational terms should be reviewed by qualified local counsel before being treated as final legal terms."]],
+    privacy: ["Privacy", "How account and reseller workflow data is used.", ["Public visitors can browse published products without an account. Exact wholesale prices, stock, applications, and orders require authorized access.", "Irunsvan Africa stores the account, business contact, application, order, inventory, and operational records needed to run the reseller service.", "A reseller directory entry is public only when the approved reseller enables the listing from Account settings. The listing can be disabled again at any time.", "For privacy questions or correction requests, email ramocha@irunsvanafrica.com. This notice should receive a legal review for every country in which the service operates."]],
   };
-  const [title, subtitle, copy] = pages[route] || pages.about;
+  const [title, subtitle, paragraphs] = pages[route] || pages.about;
   return `
     <main class="info-page">
       <section>
         <span class="eyebrow dark">Irunsvan Africa</span>
         <h1>${escapeHtml(title)}</h1>
         <p class="lead-copy">${escapeHtml(subtitle)}</p>
-        <p>${escapeHtml(copy)}</p>
+        ${paragraphs.map((copy) => `<p>${escapeHtml(copy)}</p>`).join("")}
+        ${route === "contact" || route === "privacy" ? `<p><a href="mailto:ramocha@irunsvanafrica.com">ramocha@irunsvanafrica.com</a></p>` : ""}
       </section>
       ${footer(true)}
     </main>
@@ -4922,12 +5072,14 @@ function footer(compact = false) {
         <button data-route="apply">Join Network</button>
         <button data-route="login">Enter</button>
         <button data-route="admin-login">Admin</button>
+        <button data-route="terms">Terms</button>
         <button data-route="privacy">Privacy</button>
       `
       : `
         <button data-route="apply">Apply as a Reseller</button>
         <button data-route="login">Login</button>
         <button data-route="admin-login">Admin Login</button>
+        <button data-route="terms">Terms</button>
         <button data-route="privacy">Privacy Policy</button>
       `;
   return `
@@ -4995,15 +5147,140 @@ function renderResellerSearchResults() {
   window.clearTimeout(resellerSearchRenderTimer);
   resellerSearchRenderTimer = null;
   const cursorPosition = String(state.resellerSearch || "").length;
-  render();
-  const input = document.querySelector("[name='reseller-search']");
+  const shop = document.querySelector(".reseller-shop-panel");
+  if (!shop) return;
+  const rows = filteredInventoryRows();
+  const groups = Orders.visibleShopProductGroups(rows, {
+    productLimit: Math.max(24, state.products.length || 21),
+    optionLimit: 500,
+  });
+  const toolbar = shop.querySelector(".toolbar-actions");
+  const grid = shop.querySelector(".reseller-product-grid");
+  const count = shop.querySelector(".pager-count");
+  if (toolbar) toolbar.innerHTML = resellerSearchControl();
+  if (grid) {
+    grid.innerHTML = groups.length
+      ? resellerProductCards(groups)
+      : `<p class="notice">${String(state.resellerSearch || "").trim() ? "No products match this search." : "No in-stock products are available for this reseller account yet."}</p>`;
+  }
+  if (count) count.textContent = `Showing ${groups.length} products with ${rows.length} available SKU rows${String(state.resellerSearch || "").trim() ? " matching search" : ""}`;
+  bindResellerSearchEvents(shop);
+  const input = shop.querySelector("[name='reseller-search']");
   if (!input) return;
   input.focus({ preventScroll: true });
   if (typeof input.setSelectionRange === "function") input.setSelectionRange(cursorPosition, cursorPosition);
 }
 
+function bindResellerSearchEvents(root = document) {
+  root.querySelectorAll("[name='reseller-search']").forEach((input) => {
+    if (input.dataset.searchBound === "true") return;
+    input.dataset.searchBound = "true";
+    input.addEventListener("input", () => {
+      state.resellerSearch = input.value;
+      state.resellerSearchSuggestionsOpen = true;
+      state.resellerSearchSuggestionIndex = -1;
+      window.clearTimeout(resellerSearchRenderTimer);
+      resellerSearchRenderTimer = window.setTimeout(() => renderResellerSearchResults(), 120);
+    });
+    input.addEventListener("keydown", (event) => {
+      const suggestions = resellerSearchSuggestions();
+      if (event.key === "ArrowDown" && suggestions.length) {
+        event.preventDefault();
+        state.resellerSearchSuggestionsOpen = true;
+        state.resellerSearchSuggestionIndex = Math.min(suggestions.length - 1, state.resellerSearchSuggestionIndex + 1);
+        renderResellerSearchResults();
+      } else if (event.key === "ArrowUp" && suggestions.length) {
+        event.preventDefault();
+        state.resellerSearchSuggestionsOpen = true;
+        state.resellerSearchSuggestionIndex = Math.max(0, state.resellerSearchSuggestionIndex - 1);
+        renderResellerSearchResults();
+      } else if (event.key === "Enter" && suggestions.length) {
+        event.preventDefault();
+        const suggestion = suggestions[Math.max(0, state.resellerSearchSuggestionIndex)] || suggestions[0];
+        state.resellerSearchSuggestionsOpen = false;
+        window.clearTimeout(resellerSearchRenderTimer);
+        setRoute("reseller-product", { productId: suggestion.productId });
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        state.resellerSearchSuggestionsOpen = false;
+        renderResellerSearchResults();
+      }
+    });
+  });
+  root.querySelectorAll("[data-action='open-search-suggestion']").forEach((button) => {
+    if (button.dataset.searchBound === "true") return;
+    button.dataset.searchBound = "true";
+    button.addEventListener("click", () => {
+      state.resellerSearchSuggestionsOpen = false;
+      setRoute("reseller-product", { productId: button.getAttribute("data-product-id") });
+    });
+  });
+  root.querySelectorAll("[data-action='open-reseller-product']").forEach((card) => {
+    if (card.dataset.searchBound === "true") return;
+    card.dataset.searchBound = "true";
+    card.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, textarea, select")) return;
+      setRoute("reseller-product", { productId: card.getAttribute("data-product-id") });
+    });
+  });
+  root.querySelectorAll("[data-route='reseller-product']").forEach((button) => {
+    if (button.dataset.searchRouteBound === "true") return;
+    button.dataset.searchRouteBound = "true";
+    button.addEventListener("click", () => setRoute("reseller-product", { productId: button.getAttribute("data-product-id") }));
+  });
+  root.querySelectorAll("[data-action='select-reseller-colour']").forEach((button) => {
+    if (button.dataset.searchBound === "true") return;
+    button.dataset.searchBound = "true";
+    button.addEventListener("click", () => {
+      const productId = button.getAttribute("data-product-id");
+      const colour = button.getAttribute("data-colour");
+      if (productId && colour) state.resellerColourSelection = { ...state.resellerColourSelection, [productId]: colour };
+      render();
+    });
+  });
+  bindCatalogImageStepEvents(root);
+}
+
+function bindCatalogImageStepEvents(root = document) {
+  root.querySelectorAll("[data-action='catalog-image-step']").forEach((button) => {
+    if (button.dataset.galleryBound === "true") return;
+    button.dataset.galleryBound = "true";
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const key = button.getAttribute("data-gallery-key");
+      const direction = Number(button.getAttribute("data-direction") || 1);
+      if (!key || !Number.isFinite(direction)) return;
+      state.catalogImageSelection = {
+        ...state.catalogImageSelection,
+        [key]: Number(state.catalogImageSelection[key] || 0) + direction,
+      };
+      render();
+    });
+  });
+}
+
+function bindContentAdminAction(action, handler) {
+  document.querySelectorAll(`[data-action='${action}']`).forEach((element) => {
+    const activate = async (event) => {
+      if (element.classList.contains("content-admin-item") && event.target.closest("button, a, input, select, textarea")) return;
+      await handler(element.getAttribute("data-content-id"), element);
+    };
+    element.addEventListener("click", activate);
+    if (element.classList.contains("content-admin-item")) {
+      element.addEventListener("keydown", async (event) => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        await handler(element.getAttribute("data-content-id"), element);
+      });
+    }
+  });
+}
+
 function bindEvents() {
+  bindResellerSearchEvents(document);
   document.querySelectorAll("[data-route]").forEach((button) => {
+    if (button.dataset.searchRouteBound === "true") return;
     button.addEventListener("click", () =>
       setRoute(button.getAttribute("data-route"), {
         productId: button.getAttribute("data-product-id"),
@@ -5027,21 +5304,6 @@ function bindEvents() {
       document.querySelectorAll("[data-action='select-gallery-image']").forEach((thumb) => {
         thumb.classList.toggle("selected", thumb === button);
       });
-    });
-  });
-
-  document.querySelectorAll("[data-action='catalog-image-step']").forEach((button) => {
-    button.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const key = button.getAttribute("data-gallery-key");
-      const direction = Number(button.getAttribute("data-direction") || 1);
-      if (!key || !Number.isFinite(direction)) return;
-      state.catalogImageSelection = {
-        ...state.catalogImageSelection,
-        [key]: Number(state.catalogImageSelection[key] || 0) + direction,
-      };
-      render();
     });
   });
 
@@ -5164,10 +5426,32 @@ function bindEvents() {
     });
   });
 
+  bindContentAdminAction("edit-homepage-flyer", async (id) => editHomepageFlyer(id));
+  bindContentAdminAction("delete-homepage-flyer", async (id) => deleteHomepageFlyer(id));
+  bindContentAdminAction("preview-homepage-flyer", async (id) => previewHomepageFlyer(id));
+  bindContentAdminAction("edit-blog-post", async (id) => editBlogPost(id));
+  bindContentAdminAction("delete-blog-post", async (id) => deleteBlogPost(id));
+
+  document.querySelectorAll("[data-action='cancel-homepage-flyer-edit']").forEach((button) => {
+    button.addEventListener("click", () => cancelHomepageFlyerEdit());
+  });
+
+  document.querySelectorAll("[data-action='cancel-blog-post-edit']").forEach((button) => {
+    button.addEventListener("click", () => cancelBlogPostEdit());
+  });
+
   document.querySelectorAll("[data-action='edit-public-product-flyer']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      await editPublicProductFlyer(button.getAttribute("data-flyer-id"));
+    button.addEventListener("click", async (event) => {
+      if (button.classList.contains("content-admin-item") && event.target.closest("button, a, input, select, textarea")) return;
+      await editPublicProductFlyer(button.getAttribute("data-flyer-id") || button.getAttribute("data-content-id"));
     });
+    if (button.classList.contains("content-admin-item")) {
+      button.addEventListener("keydown", async (event) => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        await editPublicProductFlyer(button.getAttribute("data-content-id"));
+      });
+    }
   });
 
   document.querySelectorAll("[data-action='add-public-product-flyer-image']").forEach((button) => {
@@ -5249,8 +5533,18 @@ function bindEvents() {
       if (formName === "account-profile") await handleAccountProfileSave(form);
       if (formName === "account-password") await handleAccountPasswordSave(form);
       if (formName === "team-role") await handleTeamRoleSave(form);
-      if (formName === "homepage-flyer") await saveHomepageFlyer(form);
-      if (formName === "blog-post") await saveBlogPost(form);
+      if (formName === "homepage-flyer") {
+        const flyerId = String(new FormData(form).get("flyer_id") || "").trim();
+        if (flyerId) await updateHomepageFlyer(form);
+        else await saveHomepageFlyer(form);
+        return;
+      }
+      if (formName === "blog-post") {
+        const storyId = String(new FormData(form).get("story_id") || "").trim();
+        if (storyId) await updateBlogPost(form);
+        else await saveBlogPost(form);
+        return;
+      }
       if (formName === "public-product-flyer") {
         const flyerId = String(new FormData(form).get("product_flyer_id") || "").trim();
         if (flyerId) await updatePublicProductFlyer(form);
@@ -5262,6 +5556,7 @@ function bindEvents() {
       if (formName === "product") await handleProductSubmit(form);
       if (formName === "colour-review") await saveColourReview(form);
       if (formName === "stock-reset") await handleStockReset(form);
+      if (formName === "workflow-action") await handleWorkflowActionSubmit(form);
       render();
     });
   });
@@ -5292,43 +5587,6 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[name='reseller-search']").forEach((input) => {
-    input.addEventListener("input", () => {
-      state.resellerSearch = input.value;
-      state.resellerSearchSuggestionsOpen = true;
-      state.resellerSearchSuggestionIndex = 0;
-      window.clearTimeout(resellerSearchRenderTimer);
-      resellerSearchRenderTimer = window.setTimeout(() => renderResellerSearchResults(), 120);
-    });
-    input.addEventListener("keydown", (event) => {
-      const suggestions = resellerSearchSuggestions();
-      if (event.key === "ArrowDown" && suggestions.length) {
-        event.preventDefault();
-        state.resellerSearchSuggestionsOpen = true;
-        state.resellerSearchSuggestionIndex = Math.min(suggestions.length - 1, state.resellerSearchSuggestionIndex + 1);
-        renderResellerSearchResults();
-      }
-      if (event.key === "ArrowUp" && suggestions.length) {
-        event.preventDefault();
-        state.resellerSearchSuggestionsOpen = true;
-        state.resellerSearchSuggestionIndex = Math.max(0, state.resellerSearchSuggestionIndex - 1);
-        renderResellerSearchResults();
-      }
-      if (event.key === "Enter" && suggestions.length) {
-        event.preventDefault();
-        const suggestion = suggestions[state.resellerSearchSuggestionIndex] || suggestions[0];
-        state.resellerSearchSuggestionsOpen = false;
-        window.clearTimeout(resellerSearchRenderTimer);
-        setRoute("reseller-product", { productId: suggestion.productId });
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        state.resellerSearchSuggestionsOpen = false;
-        renderResellerSearchResults();
-      }
-    });
-  });
-
   document.querySelectorAll("[data-action='save-stock-adjustment']").forEach((button) => {
     button.addEventListener("click", async () => {
       const row = button.closest("[data-stock-adjustment]");
@@ -5340,23 +5598,9 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-action='open-search-suggestion']").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.resellerSearchSuggestionsOpen = false;
-      setRoute("reseller-product", { productId: button.getAttribute("data-product-id") });
-    });
-  });
-
   document.querySelectorAll("[name='order_notes']").forEach((input) => {
     input.addEventListener("input", () => {
       state.resellerNotes = input.value;
-    });
-  });
-
-  document.querySelectorAll("[data-action='open-reseller-product']").forEach((card) => {
-    card.addEventListener("click", (event) => {
-      if (event.target.closest("button, a, input, textarea, select")) return;
-      setRoute("reseller-product", { productId: card.getAttribute("data-product-id") });
     });
   });
 
@@ -5364,20 +5608,6 @@ function bindEvents() {
     button.addEventListener("click", () => {
       const productId = button.getAttribute("data-product-id");
       state.resellerQuickOrderProductId = state.resellerQuickOrderProductId === productId ? null : productId;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-action='select-reseller-colour']").forEach((button) => {
-    button.addEventListener("click", () => {
-      const productId = button.getAttribute("data-product-id");
-      const colour = button.getAttribute("data-colour");
-      if (productId && colour) {
-        state.resellerColourSelection = {
-          ...state.resellerColourSelection,
-          [productId]: colour,
-        };
-      }
       render();
     });
   });
@@ -5424,10 +5654,14 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-action='order-status']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const orderId = button.getAttribute("data-order-id");
-      const status = button.getAttribute("data-status");
-      await handleOrderStatusUpdate(orderId, status);
+    button.addEventListener("click", () => {
+      state.workflowAction = {
+        kind: "order",
+        id: button.getAttribute("data-order-id"),
+        status: button.getAttribute("data-status"),
+      };
+      state.workflowActionError = null;
+      render();
     });
   });
 
@@ -5446,11 +5680,24 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-action='application-status']").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const applicationId = button.getAttribute("data-application-id");
-      const userId = button.getAttribute("data-user-id");
-      const status = button.getAttribute("data-status");
-      await handleApplicationStatusUpdate(applicationId, userId, status);
+    button.addEventListener("click", () => {
+      state.workflowAction = {
+        kind: "application",
+        id: button.getAttribute("data-application-id"),
+        userId: button.getAttribute("data-user-id"),
+        status: button.getAttribute("data-status"),
+      };
+      state.workflowActionError = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='close-workflow-action']").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      if (event.target.closest("[data-workflow-dialog]") && !event.target.closest("button[data-action='close-workflow-action']")) return;
+      state.workflowAction = null;
+      state.workflowActionError = null;
+      render();
     });
   });
 
@@ -5722,6 +5969,15 @@ async function handleAccountProfileSave(form) {
     });
     if (state.auth.user?.id && state.staffProfiles.length) {
       state.staffProfiles = state.staffProfiles.map((profile) => (profile.id === state.auth.user.id ? { ...profile, ...updatedProfile } : profile));
+    }
+    if (state.auth.isReseller) {
+      await invokeAuthedRpc("set_reseller_directory_listing", {
+        p_published: Boolean(form.elements.namedItem("directory_listed")?.checked),
+        p_country: String(data.get("directory_country") || "").trim() || null,
+        p_phone: String(data.get("phone") || "").trim() || null,
+        p_email: state.auth.user?.email || null,
+      });
+      await loadCatalog();
     }
     state.accountProfileSaved = true;
   } catch (error) {
@@ -6017,17 +6273,7 @@ async function handleOrderSubmit(form) {
     state.orderSubmitPending = false;
     setRoute("request-confirmation");
     loadProtectedDataInBackground();
-    sendOrderNotification({
-      eventType: "order_submitted",
-      adminEmails: [],
-      orderCode: formatRequestCode(createdRequest.id),
-      resellerCompany: state.auth.profile?.company_name || "Irunsvan reseller",
-      resellerEmail: state.auth.user?.email || "",
-      totalSkus: payload.orderItems.length,
-      totalUnits: payload.orderItems.reduce((sum, item) => sum + item.quantity, 0),
-      subtotal: payload.orderItems.reduce((sum, item) => sum + Number(item.base_price || 0) * item.quantity, 0),
-      notes: payload.orderRequest.notes || "",
-    }).catch(() => {});
+    sendOrderNotification({ aggregateId: createdRequest.id }).catch(() => {});
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to submit order request";
     state.inventoryError = message;
@@ -6094,18 +6340,17 @@ async function handleApplicationSubmit(form) {
       country: data.get("country"),
       message: data.get("message"),
     });
-    await insertAuthedSupabase("reseller_applications", payload);
+    const savedApplication = await invokeAuthedRpc("submit_reseller_application", {
+      p_email: payload.email,
+      p_full_name: payload.full_name,
+      p_company_name: payload.company_name,
+      p_phone: payload.phone || null,
+      p_country: payload.country || null,
+      p_message: payload.message || null,
+    });
     state.applicationSubmitted = true;
     await loadProtectedData();
-    sendApplicationNotification({
-      eventType: "application_submitted",
-      adminEmails: [],
-      companyName: payload.company_name,
-      fullName: payload.full_name,
-      email: payload.email,
-      country: payload.country || "",
-      message: payload.message || "",
-    }).catch(() => {});
+    sendApplicationNotification({ aggregateId: savedApplication?.id }).catch(() => {});
   } catch (error) {
     state.applicationError = error instanceof Error ? error.message : "Unable to submit reseller application";
   } finally {
@@ -6113,42 +6358,49 @@ async function handleApplicationSubmit(form) {
   }
 }
 
-async function handleOrderStatusUpdate(orderId, status) {
+async function handleWorkflowActionSubmit(form) {
+  const action = state.workflowAction;
+  if (!action) return;
+  const data = new FormData(form);
+  state.workflowActionError = null;
+  try {
+    if (action.kind === "application") {
+      await handleApplicationStatusUpdate(action.id, action.userId, action.status, {
+        reviewNotes: String(data.get("rejection_reason") || data.get("admin_notes") || "").trim(),
+      });
+    } else {
+      await handleOrderStatusUpdate(action.id, action.status, {
+        adminNotes: String(data.get("admin_notes") || "").trim(),
+        paymentReference: String(data.get("payment_reference") || "").trim(),
+        expectedFulfillmentDate: String(data.get("expected_fulfillment_date") || "").trim(),
+        rejectionReason: String(data.get("rejection_reason") || "").trim(),
+        invoiceNumber: String(data.get("invoice_number") || "").trim(),
+      });
+    }
+    state.workflowAction = null;
+  } catch (error) {
+    state.workflowActionError = error instanceof Error ? error.message : "Unable to complete this workflow action";
+  }
+}
+
+async function handleOrderStatusUpdate(orderId, status, details = {}) {
   try {
     const orderRequest = state.orderRequests.find((request) => request.id === orderId);
-    const currentStatus = orderRequest?.status || "submitted";
-    const approvalItems = state.orderRequestItems.filter((item) => item.order_request_id === orderId);
-    const patch = AdminOrders.buildOrderStatusPatch(
-      status,
-      `Updated from admin dashboard on ${new Date().toLocaleString()}`,
-      orderRequest,
-    );
-    if (status === "awaiting_payment" && currentStatus !== "awaiting_payment") {
-      await invokeAuthedRpc("approve_order_request", { p_order_id: orderId });
-    } else {
-      await patchAuthedSupabase("order_requests", `id=eq.${encodeURIComponent(orderId)}`, patch);
-    }
-    if (orderRequest?.reseller_id) {
-      const [profile] = await fetchAuthedSupabase(
-        "profiles",
-        `select=id,email,company_name&id=eq.${encodeURIComponent(orderRequest.reseller_id)}&limit=1`,
-      );
-      sendOrderNotification({
-        eventType: `order_${status}`,
-        adminEmails: [profile?.email].filter(Boolean),
-        orderCode: formatRequestCode(orderId),
-        resellerCompany: profile?.company_name || "Irunsvan reseller",
-        resellerEmail: profile?.email || "",
-        totalSkus: approvalItems.length,
-        totalUnits: approvalItems.reduce((total, item) => total + Number(item.quantity || 0), 0),
-        subtotal: approvalItems.reduce((total, item) => total + Number(item.quantity || 0) * Number(item.base_price || 0), 0),
-        notes: patch.admin_notes || "",
-      }).catch(() => {});
-    }
+    if (!orderRequest) throw new Error("Order request not found.");
+    await invokeAuthedRpc("transition_order_request", {
+      p_order_id: orderId,
+      p_status: status,
+      p_admin_notes: details.adminNotes || null,
+      p_payment_reference: details.paymentReference || null,
+      p_expected_fulfillment_date: details.expectedFulfillmentDate || null,
+      p_rejection_reason: details.rejectionReason || null,
+      p_invoice_number: details.invoiceNumber || null,
+    });
+    sendOrderNotification({ aggregateId: orderId }).catch(() => {});
     await loadProtectedData();
   } catch (error) {
     state.historyError = error instanceof Error ? error.message : "Unable to update order status";
-    render();
+    throw error;
   }
 }
 
@@ -6260,7 +6512,7 @@ async function handleManualStockAdjustment(inventoryId, stockQuantity, reason) {
   }
 }
 
-async function handleApplicationStatusUpdate(applicationId, userId, status) {
+async function handleApplicationStatusUpdate(applicationId, userId, status, details = {}) {
   state.applicationActionPendingId = applicationId;
   state.applicationActionNotice = null;
   state.applicationError = null;
@@ -6271,19 +6523,12 @@ async function handleApplicationStatusUpdate(applicationId, userId, status) {
     await invokeAuthedRpc("review_reseller_application", {
       p_application_id: applicationId,
       p_status: status,
+      p_review_notes: details.reviewNotes || null,
     });
     let emailError = application?.email ? null : "The reseller application has no email address";
     if (application?.email) {
       try {
-        const result = await sendApplicationNotification({
-          eventType: `application_${status}`,
-          adminEmails: [],
-          companyName: application.company_name,
-          fullName: application.full_name,
-          email: application.email,
-          country: application.country || "",
-          message: application.message || "",
-        });
+        const result = await sendApplicationNotification({ aggregateId: applicationId });
         if (!result?.ok) throw new Error(result?.reason || "Email delivery was not confirmed");
       } catch (error) {
         emailError = error instanceof Error ? error.message : "Email delivery failed";
@@ -6295,6 +6540,7 @@ async function handleApplicationStatusUpdate(applicationId, userId, status) {
       : { type: "success", message: `Application ${status}. Confirmation email sent to ${application?.email || "the reseller"}.` };
   } catch (error) {
     state.applicationError = error instanceof Error ? error.message : "Unable to update reseller application";
+    throw error;
   } finally {
     state.applicationActionPendingId = null;
     render();
@@ -6342,16 +6588,27 @@ async function saveSiteControls(form) {
   }
 }
 
+function focusSiteContentEditor(formName) {
+  window.requestAnimationFrame(() => {
+    const form = document.querySelector(`[data-form='${formName}']`);
+    form?.scrollIntoView({ behavior: "smooth", block: "start" });
+    form?.querySelector("input:not([type='hidden']), textarea")?.focus({ preventScroll: true });
+  });
+}
+
 async function saveHomepageFlyer(form) {
   const data = new FormData(form);
   state.flyerSavePending = true;
   state.adminContentError = null;
+  state.adminContentNotice = null;
   render();
+  let uploadedPath = "";
   try {
     const file = form.elements.namedItem("flyer_image")?.files?.[0];
     if (!file) throw new Error("Choose a flyer image before saving.");
     const record = WebsiteContent.buildContentImageRecord({ folder: "flyers", file, uniquePrefix: new Date().toISOString().replace(/\D/g, "") });
     await uploadContentImage(record);
+    uploadedPath = record.storagePath;
     const [saved] = await insertAuthedSupabase(
       "homepage_flyers",
       WebsiteContent.buildFlyerPayload(
@@ -6368,10 +6625,104 @@ async function saveHomepageFlyer(form) {
       ? state.homepageFlyers.filter((flyer) => flyer.id !== WebsiteContent.DEFAULT_HOME_FLYERS[0]?.id)
       : [];
     state.homepageFlyers = WebsiteContent.normalizeFlyers([...currentFlyers, saved], { includeUnpublished: true });
+    state.adminContentNotice = `Homepage flyer “${saved.title}” saved.`;
   } catch (error) {
+    if (uploadedPath) await deleteContentImages([uploadedPath]).catch(() => {});
     state.adminContentError = error instanceof Error ? error.message : "Unable to save flyer";
   } finally {
     state.flyerSavePending = false;
+    render();
+  }
+}
+
+function editHomepageFlyer(flyerId) {
+  const id = String(flyerId || "").trim();
+  const flyer = state.homepageFlyers.find((item) => item.id === id);
+  if (!flyer) {
+    state.adminContentError = "That homepage flyer could not be found.";
+    render();
+    return;
+  }
+  state.homepageFlyerEditingId = id;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  render();
+  focusSiteContentEditor("homepage-flyer");
+}
+
+function cancelHomepageFlyerEdit() {
+  state.homepageFlyerEditingId = null;
+  state.adminContentError = null;
+  render();
+}
+
+function previewHomepageFlyer(flyerId) {
+  const index = state.homepageFlyers.findIndex((flyer) => flyer.id === String(flyerId || "").trim());
+  if (index < 0) return;
+  state.homeFlyerIndex = index;
+  setRoute("store");
+}
+
+async function updateHomepageFlyer(form) {
+  const data = new FormData(form);
+  const id = String(data.get("flyer_id") || state.homepageFlyerEditingId || "").trim();
+  const current = state.homepageFlyers.find((flyer) => flyer.id === id);
+  state.flyerSavePending = true;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  render();
+  let uploadedPath = "";
+  try {
+    if (!current) throw new Error("Choose a homepage flyer before updating.");
+    const file = form.elements.namedItem("flyer_image")?.files?.[0];
+    if (file) {
+      const record = WebsiteContent.buildContentImageRecord({ folder: "flyers", file, uniquePrefix: new Date().toISOString().replace(/\D/g, "") });
+      await uploadContentImage(record);
+      uploadedPath = record.storagePath;
+    }
+    const payloadWithCreator = WebsiteContent.buildFlyerPayload({
+      title: data.get("flyer_title"),
+      imagePath: uploadedPath || current.imagePath,
+      sortOrder: data.get("flyer_sort_order"),
+      published: data.get("flyer_published") === "on",
+    });
+    const { created_by: _createdBy, ...payload } = payloadWithCreator;
+    const [updated] = await updateAuthedSupabase("homepage_flyers", id, payload);
+    if (!updated?.id) throw new Error("The homepage flyer update did not return a saved record.");
+    state.homepageFlyers = WebsiteContent.normalizeFlyers(
+      state.homepageFlyers.map((flyer) => (flyer.id === id ? updated : flyer)),
+      { includeUnpublished: true },
+    );
+    if (uploadedPath && current.imagePath && current.imagePath !== uploadedPath) {
+      await deleteContentImages([current.imagePath]).catch(() => {});
+    }
+    state.homepageFlyerEditingId = null;
+    state.adminContentNotice = `Homepage flyer “${updated.title}” updated.`;
+  } catch (error) {
+    if (uploadedPath) await deleteContentImages([uploadedPath]).catch(() => {});
+    state.adminContentError = error instanceof Error ? error.message : "Unable to update homepage flyer";
+  } finally {
+    state.flyerSavePending = false;
+    render();
+  }
+}
+
+async function deleteHomepageFlyer(flyerId) {
+  const id = String(flyerId || "").trim();
+  const current = state.homepageFlyers.find((flyer) => flyer.id === id);
+  if (!current || !window.confirm(`Delete “${current.title}”? This cannot be undone.`)) return;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  try {
+    await deleteAuthedSupabase("homepage_flyers", `id=eq.${encodeURIComponent(id)}`);
+    state.homepageFlyers = state.homepageFlyers.filter((flyer) => flyer.id !== id);
+    state.homeFlyerIndex = Math.min(state.homeFlyerIndex, Math.max(0, state.homepageFlyers.length - 1));
+    if (state.homepageFlyerEditingId === id) state.homepageFlyerEditingId = null;
+    await deleteContentImages([current.imagePath]).catch(() => {});
+    state.adminContentNotice = `Homepage flyer “${current.title}” deleted.`;
+  } catch (error) {
+    state.adminContentError = error instanceof Error ? error.message : "Unable to delete homepage flyer";
+  } finally {
     render();
   }
 }
@@ -6380,14 +6731,19 @@ async function saveBlogPost(form) {
   const data = new FormData(form);
   state.storySavePending = true;
   state.adminContentError = null;
+  state.adminContentNotice = null;
   render();
+  let uploadedPath = "";
   try {
+    if (!String(data.get("story_title") || "").trim()) throw new Error("Enter a story title before saving.");
+    if (!String(data.get("story_body") || "").trim()) throw new Error("Enter the story body before saving.");
     const file = form.elements.namedItem("story_cover_image")?.files?.[0];
     let coverImagePath = "";
     if (file) {
       const record = WebsiteContent.buildContentImageRecord({ folder: "stories", file, uniquePrefix: new Date().toISOString().replace(/\D/g, "") });
       await uploadContentImage(record);
       coverImagePath = record.storagePath;
+      uploadedPath = record.storagePath;
     }
     const [saved] = await insertAuthedSupabase(
       "blog_posts",
@@ -6403,10 +6759,103 @@ async function saveBlogPost(form) {
       ),
     );
     state.blogPosts = WebsiteContent.normalizeStories([saved, ...state.blogPosts], { includeUnpublished: true });
+    state.adminContentNotice = `Story “${saved.title}” saved.`;
   } catch (error) {
+    if (uploadedPath) await deleteContentImages([uploadedPath]).catch(() => {});
     state.adminContentError = error instanceof Error ? error.message : "Unable to save story";
   } finally {
     state.storySavePending = false;
+    render();
+  }
+}
+
+function editBlogPost(storyId) {
+  const id = String(storyId || "").trim();
+  const story = state.blogPosts.find((item) => item.id === id);
+  if (!story) {
+    state.adminContentError = "That story could not be found.";
+    render();
+    return;
+  }
+  state.storyEditingId = id;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  render();
+  focusSiteContentEditor("blog-post");
+}
+
+function cancelBlogPostEdit() {
+  state.storyEditingId = null;
+  state.adminContentError = null;
+  render();
+}
+
+async function updateBlogPost(form) {
+  const data = new FormData(form);
+  const id = String(data.get("story_id") || state.storyEditingId || "").trim();
+  const current = state.blogPosts.find((story) => story.id === id);
+  state.storySavePending = true;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  render();
+  let uploadedPath = "";
+  try {
+    if (!current) throw new Error("Choose a story before updating.");
+    if (!String(data.get("story_title") || "").trim()) throw new Error("Enter a story title before updating.");
+    if (!String(data.get("story_body") || "").trim()) throw new Error("Enter the story body before updating.");
+    const file = form.elements.namedItem("story_cover_image")?.files?.[0];
+    if (file) {
+      const record = WebsiteContent.buildContentImageRecord({ folder: "stories", file, uniquePrefix: new Date().toISOString().replace(/\D/g, "") });
+      await uploadContentImage(record);
+      uploadedPath = record.storagePath;
+    }
+    const payloadWithCreator = WebsiteContent.buildStoryPayload({
+      title: data.get("story_title"),
+      slug: current.slug,
+      coverImagePath: uploadedPath || current.coverImagePath,
+      summary: data.get("story_summary"),
+      body: data.get("story_body"),
+      published: data.get("story_published") === "on",
+      publishedAt: current.publishedAt,
+    });
+    const { created_by: _createdBy, ...payload } = payloadWithCreator;
+    const [updated] = await updateAuthedSupabase("blog_posts", id, payload);
+    if (!updated?.id) throw new Error("The story update did not return a saved record.");
+    state.blogPosts = WebsiteContent.normalizeStories(
+      state.blogPosts.map((story) => (story.id === id ? updated : story)),
+      { includeUnpublished: true },
+    );
+    if (uploadedPath && current.coverImagePath && current.coverImagePath !== uploadedPath) {
+      await deleteContentImages([current.coverImagePath]).catch(() => {});
+    }
+    if (state.selectedStorySlug === current.slug) state.selectedStorySlug = updated.slug || current.slug;
+    state.storyEditingId = null;
+    state.adminContentNotice = `Story “${updated.title}” updated.`;
+  } catch (error) {
+    if (uploadedPath) await deleteContentImages([uploadedPath]).catch(() => {});
+    state.adminContentError = error instanceof Error ? error.message : "Unable to update story";
+  } finally {
+    state.storySavePending = false;
+    render();
+  }
+}
+
+async function deleteBlogPost(storyId) {
+  const id = String(storyId || "").trim();
+  const current = state.blogPosts.find((story) => story.id === id);
+  if (!current || !window.confirm(`Delete “${current.title}”? This cannot be undone.`)) return;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  try {
+    await deleteAuthedSupabase("blog_posts", `id=eq.${encodeURIComponent(id)}`);
+    state.blogPosts = state.blogPosts.filter((story) => story.id !== id);
+    if (state.storyEditingId === id) state.storyEditingId = null;
+    if (state.selectedStorySlug === current.slug) state.selectedStorySlug = null;
+    await deleteContentImages([current.coverImagePath]).catch(() => {});
+    state.adminContentNotice = `Story “${current.title}” deleted.`;
+  } catch (error) {
+    state.adminContentError = error instanceof Error ? error.message : "Unable to delete story";
+  } finally {
     render();
   }
 }
@@ -6657,10 +7106,17 @@ async function updatePublicProductFlyer(form) {
 async function deletePublicProductFlyer(flyerId) {
   const id = String(flyerId || "").trim();
   if (!id) return;
+  const currentFlyer = (Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : []).find((flyer) => flyer.id === id);
+  if (!currentFlyer) return;
+  const seeded = isSeededProductFlyer(currentFlyer);
+  const prompt = seeded
+    ? `Remove "${currentFlyer.title}" from the public Products page?`
+    : `Delete "${currentFlyer.title}"? This cannot be undone.`;
+  if (!window.confirm(prompt)) return;
   state.adminContentError = null;
+  state.adminContentNotice = null;
   try {
-    const currentFlyer = (Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : []).find((flyer) => flyer.id === id);
-    if (currentFlyer && isSeededProductFlyer(currentFlyer)) {
+    if (seeded) {
       const hiddenInput = {
         title: currentFlyer.title,
         slug: currentFlyer.slug,
@@ -6684,6 +7140,7 @@ async function deletePublicProductFlyer(flyerId) {
     } else {
       await deleteAuthedSupabase("public_product_flyers", `id=eq.${encodeURIComponent(id)}`);
       state.publicProductFlyers = state.publicProductFlyers.filter((flyer) => flyer.id !== id);
+      await deleteContentImages(productFlyerGallery(currentFlyer).map((image) => image.imagePath)).catch(() => {});
     }
     if (state.publicProductFlyerEditingId === id) {
       state.publicProductFlyerEditingId = null;
@@ -6696,6 +7153,9 @@ async function deletePublicProductFlyer(flyerId) {
     if (state.selectedProductFlyerSlug && !state.publicProductFlyers.some((flyer) => flyer.slug === state.selectedProductFlyerSlug)) {
       state.selectedProductFlyerSlug = null;
     }
+    state.adminContentNotice = seeded
+      ? `Product flyer "${currentFlyer.title}" removed from the public page.`
+      : `Product flyer "${currentFlyer.title}" deleted.`;
   } catch (error) {
     state.adminContentError = readablePublicProductFlyerDatabaseError(error, "Unable to delete public product flyer");
   } finally {
@@ -6876,6 +7336,7 @@ async function handleProductSubmit(form) {
   state.productFormSaved = false;
   state.productFormSaveMessage = null;
 
+  let uploadedImagePaths = [];
   try {
     const data = new FormData(form);
     const colourRows = collectProductColourRows(data);
@@ -6899,8 +7360,25 @@ async function handleProductSubmit(form) {
     };
     for (const record of imageRecords) {
       await uploadProductImage(record);
+      uploadedImagePaths.push(record.storagePath);
     }
-    const [savedProductRow] = await upsertAuthedSupabase("products", ProductPersistence.buildProductUpsertPayload(product), "sku");
+    const variantDrafts = ProductCatalogManager.generateProductVariants(product).map((variant) => ({ ...variant, published: true }));
+    const colourMappingPayload = ProductPersistence.buildColourMappingUpsertPayloads(
+      (product.colours || []).map((colour) => ({
+        model_code: product.model_code,
+        original_colour: colour.original,
+        colour: colour.name,
+        color_code: colour.code,
+        image_name: colour.image,
+        published: true,
+      })),
+    );
+    const savedCatalog = await invokeAuthedRpc("save_product_catalog", {
+      p_product: ProductPersistence.buildProductUpsertPayload(product),
+      p_variants: ProductPersistence.buildVariantUpsertPayloads(variantDrafts, null),
+      p_mappings: colourMappingPayload,
+    });
+    const savedProductRow = savedCatalog?.product;
     if (!savedProductRow?.id) throw new Error("Supabase saved the product but did not return its id.");
     const savedProduct = {
       ...product,
@@ -6909,34 +7387,11 @@ async function handleProductSubmit(form) {
       sizes: product.sizes,
       published: true,
     };
-    const variantDrafts = ProductCatalogManager.generateProductVariants(savedProduct).map((variant) => ({ ...variant, published: true }));
-    const colourMappingPayload = ProductPersistence.buildColourMappingUpsertPayloads(
-      (savedProduct.colours || []).map((colour) => ({
-        product_id: savedProduct.id,
-        model_code: savedProduct.model_code,
-        original_colour: colour.original,
-        colour: colour.name,
-        color_code: colour.code,
-        image_name: colour.image,
-        published: true,
-      })),
-    );
-    const savedColourMappings = colourMappingPayload.length
-      ? await upsertAuthedSupabase("product_colour_mappings", colourMappingPayload, "product_id,original_colour,color_code")
-      : [];
-    const savedVariantRows = await upsertAuthedSupabase(
-      "product_variants",
-      ProductPersistence.buildVariantUpsertPayloads(variantDrafts, savedProduct.id),
-      "sku",
-    );
+    const savedColourMappings = Array.isArray(savedCatalog?.mappings) ? savedCatalog.mappings : [];
+    const savedVariantRows = Array.isArray(savedCatalog?.variants) ? savedCatalog.variants : [];
     if (!savedVariantRows.length || savedVariantRows.some((variant) => !variant.id)) {
       throw new Error("Supabase saved the product but did not return generated variant ids.");
     }
-    await upsertAuthedSupabase(
-      "inventory",
-      ProductPersistence.buildZeroInventoryPayloads(savedVariantRows.map((variant) => ({ ...variant, product_sku: savedProduct.sku }))),
-      "sku",
-    );
     applySavedProductToState(savedProduct, savedVariantRows);
     applySavedColourMappingsToState(savedColourMappings);
     state.inventory = InventoryWorkflow.applyInventoryPublishPlan(
@@ -6958,6 +7413,7 @@ async function handleProductSubmit(form) {
     state.productFormSaved = true;
     state.productImageDrafts = [];
   } catch (error) {
+    if (uploadedImagePaths.length) await deleteProductImages(uploadedImagePaths).catch(() => {});
     state.productFormError = error instanceof Error ? error.message : "Unable to create product";
   }
 }
@@ -7132,7 +7588,9 @@ function render() {
   if (state.adminInviteToken) {
     document.getElementById("app").innerHTML = adminInvitePage();
   } else {
-    document.getElementById("app").innerHTML = state.authBootstrapPending ? authBootstrapView() : adminPublicBar() + topNav() + routeView();
+    document.getElementById("app").innerHTML = state.authBootstrapPending
+      ? authBootstrapView()
+      : adminPublicBar() + topNav() + routeView() + workflowActionDialog();
   }
   bindEvents();
   applyRevealMotion();
@@ -7315,5 +7773,64 @@ async function initializeApp() {
   }
   await catalogLoad;
 }
+
+let workflowRefreshPending = false;
+
+async function refreshWorkflowData() {
+  if (workflowRefreshPending || !state.auth.isAuthenticated || document.visibilityState !== "visible") return;
+  const activeElement = document.activeElement;
+  if (activeElement && /^(INPUT|TEXTAREA|SELECT)$/.test(activeElement.tagName)) return;
+  if (state.workflowAction || state.orderSubmitPending || state.applicationSubmitPending) return;
+  workflowRefreshPending = true;
+  try {
+    const [orders, items, applications] = await Promise.all([
+      state.auth.isReseller || state.auth.isAdmin ? fetchOrderRequests() : Promise.resolve([]),
+      state.auth.isReseller || state.auth.isAdmin
+        ? fetchAuthedSupabase("order_request_items", "select=id,order_request_id,variant_id,sku,product_name,colour,size,quantity,base_price,base_currency,created_at&order=created_at.desc&limit=5000")
+        : Promise.resolve([]),
+      fetchAuthedSupabase("reseller_applications", "select=id,user_id,email,full_name,company_name,phone,country,message,status,reviewed_by,reviewed_at,review_notes,created_at&order=created_at.desc&limit=1000"),
+    ]);
+    state.orderRequests = Array.isArray(orders) ? orders : [];
+    state.orderRequestItems = Array.isArray(items) ? items : [];
+    state.resellerApplicationsData = Array.isArray(applications) ? applications : [];
+    render();
+    if (state.auth.isAdmin) {
+      Promise.allSettled([sendOrderNotification({}), sendApplicationNotification({})]);
+    }
+  } catch (error) {
+    console.warn("Workflow refresh failed", error);
+  } finally {
+    workflowRefreshPending = false;
+  }
+}
+
+window.setInterval(refreshWorkflowData, 30000);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshWorkflowData();
+});
+
+let lastClientErrorReportAt = 0;
+function reportClientError(error, context = {}) {
+  if (!state.auth.isAuthenticated || Date.now() - lastClientErrorReportAt < 5000) return;
+  lastClientErrorReportAt = Date.now();
+  const message = error instanceof Error ? error.message : String(error || "Unknown client error");
+  invokeAuthedRpc("report_client_error", {
+    p_route: state.route,
+    p_message: message.slice(0, 1000),
+    p_source: String(context.source || "").slice(0, 300) || null,
+    p_line: Number.isFinite(context.line) ? context.line : null,
+    p_column: Number.isFinite(context.column) ? context.column : null,
+    p_user_agent: navigator.userAgent,
+  }).catch(() => {});
+}
+
+window.addEventListener("error", (event) => {
+  reportClientError(event.error || event.message, {
+    source: event.filename,
+    line: event.lineno,
+    column: event.colno,
+  });
+});
+window.addEventListener("unhandledrejection", (event) => reportClientError(event.reason));
 
 initializeApp();

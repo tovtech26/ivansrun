@@ -205,16 +205,19 @@
 
   function normalizeStories(rows = [], options = {}) {
     return (Array.isArray(rows) ? rows : [])
-      .map((row) => ({
-        id: safeText(row.id),
-        title: safeText(row.title),
-        slug: safeText(row.slug) || buildStorySlug(row.title),
-        coverImagePath: safeText(row.cover_image_path || row.coverImagePath),
-        summary: safeText(row.summary),
-        body: safeText(row.body),
-        published: row.published !== false,
-        publishedAt: safeText(row.published_at || row.publishedAt || row.created_at || row.createdAt),
-      }))
+      .map((row) => {
+        const published = row.published !== false;
+        return {
+          id: safeText(row.id),
+          title: safeText(row.title),
+          slug: safeText(row.slug) || buildStorySlug(row.title),
+          coverImagePath: safeText(row.cover_image_path || row.coverImagePath),
+          summary: safeText(row.summary),
+          body: safeText(row.body),
+          published,
+          publishedAt: safeText(row.published_at || row.publishedAt || (published ? row.created_at || row.createdAt : "")),
+        };
+      })
       .filter((row) => row.id && row.title && row.slug && row.body && (options.includeUnpublished === true || row.published))
       .sort((left, right) => String(right.publishedAt).localeCompare(String(left.publishedAt)));
   }

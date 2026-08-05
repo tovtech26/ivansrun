@@ -56,6 +56,9 @@ assert.deepEqual(buildAdminOrderRecords(requests, items), [
     processingAt: null,
     shippedAt: null,
     fulfilledAt: null,
+    rejectedAt: null,
+    cancelledAt: null,
+    rejectionReason: null,
     expectedFulfillmentDate: null,
     invoiceNumber: null,
     paymentReference: null,
@@ -81,6 +84,9 @@ assert.deepEqual(buildAdminOrderRecords(requests, items), [
     processingAt: null,
     shippedAt: null,
     fulfilledAt: null,
+    rejectedAt: null,
+    cancelledAt: null,
+    rejectionReason: null,
     expectedFulfillmentDate: null,
     invoiceNumber: null,
     paymentReference: null,
@@ -110,6 +116,13 @@ const awaitingPaymentPatch = buildOrderStatusPatch("awaiting_payment", "Ready to
 assert.equal(awaitingPaymentPatch.status, "awaiting_payment");
 assert.equal(awaitingPaymentPatch.admin_notes, "Ready to allocate");
 assert.match(awaitingPaymentPatch.approved_at, /^\d{4}-\d{2}-\d{2}T/);
+
+const shippedPatch = buildOrderStatusPatch("shipped", "Courier collected");
+assert.match(shippedPatch.processing_at, /^\d{4}-\d{2}-\d{2}T/);
+assert.match(shippedPatch.shipped_at, /^\d{4}-\d{2}-\d{2}T/);
+
+const rejectedPatch = buildOrderStatusPatch("rejected", "Unavailable");
+assert.match(rejectedPatch.rejected_at, /^\d{4}-\d{2}-\d{2}T/);
 
 assert.throws(() => buildOrderStatusPatch("unknown"), /invalid order status/i);
 

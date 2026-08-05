@@ -17,6 +17,12 @@ const publicProductFlyerImagesSql = readFileSync(join(__dirname, "..", "supabase
 const publicProductFlyerImageAdvisorFixesSql = readFileSync(join(__dirname, "..", "supabase", "sql", "022_public_product_flyer_image_advisor_fixes.sql"), "utf8");
 const transactionalWorkflowSql = readFileSync(join(__dirname, "..", "supabase", "sql", "023_transactional_order_and_application_workflows.sql"), "utf8");
 const inventoryResetSql = readFileSync(join(__dirname, "..", "supabase", "sql", "024_atomic_inventory_reset_and_adjustments.sql"), "utf8");
+const workflowReliabilitySql = readFileSync(join(__dirname, "..", "supabase", "sql", "025_workflow_reliability_and_notifications.sql"), "utf8");
+const atomicAdminSql = readFileSync(join(__dirname, "..", "supabase", "sql", "026_atomic_admin_operations_and_security.sql"), "utf8");
+const contentPoliciesSql = readFileSync(join(__dirname, "..", "supabase", "sql", "027_single_path_content_policies.sql"), "utf8");
+const notificationClaimsSql = readFileSync(join(__dirname, "..", "supabase", "sql", "028_atomic_notification_claims.sql"), "utf8");
+const serviceRoleUsageSql = readFileSync(join(__dirname, "..", "supabase", "sql", "029_service_role_private_schema_usage.sql"), "utf8");
+const priceCompatibilitySql = readFileSync(join(__dirname, "..", "supabase", "sql", "030_secure_price_view_compatibility.sql"), "utf8");
 
 assert.match(pricePrivacySql, /create or replace view public\.reseller_products\s+with \(security_invoker = true\)/i);
 assert.match(pricePrivacySql, /create or replace view public\.reseller_product_variants\s+with \(security_invoker = true\)/i);
@@ -181,5 +187,31 @@ assert.match(inventoryResetSql, /for update/i);
 assert.match(inventoryResetSql, /grant execute on function public\.reset_inventory_from_import\(jsonb, text, integer, integer\) to authenticated/i);
 assert.match(inventoryResetSql, /grant execute on function public\.adjust_inventory_stock\(uuid, integer, text\) to authenticated/i);
 assert.match(inventoryResetSql, /notify pgrst, 'reload schema'/i);
+
+assert.match(workflowReliabilitySql, /create unique index if not exists reseller_applications_user_id_unique_idx/i);
+assert.match(workflowReliabilitySql, /create table if not exists public\.notification_outbox/i);
+assert.match(workflowReliabilitySql, /create or replace function private\.transition_order_request/i);
+assert.match(workflowReliabilitySql, /stock_quantity = stock_quantity - v_item\.requested_quantity/i);
+assert.match(workflowReliabilitySql, /stock_quantity = stock_quantity \+ v_item\.requested_quantity/i);
+assert.match(workflowReliabilitySql, /create table if not exists public\.reseller_directory_entries/i);
+assert.match(workflowReliabilitySql, /with \(security_invoker = true\)/i);
+assert.match(atomicAdminSql, /create or replace function private\.publish_site_controls/i);
+assert.match(atomicAdminSql, /create or replace function private\.save_product_catalog/i);
+assert.match(atomicAdminSql, /drop view if exists public\.authorized_product_prices/i);
+assert.match(atomicAdminSql, /create or replace function public\.get_authorized_product_prices/i);
+assert.match(atomicAdminSql, /create table if not exists public\.client_error_events/i);
+assert.match(contentPoliciesSql, /Authenticated can read hero sections/i);
+assert.match(contentPoliciesSql, /Admins can insert product flyers/i);
+assert.match(contentPoliciesSql, /for delete to authenticated using \(\(select private\.is_admin\(\)\)\)/i);
+assert.equal(/for all\s+to authenticated/i.test(contentPoliciesSql), false, "Content admin policies must not overlap authenticated SELECT policies.");
+assert.match(notificationClaimsSql, /for update skip locked/i);
+assert.match(notificationClaimsSql, /status = 'sending'/i);
+assert.match(notificationClaimsSql, /updated_at <= now\(\) - interval '10 minutes'/i);
+assert.match(notificationClaimsSql, /grant execute on function public\.claim_notification_outbox[\s\S]*to service_role/i);
+assert.match(notificationClaimsSql, /grant usage on schema private to service_role/i);
+assert.match(serviceRoleUsageSql, /grant usage on schema private to service_role/i);
+assert.match(priceCompatibilitySql, /authorized_product_prices[\s\S]*security_invoker = true/i);
+assert.match(priceCompatibilitySql, /authorized_variant_prices[\s\S]*security_invoker = true/i);
+assert.match(priceCompatibilitySql, /grant select on public\.authorized_product_prices to authenticated/i);
 
 console.log("supabase-sql tests passed");

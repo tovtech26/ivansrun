@@ -244,7 +244,9 @@
         errors.push({ row: rowNumber, code: "invalid_stock_quantity", sku: sourceSku || null });
       }
 
-      if (!sourceStyleCode || !sourceSku || !original_colour || !size || !Number.isInteger(stockQuantity) || stockQuantity < 0) return;
+      // Stock reset matching is SKU-first. Colour, size, and style metadata are useful
+      // for review, but must not discard an otherwise valid manufacturer stock row.
+      if (!sourceSku || !Number.isInteger(stockQuantity) || stockQuantity < 0) return;
 
       parsed.push({
         source_style_code: sourceStyleCode,

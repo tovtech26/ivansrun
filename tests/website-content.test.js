@@ -121,6 +121,11 @@ assert.deepEqual(
 assert.equal(normalizeStories([{ id: "bad", title: "", slug: "", body: "" }]).length, 0);
 assert.equal(normalizeStories([{ id: "draft", title: "Draft", slug: "draft", body: "Draft", published: false }], { includeUnpublished: true }).length, 1);
 assert.equal(normalizeStories([{ id: "draft", title: "Draft", slug: "draft", body: "Draft", published: false }]).length, 0);
+assert.equal(
+  normalizeStories([{ id: "draft", title: "Draft", slug: "draft", body: "Draft", published: false, created_at: "2026-06-01T00:00:00Z" }], { includeUnpublished: true })[0].publishedAt,
+  "",
+  "Draft stories must not reuse their creation time as a publication time.",
+);
 
 assert.deepEqual(
   normalizeProductFlyers([

@@ -117,6 +117,9 @@
         processingAt: request.processing_at ?? null,
         shippedAt: request.shipped_at ?? null,
         fulfilledAt: request.fulfilled_at ?? null,
+        rejectedAt: request.rejected_at ?? null,
+        cancelledAt: request.cancelled_at ?? null,
+        rejectionReason: request.rejection_reason ?? null,
         expectedFulfillmentDate: request.expected_fulfillment_date ?? null,
         invoiceNumber: request.invoice_number ?? null,
         paymentReference: request.payment_reference ?? null,
@@ -159,18 +162,25 @@
       patch.approved_at = currentRequest.approved_at || timestamp;
       patch.paid_at = currentRequest.paid_at || timestamp;
       patch.supplier_submitted_at = currentRequest.supplier_submitted_at || timestamp;
+      patch.processing_at = currentRequest.processing_at || timestamp;
     }
     if (status === "shipped") {
       patch.approved_at = currentRequest.approved_at || timestamp;
       patch.paid_at = currentRequest.paid_at || timestamp;
       patch.supplier_submitted_at = currentRequest.supplier_submitted_at || timestamp;
+      patch.processing_at = currentRequest.processing_at || timestamp;
+      patch.shipped_at = currentRequest.shipped_at || timestamp;
     }
     if (status === "fulfilled") {
       patch.approved_at = currentRequest.approved_at || timestamp;
       patch.paid_at = currentRequest.paid_at || timestamp;
       patch.supplier_submitted_at = currentRequest.supplier_submitted_at || timestamp;
+      patch.processing_at = currentRequest.processing_at || timestamp;
+      patch.shipped_at = currentRequest.shipped_at || timestamp;
       patch.fulfilled_at = currentRequest.fulfilled_at || timestamp;
     }
+    if (status === "rejected") patch.rejected_at = currentRequest.rejected_at || timestamp;
+    if (status === "cancelled") patch.cancelled_at = currentRequest.cancelled_at || timestamp;
     return patch;
   }
 
