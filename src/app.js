@@ -23,7 +23,9 @@ const ROUTES = [
   "order",
   "admin",
   "team",
+  "resellers",
   "requests",
+  "requests-all",
   "requests-review",
   "requests-payment",
   "requests-supplier",
@@ -64,6 +66,7 @@ const OperationsProducts = window.IrunsvanOperationsProducts;
 const WebsiteContent = window.IrunsvanWebsiteContent;
 const OrderExport = window.IrunsvanOrderExport;
 const SITE_CONTENT_STORAGE_KEY = "irunsvan_site_content";
+const RESELLER_APPLICATION_DRAFT_KEY = "irunsvan_reseller_application_draft";
 const PUBLIC_PRODUCT_FLYER_IMAGE_LIMIT = 20;
 const PUBLIC_PRODUCT_FLYER_EMPTY_IMAGE_SLOTS = 3;
 const SERVER_MONITOR_ENABLED =
@@ -87,6 +90,33 @@ function readStoredSiteContent() {
 
 function readInitialRouteState() {
   return MobileNavigation.parseRouteUrl(window.location.hash) || { route: "store", productId: null, orderId: null, storySlug: null, flyerSlug: null };
+}
+
+function readApplicationDraft() {
+  let localDraft = {};
+  try {
+    localDraft = JSON.parse(localStorage.getItem(RESELLER_APPLICATION_DRAFT_KEY) || "{}") || {};
+  } catch {
+    localDraft = {};
+  }
+  const remoteDraft = state.auth.user?.user_metadata?.reseller_application || {};
+  return { ...remoteDraft, ...localDraft };
+}
+
+function applicationDraftFromForm(form) {
+  const data = new FormData(form);
+  return {
+    company_name: String(data.get("company_name") || "").trim(),
+    full_name: String(data.get("full_name") || "").trim(),
+    email: String(data.get("email") || "").trim().toLowerCase(),
+    phone: String(data.get("phone") || "").trim(),
+    country: String(data.get("country") || "").trim(),
+    message: String(data.get("message") || "").trim(),
+  };
+}
+
+function storeApplicationDraft(draft) {
+  localStorage.setItem(RESELLER_APPLICATION_DRAFT_KEY, JSON.stringify(draft || {}));
 }
 
 function hasPendingOAuthCallback() {
@@ -171,6 +201,7 @@ const state = {
   publicProductFlyerEditingId: null,
   publicProductFlyerImageDrafts: {},
   siteControlSection: "product-flyers",
+  siteControlsDirty: false,
   aboutSavePending: false,
   importPending: false,
   stockResetPending: false,
@@ -195,6 +226,11 @@ const state = {
   productFormSaveMessage: null,
   productPriceSaved: false,
   productPriceError: null,
+  productPricePendingId: null,
+  adminProductSearch: "",
+  adminProductPage: 1,
+  adminExpandedStockProductId: null,
+  adminColourPage: 1,
   productImageDrafts: [],
   emailTemplatePreview: null,
   adminInviteToken: null,
@@ -714,6 +750,23 @@ async function deleteContentImages(storagePaths = []) {
     },
   );
   if (!response.ok) throw await buildResponseError("content image cleanup failed", response);
+}
+
+async function queueContentImageCleanup(storagePaths = [], reason = "content_replaced", sourceId = null) {
+  const paths = [...new Set(storagePaths.filter((path) => String(path || "").trim()).map((path) => String(path).trim()))];
+  if (!paths.length) return [];
+  return upsertAuthedSupabase(
+    "storage_cleanup_candidates",
+    paths.map((objectPath) => ({
+      bucket_id: WebsiteContent.CONTENT_IMAGE_BUCKET,
+      object_path: objectPath,
+      reason,
+      source_id: sourceId || null,
+      created_by: state.auth.user?.id || null,
+      status: "pending_backup",
+    })),
+    "bucket_id,object_path",
+  );
 }
 
 function readablePublicProductFlyerDatabaseError(error, fallback = "Unable to save public product flyer") {
@@ -1418,6 +1471,8 @@ async function loadProtectedData() {
 
 function setRoute(route, params = {}, options = {}) {
   if (!ROUTES.includes(route)) return;
+  if (state.route === "site" && route !== "site" && state.siteControlsDirty && !window.confirm("Leave Site Controls without saving these changes?")) return;
+  if (state.route === "site" && route !== "site") state.siteControlsDirty = false;
   const nextRoute = routeForAccess(route);
   state.route = nextRoute;
   if (params.productId) state.selectedProductId = params.productId;
@@ -1579,7 +1634,7 @@ function mobileAreaLabel() {
 }
 
 function isAdminRoute(route = state.route) {
-  return ["admin", "team", "requests", "requests-review", "requests-payment", "requests-supplier", "requests-completed", "applications", "products", "site", "approvals", "imports", "email"].includes(route);
+  return ["admin", "team", "resellers", "requests", "requests-all", "requests-review", "requests-payment", "requests-supplier", "requests-completed", "applications", "products", "site", "approvals", "imports", "email"].includes(route);
 }
 
 function isResellerRoute(route = state.route) {
@@ -1596,8 +1651,9 @@ function mobileDrawerItems() {
   if (currentPortalMode() === "admin") {
     return [
       ["Dashboard", "admin", ["admin"]],
-      ["Requests", "requests", ["requests", "requests-review", "requests-payment", "requests-supplier", "requests-completed"]],
+      ["Requests", "requests", ["requests", "requests-all", "requests-review", "requests-payment", "requests-supplier", "requests-completed"]],
       ["Applications", "applications", ["applications"]],
+      ["Resellers", "resellers", ["resellers"]],
       ["Team", "team", ["team"]],
       ["Products", "products", ["products"]],
       ["Inventory Uploads", "imports", ["imports"]],
@@ -1667,11 +1723,14 @@ function mobileContextBar() {
     products: "Admin",
     site: "Admin",
     requests: "Admin",
+    "requests-all": "Orders",
     "requests-review": "Orders",
     "requests-payment": "Orders",
     "requests-supplier": "Orders",
     "requests-completed": "Orders",
     applications: "Admin",
+    resellers: "Admin",
+    team: "Admin",
     approvals: "Admin",
     imports: "Admin",
     email: "Admin",
@@ -1735,30 +1794,23 @@ function flyerCarousel(flyers) {
   const items = WebsiteContent.normalizeFlyers(flyers, { includeUnpublished: state.auth.isAdmin });
   const selectedIndex = ((Number(state.homeFlyerIndex || 0) % items.length) + items.length) % items.length;
   const selected = items[selectedIndex];
-  const heroTitle = String(selected.title || "Blue Motion Protocol")
-    .replaceAll("_", " ")
-    .replaceAll("-", " ")
-    .trim()
-    .toUpperCase();
+  const hero = SiteControls.sanitizeSiteContent(state.siteContent).hero;
   return `
     <section class="home-flyer-carousel" aria-label="Irunsvan Africa flyers">
       <div class="home-flyer-panel campaign-surface-shadow">
         <div class="home-flyer-stage">
           <div class="home-flyer-copy">
-            <span class="campaign-eyebrow">IRUNSVAN AFRICA</span>
+            <span class="campaign-eyebrow">${escapeHtml(hero.eyebrow)}</span>
             <div class="campaign-meta" aria-label="Campaign metadata">
               <span>NEW SEASON</span>
               <span>${escapeHtml(`EDITION ${selectedIndex + 1}/${items.length}`)}</span>
               <span>PERFORMANCE FOOTWEAR</span>
             </div>
-            <h1>${escapeHtml(heroTitle || "BLUE MOTION PROTOCOL")}</h1>
-            <p>
-              Technical footwear stories, campaign drops, and reseller-ready movement built for the
-              continent.
-            </p>
+            <h1>${escapeHtml(hero.title)}</h1>
+            <p>${escapeHtml(hero.copy)}</p>
             <div class="campaign-actions">
-              <button class="button primary" data-route="find-reseller">Find Stockists <span class="button-mark" aria-hidden="true">&rarr;</span></button>
-              <button class="button ghost home-ghost-button" data-route="product-flyers">View Products <span class="button-mark" aria-hidden="true">&nearr;</span></button>
+              ${ctaMarkup(hero.primaryCta, hero.primaryRoute, "button primary")}
+              ${ctaMarkup(hero.secondaryCta, hero.secondaryRoute, "button ghost home-ghost-button")}
             </div>
           </div>
           <div class="home-flyer-media">
@@ -2328,6 +2380,7 @@ function filterGroup(title, options, selectedValues = [], actionPrefix = "") {
 
 function resellerApplication() {
   const existingApplication = latestOwnApplication();
+  const draft = readApplicationDraft();
   const needsPassword = !state.auth.isAuthenticated;
   const confirmationNotice = state.signupConfirmationEmail
     ? `<p class="notice success">Account created for ${escapeHtml(state.signupConfirmationEmail)}. Confirm your email, then sign in to finish the reseller application.</p>`
@@ -2347,14 +2400,14 @@ function resellerApplication() {
           ${confirmationNotice}
           ${statusNotice}
           ${state.applicationError ? `<p class="notice error">${escapeHtml(state.applicationError)}</p>` : ""}
-          ${inputField("Company Name", "company_name", existingApplication?.company_name || state.auth.profile?.company_name || "")}
-          ${inputField("Full Name", "full_name", existingApplication?.full_name || state.auth.profile?.full_name || "")}
-          ${inputField("Email", "email", existingApplication?.email || state.auth.user?.email || "", "email")}
+          ${inputField("Company Name", "company_name", existingApplication?.company_name || draft.company_name || state.auth.profile?.company_name || "")}
+          ${inputField("Full Name", "full_name", existingApplication?.full_name || draft.full_name || state.auth.profile?.full_name || "")}
+          ${inputField("Email", "email", existingApplication?.email || draft.email || state.auth.user?.email || "", "email")}
           ${needsPassword ? inputField("Password", "password", "Create a password", "password") : ""}
           ${needsPassword ? inputField("Confirm Password", "password_confirm", "Repeat your password", "password") : ""}
-          ${inputField("Phone", "phone", existingApplication?.phone || "")}
-          ${inputField("Country", "country", existingApplication?.country || "")}
-          <label><span>Notes</span><textarea name="message" placeholder="Tell us what you want to buy and where you resell.">${escapeHtml(existingApplication?.message || "")}</textarea></label>
+          ${inputField("Phone", "phone", existingApplication?.phone || draft.phone || "")}
+          ${inputField("Country", "country", existingApplication?.country || draft.country || "")}
+          <label><span>Notes</span><textarea name="message" placeholder="Tell us what you want to buy and where you resell.">${escapeHtml(existingApplication?.message || draft.message || "")}</textarea></label>
           <button class="button primary full" ${state.applicationSubmitPending ? "disabled" : ""}>${state.applicationSubmitPending ? "Submitting..." : "Submit Application"}</button>
         </form>
         <aside class="process-panel">
@@ -3109,7 +3162,8 @@ function resellerOrderSubnavItems() {
 function adminOrderSubnavItems() {
   const buckets = AdminOrders.buildClientOrderBuckets(requestHistoryRecords());
   return [
-    ["Needs Review", "requests", buckets.new.length],
+    ["All Orders", "requests-all", requestHistoryRecords().length],
+    ["Needs Review", "requests-review", buckets.new.length],
     ["Awaiting Payment", "requests-payment", buckets.awaitingPayment.length],
     ["Supplier", "requests-supplier", buckets.active.length],
     ["Completed", "requests-completed", buckets.shipped.length + buckets.fulfilled.length],
@@ -3350,22 +3404,17 @@ function adminDashboard() {
 
 function adminTeam() {
   const admins = state.staffProfiles.filter((profile) => profile.role === "admin");
-  const resellers = state.staffProfiles.filter((profile) => profile.role === "reseller");
-  const pending = state.staffProfiles.filter((profile) => profile.role === "pending_reseller");
   const invites = state.adminInvites || [];
   return `
     <main class="admin-layout">
       ${adminSidebar("team")}
       <section class="admin-main">
         <header class="admin-topbar">
-          <div><h1>Team & Access</h1><p>Manage internal admins and review which reseller accounts already exist in the system.</p></div>
+          <div><h1>Team</h1><p>Manage internal administrator accounts and private admin invites.</p></div>
         </header>
         ${metricGrid([
           ["Admins", String(admins.length), "Operations accounts"],
-          ["Approved Resellers", String(resellers.length), "Can place wholesale requests"],
-          ["Pending Accounts", String(pending.length), "Need review or promotion"],
           ["Admin Invites", String(invites.filter((invite) => invite.status === "pending").length), "Private links waiting to be used"],
-          ["Total Profiles", String(state.staffProfiles.length), "Stored user records"],
         ])}
         <section class="admin-panels">
           <div class="admin-card">
@@ -3383,19 +3432,13 @@ function adminTeam() {
         </section>
         <section class="form-grid">
           <form class="workflow-form" data-form="team-role">
-            <h2>Assign access</h2>
-            <p class="form-note">To add an admin, have the person sign in or submit a reseller application first. Then enter that existing account email here and set the role to Admin.</p>
+            <h2>Promote existing account</h2>
+            <p class="form-note">Use this only for internal staff. Reseller access is handled from Applications and Resellers.</p>
             ${state.teamError ? `<p class="notice error">${escapeHtml(state.teamError)}</p>` : ""}
             ${state.teamSaved ? `<p class="notice success">Account access updated.</p>` : ""}
             ${inputField("Existing Account Email", "email", "name@example.com", "email")}
-            <label><span>Role</span>
-              <select name="role">
-                <option value="admin">Admin</option>
-                <option value="reseller">Reseller</option>
-                <option value="pending_reseller">Pending Reseller</option>
-              </select>
-            </label>
-            <button class="button primary full" ${state.teamSavePending ? "disabled" : ""}>${state.teamSavePending ? "Saving..." : "Update Access"}</button>
+            <input type="hidden" name="role" value="admin" />
+            <button class="button primary full" ${state.teamSavePending ? "disabled" : ""}>${state.teamSavePending ? "Saving..." : "Promote to Admin"}</button>
           </form>
           <section class="inventory-panel">
             <div class="panel-toolbar"><h2>Current team</h2><span>${admins.length} admin accounts</span></div>
@@ -3404,8 +3447,8 @@ function adminTeam() {
                 <thead><tr><th>Name</th><th>Email</th><th>Company</th><th>Phone</th><th>Role</th></tr></thead>
                 <tbody>
                   ${
-                    state.staffProfiles.length
-                      ? state.staffProfiles
+                    admins.length
+                      ? admins
                           .map(
                             (profile) => `
                               <tr>
@@ -3418,7 +3461,7 @@ function adminTeam() {
                             `,
                           )
                           .join("")
-                      : `<tr><td colspan="5">No staff or reseller profiles loaded yet.</td></tr>`
+                      : `<tr><td colspan="5">No admin profiles loaded yet.</td></tr>`
                   }
                 </tbody>
               </table>
@@ -3483,6 +3526,44 @@ function contentAdminItem({ title, imagePath, meta, published, actions = "", ite
       ${actions ? `<div class="content-admin-actions">${actions}</div>` : ""}
     </article>
   `;
+}
+
+function adminResellers() {
+  const profiles = state.staffProfiles.filter((profile) => ["reseller", "pending_reseller"].includes(profile.role));
+  const applicationsByUser = new Map(state.resellerApplicationsData.map((application) => [application.user_id, application]));
+  const pendingCount = state.resellerApplicationsData.filter((application) => application.status === "pending").length;
+  return `
+    <main class="admin-layout">
+      ${adminSidebar("resellers")}
+      <section class="admin-main">
+        <header class="admin-topbar"><div><h1>Resellers</h1><p>Customer accounts are managed separately from internal administrators.</p></div></header>
+        ${metricGrid([
+          ["Approved Resellers", String(profiles.filter((profile) => profile.role === "reseller").length), "Can place wholesale orders"],
+          ["Pending Applications", String(pendingCount), "Awaiting a decision"],
+          ["Pending Accounts", String(profiles.filter((profile) => profile.role === "pending_reseller").length), "Signed up but not approved"],
+        ])}
+        <section class="inventory-panel">
+          <div class="panel-toolbar"><h2>Stockists & Reseller Accounts</h2><button class="button mini" data-route="applications">Review Applications</button></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Account</th><th>Application</th></tr></thead>
+              <tbody>
+                ${profiles.length ? profiles.map((profile) => {
+                  const application = applicationsByUser.get(profile.id);
+                  return `<tr>
+                    <td>${escapeHtml(profile.company_name || "Company not provided")}</td>
+                    <td>${escapeHtml(profile.full_name || profile.phone || "Not provided")}</td>
+                    <td>${escapeHtml(profile.email || "No email")}</td>
+                    <td>${statusPill(profile.role)}</td>
+                    <td>${application ? statusPill(application.status) : `<span class="status-badge danger">Application missing</span>`}</td>
+                  </tr>`;
+                }).join("") : `<tr><td colspan="5">No reseller accounts loaded yet.</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>`;
 }
 
 function flyerAdminList() {
@@ -3887,6 +3968,7 @@ function adminSiteControls() {
         ${state.siteSaveError ? `<p class="notice error">${escapeHtml(state.siteSaveError)}</p>` : ""}
         ${state.adminContentNotice ? `<p class="notice success">${escapeHtml(state.adminContentNotice)}</p>` : ""}
         ${state.adminContentError ? `<p class="notice error">${escapeHtml(state.adminContentError)}</p>` : ""}
+        <p class="notice warning" data-site-unsaved ${state.siteControlsDirty ? "" : "hidden"}>You have unsaved changes in this Site Controls section.</p>
         <section class="site-controls-workspace">
           ${siteControlsSubnav()}
           <div class="site-controls-panel">
@@ -3900,8 +3982,18 @@ function adminSiteControls() {
 
 function adminProducts() {
   const colourRows = colourReviewRows();
+  const colourPageSize = 24;
+  const colourTotalPages = Math.max(1, Math.ceil(colourRows.length / colourPageSize));
+  const colourCurrentPage = Math.min(Math.max(1, state.adminColourPage), colourTotalPages);
+  const visibleColourRows = colourRows.slice((colourCurrentPage - 1) * colourPageSize, colourCurrentPage * colourPageSize);
   const productModels = adminProductModels();
   const activeProductModels = productModels.filter((model) => model.published);
+  const search = String(state.adminProductSearch || "").trim().toLowerCase();
+  const filteredProductModels = activeProductModels.filter((model) => !search || [model.name, model.sku, model.modelCode, model.category].some((value) => String(value || "").toLowerCase().includes(search)));
+  const pageSize = 6;
+  const totalPages = Math.max(1, Math.ceil(filteredProductModels.length / pageSize));
+  const currentPage = Math.min(Math.max(1, state.adminProductPage), totalPages);
+  const visibleProductModels = filteredProductModels.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const archivedProductModels = productModels.filter((model) => !model.published);
   const summary = OperationsProducts.summarizeAdminProducts(activeProductModels);
   return `
@@ -3934,13 +4026,19 @@ function adminProducts() {
         </section>
         ${state.productFormOpen ? productForm() : ""}
         <section class="admin-product-board">
-          <div class="panel-toolbar"><h2>Product Control Center</h2><span>${activeProductModels.length} products</span></div>
+          <div class="panel-toolbar"><h2>Product Control Center</h2><span>${filteredProductModels.length} products</span></div>
+          <label class="admin-search-field"><span>Search products</span><input name="admin-product-search" value="${escapeHtml(state.adminProductSearch)}" placeholder="Name, SKU, model, or category" /></label>
           ${state.inventoryError ? `<p class="notice error">${escapeHtml(state.inventoryError)}</p>` : ""}
           ${
             state.inventoryLoading
               ? `<p class="notice">Loading product stock and pricing...</p>`
-              : activeProductModels.length
-                ? `<div class="admin-product-list">${activeProductModels.map(adminProductCard).join("")}</div>`
+              : visibleProductModels.length
+                ? `<div class="admin-product-list">${visibleProductModels.map(adminProductCard).join("")}</div>
+                   <div class="pager-controls">
+                     <button class="button mini secondary" data-action="admin-product-page" data-page="${currentPage - 1}" ${currentPage <= 1 ? "disabled" : ""}>Previous</button>
+                     <span>Page ${currentPage} of ${totalPages}</span>
+                     <button class="button mini secondary" data-action="admin-product-page" data-page="${currentPage + 1}" ${currentPage >= totalPages ? "disabled" : ""}>Next</button>
+                   </div>`
                 : `<p class="notice">No products are loaded yet. Upload a master inventory file or add the first product.</p>`
           }
           ${archivedProductModels.length ? `<p class="import-note">${escapeHtml(`${archivedProductModels.length} archived products are hidden from this view to keep the active catalog clean.`)}</p>` : ""}
@@ -3953,7 +4051,7 @@ function adminProducts() {
               ? `
                 <form class="workflow-form colour-review-form" data-form="colour-review">
                   <div class="colour-review-grid">
-                    ${colourRows
+                    ${visibleColourRows
                       .map(
                         (row, index) => `
                           <article class="colour-review-row">
@@ -3979,7 +4077,12 @@ function adminProducts() {
                       )
                       .join("")}
                   </div>
-                  <button class="button primary" type="submit" ${state.colourReviewPending ? "disabled" : ""}>${state.colourReviewPending ? "Saving..." : "Save Colour Review"}</button>
+                  <div class="pager-controls">
+                    <button class="button mini secondary" type="button" data-action="admin-colour-page" data-page="${colourCurrentPage - 1}" ${colourCurrentPage <= 1 ? "disabled" : ""}>Previous</button>
+                    <span>Page ${colourCurrentPage} of ${colourTotalPages}</span>
+                    <button class="button mini secondary" type="button" data-action="admin-colour-page" data-page="${colourCurrentPage + 1}" ${colourCurrentPage >= colourTotalPages ? "disabled" : ""}>Next</button>
+                  </div>
+                  <button class="button primary" type="submit" ${state.colourReviewPending ? "disabled" : ""}>${state.colourReviewPending ? "Saving..." : "Save This Page"}</button>
                 </form>
               `
               : `<p class="import-note">Colour mappings appear here after a catalog seed import or once products with saved colours are loaded from Supabase.</p>`
@@ -4005,7 +4108,7 @@ function adminProductCard(model) {
             ${priceBadge(model.price)}
             <div class="inline-price-editor" data-product-price-editor="${escapeHtml(model.id)}">
               <input type="number" min="0" step="0.01" value="${model.price.priced ? escapeHtml(String(model.price.amount)) : ""}" aria-label="Price for ${escapeHtml(model.name)}" />
-              <button class="button mini" data-action="save-product-price" data-product-id="${escapeHtml(model.id)}">Save Price</button>
+              <button class="button mini" data-action="save-product-price" data-product-id="${escapeHtml(model.id)}" ${state.productPricePendingId ? "disabled" : ""}>${state.productPricePendingId === model.id ? "Saving..." : "Save Price"}</button>
             </div>
           </div>
         </div>
@@ -4031,9 +4134,13 @@ function adminProductCard(model) {
 function adminStockEditors(productId) {
   const rows = inventoryRows().filter((row) => row.productId === productId);
   if (!rows.length) return "";
+  if (state.adminExpandedStockProductId !== productId) {
+    return `<button type="button" class="button mini secondary" data-action="toggle-admin-stock" data-product-id="${escapeHtml(productId)}">Manage ${escapeHtml(String(rows.length))} SKU stock rows</button>`;
+  }
   return `
-    <details class="admin-stock-details manual-stock-details">
+    <details class="admin-stock-details manual-stock-details" open>
       <summary><span>Manual stock corrections</span><strong>${escapeHtml(String(rows.length))} SKU rows</strong></summary>
+      <button type="button" class="button mini secondary" data-action="toggle-admin-stock" data-product-id="${escapeHtml(productId)}">Close stock editor</button>
       ${state.stockAdjustmentSaved ? `<p class="notice success">${escapeHtml(state.stockAdjustmentSaved)}</p>` : ""}
       ${state.stockAdjustmentError ? `<p class="notice error">${escapeHtml(state.stockAdjustmentError)}</p>` : ""}
       <div class="manual-stock-list">
@@ -4408,7 +4515,8 @@ function orderDetailPage() {
 function adminRequests() {
   const buckets = AdminOrders.buildClientOrderBuckets(requestHistoryRecords());
   const summaryCards = [
-    ["Needs Review", buckets.new.length, "New requests waiting for approval.", "requests"],
+    ["All Orders", requestHistoryRecords().length, "Every order, including rejected and cancelled records.", "requests-all"],
+    ["Needs Review", buckets.new.length, "New requests waiting for approval.", "requests-review"],
     ["Awaiting Payment", buckets.awaitingPayment.length, "Approved orders waiting for payment.", "requests-payment"],
     ["Supplier", buckets.active.length, "Orders moving through supplier and processing.", "requests-supplier"],
     ["Completed", buckets.shipped.length + buckets.fulfilled.length, "Shipped and fulfilled orders.", "requests-completed"],
@@ -4441,6 +4549,48 @@ function adminRequests() {
       </section>
     </main>
   `;
+}
+
+function adminAllOrdersPage() {
+  const records = requestHistoryRecords();
+  return `
+    <main class="admin-layout">
+      ${adminSidebar("requests")}
+      <section class="admin-main">
+        <header class="admin-topbar">
+          <div><h1>All Orders</h1><p>Review every reseller order and export the complete order history.</p></div>
+          <div class="approval-actions">
+            <button class="button secondary" data-action="download-all-orders-csv" ${records.length ? "" : "disabled"}>Export CSV</button>
+            <button class="button primary" data-action="download-all-orders-xlsx" ${records.length ? "" : "disabled"}>Export Excel</button>
+          </div>
+        </header>
+        ${state.historyError ? `<p class="notice error">${escapeHtml(state.historyError)}</p>` : ""}
+        <section class="workspace-shell admin-workspace-shell">
+          ${workspaceSubnav("Order Menu", adminOrderSubnavItems())}
+          <div class="workspace-content">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Order</th><th>Reseller</th><th>Date</th><th>Status</th><th>SKU lines</th><th>Pairs</th><th>Total</th><th>Action</th></tr></thead>
+                <tbody>
+                  ${records.length
+                    ? records.map((record) => `<tr>
+                        <td><strong>${escapeHtml(record.code)}</strong></td>
+                        <td>${escapeHtml(orderCompanyFor(record))}</td>
+                        <td>${escapeHtml(formatOrderDate(record.createdAt))}</td>
+                        <td>${statusPill(record.statusMeta?.label || record.normalizedStatus || record.status)}</td>
+                        <td>${escapeHtml(String(record.totalItems))}</td>
+                        <td>${escapeHtml(String(record.totalUnits))}</td>
+                        <td>${money(record.subtotal)}</td>
+                        <td><button class="button mini secondary" data-route="order" data-order-id="${escapeHtml(record.id)}">Open</button></td>
+                      </tr>`).join("")
+                    : `<tr><td colspan="8">No orders are available.</td></tr>`}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>`;
 }
 
 function adminOrderWorkspacePage(title, copy, records = [], emptyCopy = "No orders in this section right now.") {
@@ -4528,6 +4678,7 @@ function applicationActionFeedback() {
 function applicationStatusActions(application) {
   const pending = state.applicationActionPendingId === application.id;
   const anyPending = Boolean(state.applicationActionPendingId);
+  if (application.status !== "pending") return `${statusPill(application.status)}<span class="form-note">Reviewed ${escapeHtml(formatOrderDate(application.reviewed_at))}</span>`;
   return `
     ${statusPill(application.status)}
     <button class="button mini" data-action="application-status" data-application-id="${escapeHtml(application.id)}" data-user-id="${escapeHtml(application.user_id)}" data-status="approved" ${anyPending ? "disabled" : ""}>${pending ? "Saving..." : "Approve"}</button>
@@ -4536,19 +4687,24 @@ function applicationStatusActions(application) {
 }
 
 function adminApplications() {
+  const applications = [...state.resellerApplicationsData].sort((left, right) => {
+    const rank = (status) => (status === "pending" ? 0 : status === "rejected" ? 1 : 2);
+    return rank(left.status) - rank(right.status) || String(right.created_at || "").localeCompare(String(left.created_at || ""));
+  });
+  const pendingCount = applications.filter((application) => application.status === "pending").length;
   return `
     <main class="admin-layout">
       ${adminSidebar("applications")}
       <section class="admin-main">
-        <header class="admin-topbar"><div><h1>Applications</h1><p>Approve reseller access after reviewing company details.</p></div></header>
+        <header class="admin-topbar"><div><h1>Applications</h1><p>Pending reseller applications appear first and remain visible after review.</p></div><span class="status-badge ${pendingCount ? "danger" : "good"}">${pendingCount} pending</span></header>
         <section class="admin-panels">
           <div class="admin-card">
             <div class="panel-toolbar"><h2>Reseller Applications</h2><span>${state.resellerApplicationsData.length} applications</span></div>
             ${applicationActionFeedback()}
             <div class="approval-stack">
               ${
-                state.resellerApplicationsData.length
-                  ? state.resellerApplicationsData
+                applications.length
+                  ? applications
                       .map(
                         (application) => `
                       <article class="approval-item">
@@ -4905,6 +5061,7 @@ function adminSidebar(activeRoute) {
         ${adminLink("Dashboard", "admin", activeRoute)}
         ${adminLink("Requests", "requests", activeRoute)}
         ${adminLink("Applications", "applications", activeRoute)}
+        ${adminLink("Resellers", "resellers", activeRoute)}
         ${adminLink("Team", "team", activeRoute)}
         ${adminLink("Products", "products", activeRoute)}
         ${adminLink("Inventory", "imports", activeRoute)}
@@ -4941,7 +5098,7 @@ function statusPill(status) {
 }
 
 function uploadBox(title, copy, importType, accept) {
-  return `<label class="upload-box"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(copy)}</span><input type="file" data-import-type="${escapeHtml(importType)}" accept="${escapeHtml(accept || "")}" /></label>`;
+  return `<label class="upload-box"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(copy)}</span><span class="button secondary upload-action">Choose file</span><input type="file" data-import-type="${escapeHtml(importType)}" accept="${escapeHtml(accept || "")}" /></label>`;
 }
 
 function emailTemplatePreview() {
@@ -5124,7 +5281,9 @@ function routeView() {
     order: orderDetailPage,
     admin: adminDashboard,
     team: adminTeam,
+    resellers: adminResellers,
     requests: adminRequests,
+    "requests-all": adminAllOrdersPage,
     "requests-review": adminRequestsReviewPage,
     "requests-payment": adminRequestsPaymentPage,
     "requests-supplier": adminRequestsSupplierPage,
@@ -5421,8 +5580,21 @@ function bindEvents() {
 
   document.querySelectorAll("[data-action='site-controls-section']").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.siteControlsDirty && !window.confirm("Switch sections without saving these changes?")) return;
+      state.siteControlsDirty = false;
       state.siteControlSection = button.getAttribute("data-section") || "product-flyers";
       render();
+    });
+  });
+
+  document.querySelectorAll(".site-controls-panel form input, .site-controls-panel form textarea, .site-controls-panel form select").forEach((field) => {
+    field.addEventListener("input", () => {
+      state.siteControlsDirty = true;
+      document.querySelector("[data-site-unsaved]")?.removeAttribute("hidden");
+    });
+    field.addEventListener("change", () => {
+      state.siteControlsDirty = true;
+      document.querySelector("[data-site-unsaved]")?.removeAttribute("hidden");
     });
   });
 
@@ -5537,28 +5709,44 @@ function bindEvents() {
         const flyerId = String(new FormData(form).get("flyer_id") || "").trim();
         if (flyerId) await updateHomepageFlyer(form);
         else await saveHomepageFlyer(form);
+        if (!state.adminContentError) state.siteControlsDirty = false;
+        render();
         return;
       }
       if (formName === "blog-post") {
         const storyId = String(new FormData(form).get("story_id") || "").trim();
         if (storyId) await updateBlogPost(form);
         else await saveBlogPost(form);
+        if (!state.adminContentError) state.siteControlsDirty = false;
+        render();
         return;
       }
       if (formName === "public-product-flyer") {
         const flyerId = String(new FormData(form).get("product_flyer_id") || "").trim();
         if (flyerId) await updatePublicProductFlyer(form);
         else await savePublicProductFlyer(form);
+        if (!state.adminContentError) state.siteControlsDirty = false;
+        render();
         return;
       }
-      if (formName === "about-content") await saveAboutContent(form);
-      if (formName === "site-controls") await saveSiteControls(form);
+      if (formName === "about-content") {
+        await saveAboutContent(form);
+        if (!state.adminContentError) state.siteControlsDirty = false;
+      }
+      if (formName === "site-controls") {
+        await saveSiteControls(form);
+        if (!state.siteSaveError) state.siteControlsDirty = false;
+      }
       if (formName === "product") await handleProductSubmit(form);
       if (formName === "colour-review") await saveColourReview(form);
       if (formName === "stock-reset") await handleStockReset(form);
       if (formName === "workflow-action") await handleWorkflowActionSubmit(form);
       render();
     });
+  });
+
+  document.querySelectorAll("[data-form='application']").forEach((form) => {
+    form.addEventListener("input", () => storeApplicationDraft(applicationDraftFromForm(form)));
   });
 
   document.querySelectorAll("[data-action='toggle-product-form']").forEach((button) => {
@@ -5595,6 +5783,40 @@ function bindEvents() {
         row?.querySelector("[name='manual_stock_quantity']")?.value,
         row?.querySelector("[name='manual_stock_reason']")?.value,
       );
+    });
+  });
+
+  document.querySelectorAll("[name='admin-product-search']").forEach((input) => {
+    input.addEventListener("change", () => {
+      state.adminProductSearch = input.value;
+      state.adminProductPage = 1;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='admin-product-page']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const page = Number(button.getAttribute("data-page"));
+      if (!Number.isFinite(page) || button.disabled) return;
+      state.adminProductPage = page;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='admin-colour-page']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const page = Number(button.getAttribute("data-page"));
+      if (!Number.isFinite(page) || button.disabled) return;
+      state.adminColourPage = page;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-action='toggle-admin-stock']").forEach((button) => {
+    button.addEventListener("click", () => {
+      const productId = button.getAttribute("data-product-id");
+      state.adminExpandedStockProductId = state.adminExpandedStockProductId === productId ? null : productId;
+      render();
     });
   });
 
@@ -5676,6 +5898,29 @@ function bindEvents() {
     button.addEventListener("click", async () => {
       const orderId = button.getAttribute("data-order-id");
       await handleOrderExport(orderId, "csv");
+    });
+  });
+
+  document.querySelectorAll("[data-action='download-all-orders-csv']").forEach((button) => {
+    button.addEventListener("click", () => {
+      try {
+        OrderExport.downloadAllOrdersCsv({ orders: state.orderRequests, items: state.orderRequestItems, profiles: state.staffProfiles });
+      } catch (error) {
+        state.historyError = error instanceof Error ? error.message : "Unable to export orders";
+        render();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-action='download-all-orders-xlsx']").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await ensureImportLibraries("order_xlsx");
+        OrderExport.downloadAllOrdersXlsx({ orders: state.orderRequests, items: state.orderRequestItems, profiles: state.staffProfiles, XLSX: window.XLSX });
+      } catch (error) {
+        state.historyError = error instanceof Error ? error.message : "Unable to export orders";
+        render();
+      }
     });
   });
 
@@ -6029,7 +6274,7 @@ async function handleTeamRoleSave(form) {
 
   try {
     if (!email) throw new Error("Enter the existing account email.");
-    if (!["admin", "reseller", "pending_reseller"].includes(role)) throw new Error("Choose a valid role.");
+    if (role !== "admin") throw new Error("Team access can only assign the Admin role. Review reseller access from Applications.");
     const profile = state.staffProfiles.find((entry) => String(entry.email || "").trim().toLowerCase() === email);
     if (!profile?.id) throw new Error("That email does not belong to an existing account yet.");
     if (profile.id === state.auth.user?.id && role !== "admin") {
@@ -6292,6 +6537,8 @@ async function handleApplicationSubmit(form) {
 
   try {
     const data = new FormData(form);
+    const applicationDraft = applicationDraftFromForm(form);
+    storeApplicationDraft(applicationDraft);
     let authState = state.auth;
 
     if (!authState.isAuthenticated) {
@@ -6305,7 +6552,12 @@ async function handleApplicationSubmit(form) {
         key: SUPABASE_KEY,
         email,
         password,
-        metadata: { full_name: String(data.get("full_name") || "").trim() },
+        metadata: {
+          full_name: applicationDraft.full_name,
+          company_name: applicationDraft.company_name,
+          phone: applicationDraft.phone,
+          reseller_application: applicationDraft,
+        },
       });
       if (!SupabaseClient.readStoredSession()?.access_token) {
         try {
@@ -6349,6 +6601,7 @@ async function handleApplicationSubmit(form) {
       p_message: payload.message || null,
     });
     state.applicationSubmitted = true;
+    localStorage.removeItem(RESELLER_APPLICATION_DRAFT_KEY);
     await loadProtectedData();
     sendApplicationNotification({ aggregateId: savedApplication?.id }).catch(() => {});
   } catch (error) {
@@ -6575,11 +6828,11 @@ async function saveSiteControls(form) {
     },
     banner: data.get("site_banner"),
   });
-  localStorage.setItem(SITE_CONTENT_STORAGE_KEY, JSON.stringify(state.siteContent));
   render();
 
   try {
     await publishActiveSiteContent(state.siteContent);
+    localStorage.setItem(SITE_CONTENT_STORAGE_KEY, JSON.stringify(state.siteContent));
     state.siteSaved = true;
   } catch (error) {
     state.siteSaveError = error instanceof Error ? error.message : "Unable to publish site controls";
@@ -6694,7 +6947,7 @@ async function updateHomepageFlyer(form) {
       { includeUnpublished: true },
     );
     if (uploadedPath && current.imagePath && current.imagePath !== uploadedPath) {
-      await deleteContentImages([current.imagePath]).catch(() => {});
+      await queueContentImageCleanup([current.imagePath], "homepage_flyer_replaced", current.id).catch(() => {});
     }
     state.homepageFlyerEditingId = null;
     state.adminContentNotice = `Homepage flyer “${updated.title}” updated.`;
@@ -6718,7 +6971,7 @@ async function deleteHomepageFlyer(flyerId) {
     state.homepageFlyers = state.homepageFlyers.filter((flyer) => flyer.id !== id);
     state.homeFlyerIndex = Math.min(state.homeFlyerIndex, Math.max(0, state.homepageFlyers.length - 1));
     if (state.homepageFlyerEditingId === id) state.homepageFlyerEditingId = null;
-    await deleteContentImages([current.imagePath]).catch(() => {});
+    await queueContentImageCleanup([current.imagePath], "homepage_flyer_deleted", current.id).catch(() => {});
     state.adminContentNotice = `Homepage flyer “${current.title}” deleted.`;
   } catch (error) {
     state.adminContentError = error instanceof Error ? error.message : "Unable to delete homepage flyer";
@@ -6826,7 +7079,7 @@ async function updateBlogPost(form) {
       { includeUnpublished: true },
     );
     if (uploadedPath && current.coverImagePath && current.coverImagePath !== uploadedPath) {
-      await deleteContentImages([current.coverImagePath]).catch(() => {});
+      await queueContentImageCleanup([current.coverImagePath], "story_cover_replaced", current.id).catch(() => {});
     }
     if (state.selectedStorySlug === current.slug) state.selectedStorySlug = updated.slug || current.slug;
     state.storyEditingId = null;
@@ -6851,7 +7104,7 @@ async function deleteBlogPost(storyId) {
     state.blogPosts = state.blogPosts.filter((story) => story.id !== id);
     if (state.storyEditingId === id) state.storyEditingId = null;
     if (state.selectedStorySlug === current.slug) state.selectedStorySlug = null;
-    await deleteContentImages([current.coverImagePath]).catch(() => {});
+    await queueContentImageCleanup([current.coverImagePath], "story_deleted", current.id).catch(() => {});
     state.adminContentNotice = `Story “${current.title}” deleted.`;
   } catch (error) {
     state.adminContentError = error instanceof Error ? error.message : "Unable to delete story";
@@ -6906,7 +7159,7 @@ function productFlyerImageDraftsFromForm(form, existingImages = []) {
   return { existing, additions };
 }
 
-async function uploadProductFlyerImageReplacements(existing = []) {
+async function uploadProductFlyerImageReplacements(existing = [], stagedPaths = []) {
   const uniquePrefix = new Date().toISOString().replace(/\D/g, "");
   const replaced = [];
   for (const image of existing) {
@@ -6920,6 +7173,7 @@ async function uploadProductFlyerImageReplacements(existing = []) {
       uniquePrefix: `${uniquePrefix}-replace-${image.index}`,
     });
     await uploadContentImage(record);
+    stagedPaths.push(record.storagePath);
     replaced.push({
       ...image,
       imagePath: record.storagePath,
@@ -6929,7 +7183,7 @@ async function uploadProductFlyerImageReplacements(existing = []) {
   return replaced;
 }
 
-async function uploadProductFlyerImageAdditions(additions = []) {
+async function uploadProductFlyerImageAdditions(additions = [], stagedPaths = []) {
   const uniquePrefix = new Date().toISOString().replace(/\D/g, "");
   const uploaded = [];
   for (const image of additions) {
@@ -6939,9 +7193,25 @@ async function uploadProductFlyerImageAdditions(additions = []) {
       uniquePrefix: `${uniquePrefix}-${image.index}`,
     });
     await uploadContentImage(record);
+    stagedPaths.push(record.storagePath);
     uploaded.push({ ...image, imagePath: record.storagePath });
   }
   return uploaded;
+}
+
+async function cleanupUnreferencedProductFlyerImages(candidatePaths = []) {
+  const candidates = [...new Set(candidatePaths.filter(Boolean))];
+  if (!candidates.length) return;
+  const [galleryRows, flyerRows] = await Promise.all([
+    fetchAuthedSupabase("public_product_flyer_images", "select=image_path&limit=5000"),
+    fetchAuthedSupabase("public_product_flyers", "select=main_image_path,secondary_image_path&limit=1000"),
+  ]);
+  const referenced = new Set([
+    ...(galleryRows || []).map((row) => row.image_path),
+    ...(flyerRows || []).flatMap((row) => [row.main_image_path, row.secondary_image_path]),
+  ].filter(Boolean));
+  const unreferenced = candidates.filter((path) => !referenced.has(path));
+  if (unreferenced.length) await deleteContentImages(unreferenced);
 }
 
 function finalProductFlyerImages(existing = [], additions = []) {
@@ -6987,13 +7257,14 @@ async function persistProductFlyerImages(flyerId, imageDrafts, uploadedAdditions
 
 async function savePublicProductFlyer(form) {
   const data = new FormData(form);
+  const stagedPaths = [];
   state.publicProductFlyerSavePending = true;
   state.adminContentError = null;
   render();
   try {
     const imageDrafts = productFlyerImageDraftsFromForm(form, []);
     if (!imageDrafts.additions.length) throw new Error("Add at least one product picture before saving.");
-    const uploadedAdditions = await uploadProductFlyerImageAdditions(imageDrafts.additions);
+    const uploadedAdditions = await uploadProductFlyerImageAdditions(imageDrafts.additions, stagedPaths);
     const finalImages = finalProductFlyerImages([], uploadedAdditions);
     const [saved] = await insertAuthedSupabase(
       "public_product_flyers",
@@ -7014,6 +7285,7 @@ async function savePublicProductFlyer(form) {
     await persistProductFlyerImages(saved.id, imageDrafts, uploadedAdditions);
     await loadProtectedData();
   } catch (error) {
+    await cleanupUnreferencedProductFlyerImages(stagedPaths).catch(() => {});
     state.adminContentError = readablePublicProductFlyerDatabaseError(error, "Unable to save public product flyer");
   } finally {
     state.publicProductFlyerSavePending = false;
@@ -7037,6 +7309,7 @@ async function editPublicProductFlyer(flyerId) {
   };
   state.adminContentError = null;
   render();
+  focusSiteContentEditor("public-product-flyer");
 }
 
 async function cancelPublicProductFlyerEdit() {
@@ -7055,6 +7328,7 @@ async function updatePublicProductFlyer(form) {
   const data = new FormData(form);
   const id = String(data.get("product_flyer_id") || state.publicProductFlyerEditingId || "").trim();
   const currentFlyer = (Array.isArray(state.publicProductFlyers) ? state.publicProductFlyers : []).find((flyer) => flyer.id === id);
+  const stagedPaths = [];
   state.publicProductFlyerSavePending = true;
   state.adminContentError = null;
   render();
@@ -7062,9 +7336,9 @@ async function updatePublicProductFlyer(form) {
     if (!id || !currentFlyer) throw new Error("Choose a public product flyer before updating.");
     const currentGallery = productFlyerGallery(currentFlyer);
     const imageDrafts = productFlyerImageDraftsFromForm(form, currentGallery);
-    const existingWithReplacements = await uploadProductFlyerImageReplacements(imageDrafts.existing);
+    const existingWithReplacements = await uploadProductFlyerImageReplacements(imageDrafts.existing, stagedPaths);
     const preparedDrafts = { ...imageDrafts, existing: existingWithReplacements };
-    const uploadedAdditions = await uploadProductFlyerImageAdditions(imageDrafts.additions);
+    const uploadedAdditions = await uploadProductFlyerImageAdditions(imageDrafts.additions, stagedPaths);
     const finalImages = finalProductFlyerImages(preparedDrafts.existing, uploadedAdditions);
     if (!finalImages.length) throw new Error("Keep at least one product picture on this flyer.");
     const payloadInput = {
@@ -7084,6 +7358,11 @@ async function updatePublicProductFlyer(form) {
           WebsiteContent.buildProductFlyerUpdatePayload(payloadInput, state.auth.user?.id || null),
         );
     await persistProductFlyerImages(updated.id, preparedDrafts, uploadedAdditions);
+    const obsoletePaths = preparedDrafts.existing
+      .filter((image) => image.removed || (image.replacementFile && currentGallery.some((current) => current.id === image.id && current.imagePath !== image.imagePath)))
+      .map((image) => currentGallery.find((current) => current.id === image.id)?.imagePath)
+      .filter(Boolean);
+    await queueContentImageCleanup(obsoletePaths, "product_flyer_image_replaced_or_removed", updated.id).catch(() => {});
     await loadProtectedData();
     if (state.selectedProductFlyerSlug === currentFlyer.slug) {
       const normalizedUpdated = WebsiteContent.normalizeProductFlyers([updated], { includeUnpublished: true })[0];
@@ -7096,6 +7375,7 @@ async function updatePublicProductFlyer(form) {
     };
     delete state.publicProductFlyerImageDrafts[id];
   } catch (error) {
+    await cleanupUnreferencedProductFlyerImages(stagedPaths).catch(() => {});
     state.adminContentError = readablePublicProductFlyerDatabaseError(error, "Unable to update public product flyer");
   } finally {
     state.publicProductFlyerSavePending = false;
@@ -7140,7 +7420,7 @@ async function deletePublicProductFlyer(flyerId) {
     } else {
       await deleteAuthedSupabase("public_product_flyers", `id=eq.${encodeURIComponent(id)}`);
       state.publicProductFlyers = state.publicProductFlyers.filter((flyer) => flyer.id !== id);
-      await deleteContentImages(productFlyerGallery(currentFlyer).map((image) => image.imagePath)).catch(() => {});
+      await queueContentImageCleanup(productFlyerGallery(currentFlyer).map((image) => image.imagePath), "product_flyer_deleted", id).catch(() => {});
     }
     if (state.publicProductFlyerEditingId === id) {
       state.publicProductFlyerEditingId = null;
@@ -7176,8 +7456,8 @@ async function saveAboutContent(form) {
         body: data.get("about_body"),
       },
     });
-    localStorage.setItem(SITE_CONTENT_STORAGE_KEY, JSON.stringify(state.siteContent));
     await publishActiveSiteContent(state.siteContent);
+    localStorage.setItem(SITE_CONTENT_STORAGE_KEY, JSON.stringify(state.siteContent));
     state.siteSaved = true;
   } catch (error) {
     state.adminContentError = error instanceof Error ? error.message : "Unable to save about content";
@@ -7275,7 +7555,8 @@ async function saveColourReview(form) {
 
   try {
     const data = new FormData(form);
-    const rows = colourReviewRows().map((row, index) => ({
+    const visibleRows = [...form.querySelectorAll(".colour-review-row")];
+    const rows = visibleRows.map((row, index) => ({
       id: data.get(`mapping_id_${index}`),
       product_id: data.get(`product_id_${index}`),
       model_code: data.get(`model_code_${index}`),
@@ -7421,15 +7702,18 @@ async function handleProductSubmit(form) {
 async function handleProductPriceUpdate(productId, value) {
   state.productPriceSaved = false;
   state.productPriceError = null;
+  state.productPricePendingId = productId;
+  render();
 
   try {
     const product = state.products.find((entry) => entry.id === productId);
     if (!product) throw new Error("Product not found.");
     const amount = Number(value);
     if (!Number.isFinite(amount) || amount <= 0) throw new Error("Enter a product price greater than zero.");
-    const [savedProduct] = await updateAuthedSupabase("products", productId, {
-      base_price: amount,
-      base_currency: product.base_currency || "USD",
+    const savedProduct = await invokeAuthedRpc("update_product_price", {
+      p_product_id: productId,
+      p_base_price: amount,
+      p_base_currency: product.base_currency || "USD",
     });
     if (!savedProduct?.id) throw new Error("Supabase did not return the updated product.");
     state.products = state.products.map((entry) =>
@@ -7445,6 +7729,7 @@ async function handleProductPriceUpdate(productId, value) {
   } catch (error) {
     state.productPriceError = error instanceof Error ? error.message : "Unable to save product price";
   } finally {
+    state.productPricePendingId = null;
     render();
   }
 }
@@ -7807,6 +8092,12 @@ async function refreshWorkflowData() {
 window.setInterval(refreshWorkflowData, 30000);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") refreshWorkflowData();
+});
+
+window.addEventListener("beforeunload", (event) => {
+  if (!state.siteControlsDirty) return;
+  event.preventDefault();
+  event.returnValue = "";
 });
 
 let lastClientErrorReportAt = 0;

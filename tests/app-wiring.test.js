@@ -163,8 +163,11 @@ assert.equal(appSource.includes("function adminRequests()"), true, "Admin reques
 assert.equal(appSource.includes("function adminOrderWorkspacePage("), true, "Admin orders should share one focused workspace renderer.");
 assert.equal(appSource.includes("function workspaceSubnav("), true, "Order workspaces must render a local sub-navigation.");
 assert.equal(appSource.includes("function adminApplications()"), true, "Reseller applications must have their own focused admin view.");
-assert.equal(appSource.includes('["Requests", "requests", ["requests", "requests-review", "requests-payment", "requests-supplier", "requests-completed"]]'), true, "Admin navigation must expose Requests as a first-level item.");
+assert.equal(appSource.includes('["Requests", "requests", ["requests", "requests-all", "requests-review", "requests-payment", "requests-supplier", "requests-completed"]]'), true, "Admin navigation must expose Requests as a first-level item.");
 assert.equal(appSource.includes('["Applications", "applications", ["applications"]]'), true, "Admin navigation must expose Applications as a first-level item.");
+assert.equal(appSource.includes('function adminAllOrdersPage()'), true, "Admin must have an all-orders view that includes closed statuses.");
+assert.equal(appSource.includes('data-action="download-all-orders-xlsx"'), true, "All orders must be exportable to Excel.");
+assert.equal(appSource.includes('function adminResellers()'), true, "Reseller customers must have a separate admin section.");
 assert.equal(appSource.includes("Orders & Applications"), false, "Admin navigation must not combine requests and applications into one ambiguous section.");
 assert.equal(appSource.includes('data-route="admin" class="admin-return button mini"'), true, "Logged-in admins viewing the public site must get a persistent Back to Admin control.");
 assert.equal(appSource.includes("function adminPublicBar()"), true, "Public admin sessions must render a dedicated return bar.");

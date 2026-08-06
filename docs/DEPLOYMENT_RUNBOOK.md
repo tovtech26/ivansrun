@@ -96,25 +96,30 @@ Approved resellers and admins should receive pricing from `reseller_products` an
 
 If invite creation fails with `PGRST205` or `Could not find the table 'public.admin_invites' in the schema cache`, run `supabase/sql/016_admin_invites.sql` in the Supabase SQL editor for project `llicocwonbokahpbireg`, then retry the invite from `Admin -> Team`.
 
-## Render Setup
+## Netlify Production Deployment
 
-Use the existing `render.yaml` Blueprint:
+The production domain `https://irunsvanafrica.com` is served by Netlify. Do not deploy this repository through the retired Render configuration.
 
-```yaml
-runtime: static
-buildCommand: npm run build
-staticPublishPath: ./dist
-routes:
-  - type: rewrite
-    source: /*
-    destination: /index.html
-```
+Netlify must use the checked-in `netlify.toml` settings:
 
-This prevents direct route refreshes from returning Not Found.
+- Build command: `npm run build`
+- Publish directory: `dist`
+- SPA fallback: all routes rewrite to `/index.html`
+- Production branch: `main`
+
+Before pushing `main`, run the complete local verification above. After Netlify reports the deploy as published, confirm the deployed commit in Netlify matches `git rev-parse HEAD`, then smoke-test the public domain and authenticated admin workflows.
+
+## Rollback
+
+1. Record the failing deploy ID and Git commit.
+2. In Netlify, open **Deploys**, select the last verified production deploy, and choose **Publish deploy**. This restores the previous static build without changing Supabase data.
+3. If a Git rollback is required, create a new revert commit for the faulty commit and push it to `main`; do not force-push production history.
+4. Database migration `p0_handover_workflows` is additive. Leave it in place during a frontend rollback; removing the function or seeded flyer is not required and must not be done during an incident without a separate reviewed migration.
+5. Re-run the public smoke test and admin login/order/price/site-control checks after rollback.
 
 ## Operating Workflow
 
-1. Run the schema SQL through `supabase/sql/011_sku_first_catalog_import.sql`.
+1. Run the schema SQL through `supabase/sql/033_lock_storage_cleanup_queue_grants.sql`.
 2. Open `Admin -> Inventory`.
 3. Upload the master inventory file to build the selected catalog from the manufacturer rows.
 4. Review the preview for products, colour mappings, variants, skipped rows, and missing selected models.

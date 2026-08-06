@@ -132,6 +132,103 @@
     return csv;
   }
 
+  const ALL_ORDER_HEADERS = [
+    "Order Code",
+    "Order ID",
+    "Company",
+    "Reseller Email",
+    "Status",
+    "Created",
+    "SKU",
+    "Product",
+    "Colour",
+    "Size",
+    "Quantity",
+    "Unit Price",
+    "Line Total",
+    "Notes",
+    "Admin Notes",
+  ];
+
+  function buildAllOrderRows({ orders = [], items = [], profiles = [] } = {}) {
+    const profilesById = new Map((profiles || []).map((profile) => [profile.id, profile]));
+    const itemsByOrder = (items || []).reduce((map, item) => {
+      const list = map.get(item.order_request_id) || [];
+      list.push(item);
+      map.set(item.order_request_id, list);
+      return map;
+    }, new Map());
+    return (orders || []).flatMap((order) => {
+      const profile = profilesById.get(order.reseller_id) || {};
+      const orderItems = itemsByOrder.get(order.id) || [];
+      const common = {
+        "Order Code": orderCode(order),
+        "Order ID": safeText(order.id),
+        Company: safeText(profile.company_name),
+        "Reseller Email": safeText(profile.email),
+        Status: safeText(order.status),
+        Created: safeText(order.created_at || order.createdAt),
+        Notes: safeText(order.notes),
+        "Admin Notes": safeText(order.admin_notes || order.adminNotes),
+      };
+      if (!orderItems.length) return [{ ...common, SKU: "", Product: "", Colour: "", Size: "", Quantity: 0, "Unit Price": 0, "Line Total": 0 }];
+      return orderItems.map((item) => {
+        const quantity = Number(item.quantity || 0);
+        const unitPrice = Number(item.base_price || 0);
+        return {
+          ...common,
+          SKU: safeText(item.sku),
+          Product: safeText(item.product_name),
+          Colour: safeText(item.colour),
+          Size: safeText(item.size),
+          Quantity: quantity,
+          "Unit Price": unitPrice,
+          "Line Total": quantity * unitPrice,
+        };
+      });
+    });
+  }
+
+  function csvCell(value) {
+    const text = String(value ?? "");
+    return /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  }
+
+  function buildAllOrdersCsv(options = {}) {
+    const rows = buildAllOrderRows(options);
+    return `\uFEFF${[ALL_ORDER_HEADERS, ...rows.map((row) => ALL_ORDER_HEADERS.map((header) => row[header]))]
+      .map((row) => row.map(csvCell).join(","))
+      .join("\r\n")}`;
+  }
+
+  function downloadAllOrdersCsv(options = {}) {
+    const csv = buildAllOrdersCsv(options);
+    downloadBlob({ blob: new Blob([csv], { type: "text/csv;charset=utf-8;" }), fileName: "irunsvan-orders.csv" });
+    return csv;
+  }
+
+  function downloadAllOrdersXlsx({ XLSX, ...options } = {}) {
+    if (!XLSX) throw new Error("Spreadsheet library not loaded.");
+    const rows = buildAllOrderRows(options);
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet([ALL_ORDER_HEADERS, ...rows.map((row) => ALL_ORDER_HEADERS.map((header) => row[header]))]);
+    sheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+    sheet["!cols"] = ALL_ORDER_HEADERS.map((header) => ({ wch: Math.max(12, Math.min(28, header.length + 4)) }));
+    XLSX.utils.book_append_sheet(workbook, sheet, "All Orders");
+    const fileName = "irunsvan-orders.xlsx";
+    if (typeof Blob !== "undefined" && typeof XLSX.write === "function") {
+      downloadBlob({
+        blob: new Blob([XLSX.write(workbook, { bookType: "xlsx", type: "array" })], {
+          type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        }),
+        fileName,
+      });
+    } else {
+      XLSX.writeFile(workbook, fileName);
+    }
+    return { fileName, rows };
+  }
+
   const api = {
     MASTER_HEADERS,
     buildSupplierOrderRows,
@@ -140,6 +237,11 @@
     downloadBlob,
     downloadSupplierXlsx,
     downloadSupplierCsv,
+    ALL_ORDER_HEADERS,
+    buildAllOrderRows,
+    buildAllOrdersCsv,
+    downloadAllOrdersCsv,
+    downloadAllOrdersXlsx,
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = api;

@@ -16,6 +16,7 @@ assert.deepEqual(backTargetForRoute("expected-orders"), { route: "history" });
 assert.deepEqual(backTargetForRoute("fulfillment"), { route: "history" });
 assert.deepEqual(backTargetForRoute("order"), { route: "history" });
 assert.deepEqual(backTargetForRoute("requests-review"), { route: "requests" });
+assert.deepEqual(backTargetForRoute("requests-all"), { route: "requests" });
 assert.deepEqual(backTargetForRoute("requests-payment"), { route: "requests" });
 assert.deepEqual(backTargetForRoute("requests-supplier"), { route: "requests" });
 assert.deepEqual(backTargetForRoute("requests-completed"), { route: "requests" });
@@ -43,6 +44,7 @@ assert.equal(buildRouteUrl("story", { storySlug: "new-launch" }), "#/story/new-l
 assert.equal(buildRouteUrl("reseller-product", { productId: "product-001" }), "#/reseller-product/product-001");
 assert.equal(buildRouteUrl("request-confirmation"), "#/request-confirmation");
 assert.equal(buildRouteUrl("current-orders"), "#/current-orders");
+assert.equal(buildRouteUrl("requests-all"), "#/requests-all");
 assert.equal(buildRouteUrl("order", { orderId: "request-001" }), "#/order/request-001");
 assert.deepEqual(parseRouteUrl("#/product/fallback-001"), { route: "product", productId: "fallback-001", orderId: null, storySlug: null });
 assert.deepEqual(parseRouteUrl("#/product-flyer/irunsvan-005"), { route: "product-flyer", productId: null, orderId: null, storySlug: null, flyerSlug: "irunsvan-005" });

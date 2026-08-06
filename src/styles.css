@@ -4634,6 +4634,11 @@ textarea {
   content: "-";
 }
 
+.upload-box .upload-action {
+  align-self: flex-start;
+  margin-top: 8px;
+}
+
 .manual-stock-list {
   display: grid;
   gap: 8px;
@@ -6226,7 +6231,37 @@ textarea {
   }
 
   .table-wrap {
-    display: none;
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-wrap table {
+    min-width: 680px;
+  }
+
+  .admin-main,
+  .workspace-content,
+  .site-controls-panel,
+  .site-controls-card,
+  .public-product-flyer-admin-card,
+  .workflow-form,
+  .admin-product-main {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .workflow-form input,
+  .workflow-form select,
+  .workflow-form textarea,
+  .public-product-flyer-gallery-row {
+    box-sizing: border-box;
+    max-width: 100%;
+    min-width: 0;
+    width: 100%;
   }
 
   .inventory-card-list {

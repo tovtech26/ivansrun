@@ -198,7 +198,7 @@ const normalizedFlyerImages = normalizeProductFlyerImages([
   })),
   { id: "bad", flyer_id: "", image_path: "", image_name: "No image" },
 ]);
-assert.equal(normalizedFlyerImages.length, 20);
+assert.equal(normalizedFlyerImages.length, 27, "Normalizing a database response must preserve every flyer image.");
 assert.equal(normalizedFlyerImages[0].imageName, "Cover angle");
 assert.equal(normalizedFlyerImages[0].isCover, true);
 assert.equal(normalizedFlyerImages[1].skuReference, "IRUNSVAN-026-BLK");
@@ -217,7 +217,7 @@ const flyerWithGallery = normalizeProductFlyers([
     published: true,
   },
 ])[0];
-assert.equal(flyerWithGallery.images.length, 20);
+assert.equal(flyerWithGallery.images.length, 27);
 assert.equal(flyerWithGallery.coverImagePath, "content/public-products/cover.jpg");
 assert.equal(productFlyerImagesForFlyer(flyerWithGallery)[0].imageName, "Cover angle");
 

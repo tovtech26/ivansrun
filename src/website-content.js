@@ -299,8 +299,7 @@
         updatedAt: safeText(row.updated_at || row.updatedAt),
       }))
       .filter((row) => row.flyerId && row.imagePath)
-      .sort((left, right) => Number(right.isCover) - Number(left.isCover) || left.displayOrder - right.displayOrder || left.imageName.localeCompare(right.imageName))
-      .slice(0, 20);
+      .sort((left, right) => Number(right.isCover) - Number(left.isCover) || left.displayOrder - right.displayOrder || left.imageName.localeCompare(right.imageName));
   }
 
   function productFlyerImagesForFlyer(flyer = {}) {

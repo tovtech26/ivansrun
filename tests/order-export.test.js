@@ -7,6 +7,9 @@ const {
   downloadBlob,
   downloadSupplierCsv,
   downloadSupplierXlsx,
+  ALL_ORDER_HEADERS,
+  buildAllOrderRows,
+  buildAllOrdersCsv,
 } = require("../src/order-export.js");
 
 const order = {
@@ -90,6 +93,20 @@ const csv = buildSupplierCsv({ order, items, inventory, variants, products });
 assert.equal(csv.startsWith("\uFEFF"), true);
 assert.equal(csv.includes("202300500138"), true);
 assert.equal(csv.includes("\r\n"), true);
+
+const allRows = buildAllOrderRows({
+  orders: [order, { id: "empty-order", reseller_id: "reseller-1", status: "rejected", created_at: "2026-06-25T10:00:00Z" }],
+  items,
+  profiles: [{ id: "reseller-1", company_name: "TOV Reseller", email: "buyer@example.com" }],
+});
+assert.equal(allRows.length, 3);
+assert.equal(allRows[0]["Order Code"], "#RE-0FC318");
+assert.equal(allRows[0]["Line Total"], 180);
+assert.equal(allRows[2].Status, "rejected");
+assert.equal(allRows[2].Quantity, 0);
+const allCsv = buildAllOrdersCsv({ orders: [order], items, profiles: [] });
+assert.equal(allCsv.startsWith(`\uFEFF${ALL_ORDER_HEADERS.join(",")}`), true);
+assert.equal(allCsv.includes("202300500139"), true);
 
 const clickedDownloads = [];
 const revokedUrls = [];

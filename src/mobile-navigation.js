@@ -21,7 +21,9 @@
     "order",
     "admin",
     "team",
+    "resellers",
     "requests",
+    "requests-all",
     "requests-review",
     "requests-payment",
     "requests-supplier",
@@ -38,7 +40,7 @@
     "privacy",
   ]);
 
-  const ADMIN_CHILDREN = new Set(["team", "requests", "applications", "products", "site", "approvals", "imports", "email"]);
+  const ADMIN_CHILDREN = new Set(["team", "resellers", "requests", "requests-all", "applications", "products", "site", "approvals", "imports", "email"]);
   const INFO_ROUTES = new Set(["find-reseller", "apply", "signup", "login", "admin-login", "account", "about", "contact", "terms", "privacy"]);
 
   function backTargetForRoute(route) {
@@ -52,7 +54,7 @@
     if (route === "history") return { route: "reseller" };
     if (route === "current-orders" || route === "expected-orders" || route === "fulfillment") return { route: "history" };
     if (route === "order") return { route: "history" };
-    if (route === "requests-review" || route === "requests-payment" || route === "requests-supplier" || route === "requests-completed") return { route: "requests" };
+    if (route === "requests-all" || route === "requests-review" || route === "requests-payment" || route === "requests-supplier" || route === "requests-completed") return { route: "requests" };
     if (ADMIN_CHILDREN.has(route)) return { route: "admin" };
     if (route === "admin" || route === "reseller" || INFO_ROUTES.has(route)) return { route: "store" };
     return { route: "store" };

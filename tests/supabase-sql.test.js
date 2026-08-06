@@ -23,6 +23,9 @@ const contentPoliciesSql = readFileSync(join(__dirname, "..", "supabase", "sql",
 const notificationClaimsSql = readFileSync(join(__dirname, "..", "supabase", "sql", "028_atomic_notification_claims.sql"), "utf8");
 const serviceRoleUsageSql = readFileSync(join(__dirname, "..", "supabase", "sql", "029_service_role_private_schema_usage.sql"), "utf8");
 const priceCompatibilitySql = readFileSync(join(__dirname, "..", "supabase", "sql", "030_secure_price_view_compatibility.sql"), "utf8");
+const p0HandoverSql = readFileSync(join(__dirname, "..", "supabase", "sql", "031_p0_handover_workflows.sql"), "utf8");
+const storageCleanupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "032_storage_cleanup_queue.sql"), "utf8");
+const storageCleanupGrantsSql = readFileSync(join(__dirname, "..", "supabase", "sql", "033_lock_storage_cleanup_queue_grants.sql"), "utf8");
 
 assert.match(pricePrivacySql, /create or replace view public\.reseller_products\s+with \(security_invoker = true\)/i);
 assert.match(pricePrivacySql, /create or replace view public\.reseller_product_variants\s+with \(security_invoker = true\)/i);
@@ -213,5 +216,16 @@ assert.match(serviceRoleUsageSql, /grant usage on schema private to service_role
 assert.match(priceCompatibilitySql, /authorized_product_prices[\s\S]*security_invoker = true/i);
 assert.match(priceCompatibilitySql, /authorized_variant_prices[\s\S]*security_invoker = true/i);
 assert.match(priceCompatibilitySql, /grant select on public\.authorized_product_prices to authenticated/i);
+assert.match(p0HandoverSql, /create or replace function private\.update_product_price/i);
+assert.match(p0HandoverSql, /not \(select private\.is_admin\(\)\)/i);
+assert.match(p0HandoverSql, /security definer[\s\S]*set search_path = ''/i);
+assert.match(p0HandoverSql, /revoke all on function private\.update_product_price\(uuid,numeric,text\)/i);
+assert.match(p0HandoverSql, /where not exists \(select 1 from public\.homepage_flyers\)/i);
+assert.match(storageCleanupSql, /create table if not exists public\.storage_cleanup_candidates/i);
+assert.match(storageCleanupSql, /pending_backup[\s\S]*backup_verified[\s\S]*delete_confirmed[\s\S]*deleted/i);
+assert.match(storageCleanupSql, /alter table public\.storage_cleanup_candidates enable row level security/i);
+assert.match(storageCleanupSql, /Admins can insert storage cleanup candidates/i);
+assert.match(storageCleanupSql, /revoke all on public\.storage_cleanup_candidates from public, anon/i);
+assert.match(storageCleanupGrantsSql, /revoke all on public\.storage_cleanup_candidates from public, anon/i);
 
 console.log("supabase-sql tests passed");

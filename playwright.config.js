@@ -10,8 +10,9 @@ module.exports = defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["line"], ["html", { open: "never" }]] : "line",
   use: {
-    baseURL: "http://127.0.0.1:4173",
-    channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL || "chrome",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || "http://127.0.0.1:4173",
+    ...(process.env.PLAYWRIGHT_BROWSER_CHANNEL ? { channel: process.env.PLAYWRIGHT_BROWSER_CHANNEL } : {}),
+    ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } } : {}),
     reducedMotion: "reduce",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
