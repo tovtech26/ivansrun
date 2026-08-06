@@ -119,7 +119,7 @@ Before pushing `main`, run the complete local verification above. After Netlify 
 
 ## Operating Workflow
 
-1. Run the schema SQL through `supabase/sql/033_lock_storage_cleanup_queue_grants.sql`.
+1. Run the schema SQL through `supabase/sql/034_active_hero_brand_cleanup.sql`.
 2. Open `Admin -> Inventory`.
 3. Upload the master inventory file to build the selected catalog from the manufacturer rows.
 4. Review the preview for products, colour mappings, variants, skipped rows, and missing selected models.

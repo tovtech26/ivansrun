@@ -12,6 +12,7 @@ test("public navigation, directory, login, and legal pages work", async ({ page 
   await page.goto("/");
 
   await expect(page.locator("#app")).not.toBeEmpty();
+  await expect(page.locator("body")).not.toContainText("Ivansrun Africa");
   await expect(page.getByRole("navigation", { name: "Primary navigation" })).toBeVisible();
 
   const primaryNav = page.getByRole("navigation", { name: "Primary navigation" });

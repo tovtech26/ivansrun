@@ -26,6 +26,7 @@ const priceCompatibilitySql = readFileSync(join(__dirname, "..", "supabase", "sq
 const p0HandoverSql = readFileSync(join(__dirname, "..", "supabase", "sql", "031_p0_handover_workflows.sql"), "utf8");
 const storageCleanupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "032_storage_cleanup_queue.sql"), "utf8");
 const storageCleanupGrantsSql = readFileSync(join(__dirname, "..", "supabase", "sql", "033_lock_storage_cleanup_queue_grants.sql"), "utf8");
+const activeHeroCleanupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "034_active_hero_brand_cleanup.sql"), "utf8");
 
 assert.match(pricePrivacySql, /create or replace view public\.reseller_products\s+with \(security_invoker = true\)/i);
 assert.match(pricePrivacySql, /create or replace view public\.reseller_product_variants\s+with \(security_invoker = true\)/i);
@@ -227,5 +228,7 @@ assert.match(storageCleanupSql, /alter table public\.storage_cleanup_candidates 
 assert.match(storageCleanupSql, /Admins can insert storage cleanup candidates/i);
 assert.match(storageCleanupSql, /revoke all on public\.storage_cleanup_candidates from public, anon/i);
 assert.match(storageCleanupGrantsSql, /revoke all on public\.storage_cleanup_candidates from public, anon/i);
+assert.match(activeHeroCleanupSql, /update public\.hero_sections/i);
+assert.match(activeHeroCleanupSql, /replace\(copy, 'Ivansrun Africa', 'Irunsvan Africa'\)/i);
 
 console.log("supabase-sql tests passed");
