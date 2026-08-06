@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 
 const root = process.cwd();
 const dist = path.join(root, "dist");
@@ -32,5 +33,19 @@ fs.mkdirSync(dist, { recursive: true });
 for (const [from, to] of copies) {
   copyRecursive(path.join(root, from), path.join(dist, to));
 }
+
+function resolveBuildCommit() {
+  const environmentCommit = String(process.env.COMMIT_REF || process.env.GITHUB_SHA || "").trim();
+  if (environmentCommit) return environmentCommit;
+  try {
+    return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+const builtIndexPath = path.join(dist, "index.html");
+const builtIndex = fs.readFileSync(builtIndexPath, "utf8").replace("__BUILD_COMMIT__", resolveBuildCommit());
+fs.writeFileSync(builtIndexPath, builtIndex);
 
 console.log("Built static site into dist/");

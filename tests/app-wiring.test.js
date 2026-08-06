@@ -6,6 +6,7 @@ const appSource = readFileSync(join(__dirname, "..", "src", "app.js"), "utf8");
 const styleSource = readFileSync(join(__dirname, "..", "src", "styles.css"), "utf8");
 const indexSource = readFileSync(join(__dirname, "..", "index.html"), "utf8");
 const staticServerSource = readFileSync(join(__dirname, "..", "scripts", "serve-static.js"), "utf8");
+const staticBuildSource = readFileSync(join(__dirname, "..", "scripts", "build-static.js"), "utf8");
 const authSource = readFileSync(join(__dirname, "..", "src", "auth.js"), "utf8");
 const supabaseClientSource = readFileSync(join(__dirname, "..", "src", "supabase-client.js"), "utf8");
 const createTestAdminsSource = readFileSync(join(__dirname, "..", "scripts", "create-test-admins.js"), "utf8");
@@ -22,6 +23,8 @@ const selectorGroupSource = sourceBetween("function selectorGroup(", "function f
 const pagerSource = sourceBetween("function pager(", "function catalogPager");
 
 assert.equal(appSource.includes("<button>View all</button>"), false, "View all buttons must navigate or trigger an action.");
+assert.equal(indexSource.includes('name="irunsvan-build-commit" content="__BUILD_COMMIT__"'), true, "The static build must expose its deployed Git commit.");
+assert.equal(staticBuildSource.includes("process.env.COMMIT_REF"), true, "Netlify's commit reference must populate the production build marker.");
 assert.equal(appSource.includes('<button class="button mini">Approve</button>'), false, "Approve buttons must use real approval actions.");
 assert.equal(appSource.includes('<button class="button mini secondary">Reject</button>'), false, "Reject buttons must use real rejection actions.");
 assert.equal(appSource.includes("function applicationActionFeedback()"), true, "Application approvals must show a visible success or failure result.");
