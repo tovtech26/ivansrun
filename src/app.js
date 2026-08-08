@@ -414,7 +414,6 @@ function logo(tone = "dark") {
 
 function productVisual(label, imageName = "") {
   const safeLabel = escapeHtml(label || "Product");
-  const safeImageName = escapeHtml(imageName);
   const shortLabel = escapeHtml(String(label || "Product").replace("IRUNSVAN ", ""));
   const imageUrl = ProductImages.resolveProductImageUrl(imageName, SUPABASE_URL);
   const visualBody = imageUrl
@@ -423,7 +422,6 @@ function productVisual(label, imageName = "") {
   return `
     <div class="product-visual" aria-label="${safeLabel} product image">
       ${visualBody}
-      ${safeImageName ? `<em>${safeImageName}</em>` : ""}
     </div>
   `;
 }
@@ -1564,6 +1562,64 @@ function publicNavItems() {
   ];
 }
 
+function campaignIcon(name) {
+  if (name === "account") {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3.5"></circle><path d="M5.5 20c.5-4.1 2.7-6.2 6.5-6.2s6 2.1 6.5 6.2"></path></svg>`;
+  }
+  if (name === "bag") {
+    return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 8.5h13l1 11h-15l1-11Z"></path><path d="M9 9V6.5a3 3 0 0 1 6 0V9"></path></svg>`;
+  }
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 7 7-7 7"></path></svg>`;
+}
+
+function campaignBagCount() {
+  if (!state.auth.isReseller) return 0;
+  return currentDraftItems().reduce((total, item) => total + Number(item.requestedQuantity || 0), 0);
+}
+
+function campaignPublicNav(active, drawerItems, drawerLabel) {
+  const resellerRoute = state.auth.isReseller || state.auth.isAdmin ? "reseller" : state.auth.isPending ? "apply" : "apply";
+  const accountRoute = state.auth.isAuthenticated ? "account" : "login";
+  const bagRoute = state.auth.isReseller || state.auth.isAdmin ? "reseller" : "login";
+  const bagCount = campaignBagCount();
+  const campaignItems = [
+    ["Footwear", "product-flyers", ["product-flyers", "product-flyer", "product"]],
+    ["Collections", "product-flyers", ["product-flyers", "product-flyer"]],
+    ["Stockists", "find-reseller", ["find-reseller"]],
+    ["Reseller", resellerRoute, ["apply", "reseller", "reseller-product"]],
+  ];
+  return `
+    <a class="campaign-skip-link" href="#campaign-main">Skip to content</a>
+    <header class="top-nav public-top-nav campaign-public-nav">
+      <button class="logo-link bare-button campaign-logo-link" data-route="store" aria-label="Irunsvan Africa home">${logo("blue")}</button>
+      <nav class="campaign-main-nav" aria-label="Primary navigation">
+        ${campaignItems.map(([label, route, routes]) => `<button class="${active(routes)}" data-route="${route}">${label}</button>`).join("")}
+      </nav>
+      <div class="campaign-nav-actions">
+        <button class="campaign-account-action" data-route="${accountRoute}" aria-label="${state.auth.isAuthenticated ? "Open account" : "Sign in"}">
+          ${campaignIcon("account")}
+          <span>Account</span>
+        </button>
+        <button class="campaign-bag-action" data-route="${bagRoute}" aria-label="${bagCount ? `Open request bag with ${bagCount} pairs` : "Open request bag"}">
+          ${campaignIcon("bag")}
+          ${bagCount ? `<span class="campaign-bag-count">${escapeHtml(String(bagCount))}</span>` : ""}
+        </button>
+        <button class="mobile-menu-button campaign-menu-button" data-action="toggle-mobile-nav" aria-label="${state.mobileNavOpen ? "Close menu" : `Open ${drawerLabel} menu`}" aria-expanded="${state.mobileNavOpen ? "true" : "false"}><span aria-hidden="true"></span><span aria-hidden="true"></span></button>
+      </div>
+    </header>
+    <div class="${state.mobileNavOpen ? "mobile-nav-backdrop open" : "mobile-nav-backdrop"}" data-action="close-mobile-nav"></div>
+    <aside class="${state.mobileNavOpen ? "mobile-nav-drawer campaign-mobile-nav open" : "mobile-nav-drawer campaign-mobile-nav"}" aria-label="${drawerLabel} navigation">
+      <div class="mobile-drawer-head"><strong>${logo("blue")}</strong><button class="bare-button" data-action="close-mobile-nav">Close</button></div>
+      <nav>
+        ${campaignItems.map(([label, route, routes]) => `<button class="${active(routes)}" data-route="${route}">${label}</button>`).join("")}
+        <button data-route="${accountRoute}">Account</button>
+        ${state.auth.isAdmin ? `<button data-route="admin">Back to Admin</button>` : ""}
+      </nav>
+    </aside>
+    ${mobileContextBar()}
+  `;
+}
+
 function topNav() {
   const active = (routes) => (routes.includes(state.route) ? "active" : "");
   const publicItems = publicNavItems();
@@ -1583,6 +1639,7 @@ function topNav() {
   const drawerLabel = mobileDrawerLabel();
   const homeRoute = currentPortalHomeRoute();
   const portalMode = currentPortalMode();
+  if (portalMode === "public") return campaignPublicNav(active, drawerItems, drawerLabel);
   const desktopItems = portalMode === "public" ? publicItems : portalMode === "reseller" ? resellerNavItems : [];
   const navActions = state.auth.isAuthenticated
     ? `
@@ -1749,18 +1806,154 @@ function mobileContextBar() {
 }
 
 function publicHomePage() {
+  const featuredProducts = campaignFeaturedProducts();
   return `
-    <main class="public-home">
-      ${homeBokehBackdrop()}
-      <div class="public-home-shell">
-        <div class="public-home-stack">
-          ${flyerCarousel(state.homepageFlyers)}
-          ${storyCarousel(state.blogPosts)}
-          ${aboutSection(state.siteContent.about)}
+    <main class="campaign-home-v2" id="campaign-main">
+      ${campaignHeroSection()}
+      ${campaignFeaturedSection(featuredProducts)}
+      ${campaignPurposeSection()}
+      ${campaignCommerceSection()}
+      ${campaignFooter()}
+    </main>
+  `;
+}
+
+function campaignHeroSection() {
+  return `
+    <section class="campaign-hero" aria-labelledby="campaign-hero-title">
+      <img class="campaign-hero-image" src="public/homepage/hero-athlete.png" alt="Sprinter accelerating on a blue athletics track" width="1536" height="864" loading="eager" />
+      <div class="campaign-hero-wash" aria-hidden="true"></div>
+      <div class="campaign-hero-copy">
+        <p class="campaign-kicker">Irunsvan Africa</p>
+        <div class="campaign-meta" aria-label="New season, edition one of one, performance footwear">
+          <span>New season</span><span>Edition 1/1</span><span>Performance footwear</span>
+        </div>
+        <h1 id="campaign-hero-title" aria-label="Performance footwear built for Africa">
+          <span>Performance</span>
+          <span>Footwear</span>
+          <strong>Built for</strong>
+          <strong>Africa.</strong>
+        </h1>
+        <p class="campaign-hero-intro">Engineered for movement.<br />Made for Africa.</p>
+        <div class="campaign-hero-actions">
+          <button class="campaign-button campaign-button-primary" data-route="product-flyers">Explore collection <span aria-hidden="true">&rarr;</span></button>
+          <button class="campaign-button campaign-button-secondary" data-route="apply">Become a reseller</button>
         </div>
       </div>
-      ${footer()}
-    </main>
+      <p class="campaign-hero-statement"><span aria-hidden="true">/</span><strong>Built to move</strong><small>Compete without limits.</small></p>
+    </section>
+  `;
+}
+
+function campaignFeaturedProducts() {
+  const published = catalogProducts().filter((product) => product.published !== false && productCardImages(product).length);
+  const preferredModels = ["028", "121", "026"];
+  const selected = preferredModels
+    .map((modelCode) => published.find((product) => String(product.model_code || "").padStart(3, "0") === modelCode))
+    .filter(Boolean);
+  published.forEach((product) => {
+    if (selected.length < 3 && !selected.some((entry) => entry.id === product.id)) selected.push(product);
+  });
+  return selected.slice(0, 3);
+}
+
+function campaignProductTitle(product) {
+  const name = String(product?.name || "").trim();
+  if (name && !/running shoe$/i.test(name)) return name.replace(/^IRUNSVAN\s+/i, "");
+  return `Irunsvan ${String(product?.model_code || product?.sku || "Performance").replace(/^IRUNSVAN[-\s]*/i, "")}`;
+}
+
+function campaignFeaturedCard(product, index) {
+  const imageName = productCardImages(product)[0] || "";
+  const imageUrl = ProductImages.resolveProductImageUrl(imageName, SUPABASE_URL);
+  const title = campaignProductTitle(product);
+  const category = String(product.category || (index === 1 ? "Training" : "Running")).replace(/\s+shoes?$/i, "");
+  return `
+    <article class="campaign-product-card">
+      <button class="campaign-product-image-button" data-route="product" data-product-id="${escapeHtml(product.id)}" aria-label="View ${escapeHtml(title)}">
+        ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" width="640" height="480" loading="lazy" />` : `<span class="campaign-product-missing">Product image coming soon</span>`}
+      </button>
+      <div class="campaign-product-copy">
+        <p>${escapeHtml(category)}</p>
+        <h3>${escapeHtml(title)}</h3>
+        <button data-route="product" data-product-id="${escapeHtml(product.id)}">Explore <span aria-hidden="true">&rarr;</span></button>
+      </div>
+    </article>
+  `;
+}
+
+function campaignFeaturedSection(products) {
+  return `
+    <section class="campaign-featured" aria-labelledby="campaign-featured-title">
+      <div class="campaign-section-intro">
+        <p class="campaign-section-number">02 / Featured</p>
+        <h2 id="campaign-featured-title">The new<br />collection.</h2>
+        <span class="campaign-heading-rule" aria-hidden="true"></span>
+        <button class="campaign-text-link" data-route="product-flyers">View all collections <span aria-hidden="true">&rarr;</span></button>
+      </div>
+      <div class="campaign-product-grid">
+        ${products.length ? products.map(campaignFeaturedCard).join("") : `<div class="campaign-featured-empty"><p>The new collection is being prepared.</p><button class="campaign-text-link" data-route="product-flyers">Browse footwear <span aria-hidden="true">&rarr;</span></button></div>`}
+      </div>
+    </section>
+  `;
+}
+
+function campaignPurposeSection() {
+  return `
+    <section class="campaign-purpose" aria-labelledby="campaign-purpose-title">
+      <img class="campaign-purpose-image" src="public/homepage/africa-runner.png" alt="Runner overlooking Cape Town and Table Mountain" width="1536" height="864" loading="lazy" />
+      <div class="campaign-purpose-overlay" aria-hidden="true"></div>
+      <img class="campaign-purpose-map" src="public/homepage/africa-outline.svg" alt="" width="420" height="480" loading="lazy" />
+      <div class="campaign-purpose-copy">
+        <p class="campaign-section-number">03 / Our purpose</p>
+        <h2 id="campaign-purpose-title">Designed for<br />how Africa<br />moves.</h2>
+        <p>From training tracks to city streets, Irunsvan footwear is designed to perform wherever movement takes you.</p>
+      </div>
+    </section>
+  `;
+}
+
+function campaignCommerceSection() {
+  return `
+    <section class="campaign-commerce" aria-label="Wholesale and stockists">
+      <article class="campaign-wholesale">
+        <img src="public/homepage/wholesale-box.png" alt="Irunsvan wholesale footwear box" width="1536" height="864" loading="lazy" />
+        <div class="campaign-wholesale-overlay" aria-hidden="true"></div>
+        <div class="campaign-commerce-copy">
+          <p class="campaign-section-number">04 / Wholesale</p>
+          <h2>Built for<br />retailers too.</h2>
+          <p>Join our network of approved stockists and get access to wholesale pricing, live stock, and dedicated support.</p>
+          <button class="campaign-button campaign-button-primary" data-route="apply">Become a stockist <span aria-hidden="true">&rarr;</span></button>
+        </div>
+      </article>
+      <article class="campaign-stockists">
+        <div class="campaign-commerce-copy">
+          <p class="campaign-section-number">05 / Stockists</p>
+          <h2>Find Irunsvan<br />near you.</h2>
+          <p>Browse our growing network of approved stockists across Africa.</p>
+          <button class="campaign-text-link" data-route="find-reseller">Find a stockist <span aria-hidden="true">&rarr;</span></button>
+        </div>
+        <img src="public/homepage/africa-stockists.svg" alt="Map of Africa" width="520" height="520" loading="lazy" />
+      </article>
+    </section>
+  `;
+}
+
+function campaignFooter() {
+  const accountRoute = state.auth.isAuthenticated ? "account" : "login";
+  return `
+    <footer class="campaign-home-footer">
+      <div class="campaign-footer-grid">
+        <div class="campaign-footer-brand">
+          ${logo("light")}
+          <p>Performance footwear.<br />Built for Africa.</p>
+        </div>
+        <nav aria-label="Shop links"><strong>Shop</strong><button data-route="product-flyers">All footwear</button><button data-route="product-flyers">Collections</button><button data-route="find-reseller">Stockists</button></nav>
+        <nav aria-label="Reseller links"><strong>Reseller</strong><button data-route="apply">Become a stockist</button><button data-route="reseller">Request products</button><button data-route="${accountRoute}">Account</button></nav>
+        <nav aria-label="Support links"><strong>Support</strong><button data-route="contact">Contact us</button><button data-route="terms">Terms</button><button data-route="privacy">Privacy</button></nav>
+      </div>
+      <div class="campaign-footer-bottom"><span>&copy; 2026 Irunsvan Africa. All rights reserved.</span><span>Proudly African. Globally driven. <i aria-hidden="true">/</i></span></div>
+    </footer>
   `;
 }
 
@@ -1957,6 +2150,18 @@ function productFlyerCoverImage(flyer) {
   return productFlyerGallery(flyer)[0]?.imagePath || flyer.coverImagePath || flyer.mainImagePath || "";
 }
 
+function publicProductFlyerImageMeta(image = {}) {
+  const imageName = String(image.imageName || "").trim();
+  const looksLikeFilename = /\.[a-z0-9]{2,5}$/i.test(imageName)
+    || /^(?:main|secondary|product\s*image(?:\s*[-_ ]?\s*\d+)?|\d+|img[-_ ]?\d+|image[-_ ]?\d+)$/i.test(imageName.replace(/\s+image$/i, ""))
+    || /^(?:main|secondary)\s+image$/i.test(imageName);
+  const details = [image.skuReference, image.colorName, image.caption]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  if (!looksLikeFilename && imageName) details.unshift(imageName);
+  return details;
+}
+
 function selectedProductFlyer() {
   const items = publicProductFlyerItems();
   if (!items.length) return null;
@@ -1968,7 +2173,6 @@ function selectedProductFlyer() {
 
 function productFlyerCard(flyer) {
   const imageUrl = resolveContentImageUrl(productFlyerCoverImage(flyer));
-  const imageCount = productFlyerGallery(flyer).length;
   return `
     <article class="product-flyer-card">
       <div class="product-flyer-image">
@@ -1982,7 +2186,6 @@ function productFlyerCard(flyer) {
         <p>${escapeHtml(flyer.productClass)}</p>
         <h2>${escapeHtml(flyer.title)}</h2>
         <span>${escapeHtml(flyer.shortDescription || "Irunsvan Africa public product flyer.")}</span>
-        ${imageCount ? `<span>${escapeHtml(`${imageCount} named product ${imageCount === 1 ? "image" : "images"}`)}</span>` : ""}
         <button type="button" class="button secondary" data-route="product-flyer" data-flyer-slug="${escapeHtml(flyer.slug)}">View shoe</button>
       </div>
     </article>
@@ -2066,14 +2269,11 @@ function productFlyerDetailPage() {
                   ? gallery
                       .map((image, index) => {
                         const imageUrl = resolveContentImageUrl(image.imagePath);
+                        const imageMeta = publicProductFlyerImageMeta(image);
                         return `
                           <figure class="product-flyer-gallery-item">
-                            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(`${flyer.title} ${image.imageName}`)}" loading="${index === 0 ? "eager" : "lazy"}" />
-                            <figcaption>
-                              <strong>${escapeHtml(image.imageName)}</strong>
-                              ${image.skuReference || image.colorName ? `<span>${escapeHtml([image.skuReference, image.colorName].filter(Boolean).join(" / "))}</span>` : ""}
-                              ${image.caption ? `<em>${escapeHtml(image.caption)}</em>` : ""}
-                            </figcaption>
+                            <img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(flyer.title)}" loading="${index === 0 ? "eager" : "lazy"}" />
+                            ${imageMeta.length ? `<figcaption>${escapeHtml(imageMeta.join(" / "))}</figcaption>` : ""}
                           </figure>
                         `;
                       })

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 520" role="img" aria-label="Map of Africa">
+  <defs>
+    <pattern id="dots" width="9" height="9" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.25" fill="#b8c8d9"/>
+    </pattern>
+    <clipPath id="africa-clip">
+      <path d="M255 42 207 56l-37 27-66 15-39 45-23 61 17 53 39 31 23 51 37 34 22 70 38 39 14 43 32-54 28-50 38-31 29-54 32-29 14-70 39-63-21-59-55-30-34-50-60-10-52-39Z"/>
+    </clipPath>
+  </defs>
+  <rect x="30" y="25" width="440" height="465" fill="url(#dots)" clip-path="url(#africa-clip)"/>
+  <path d="M255 42 207 56l-37 27-66 15-39 45-23 61 17 53 39 31 23 51 37 34 22 70 38 39 14 43 32-54 28-50 38-31 29-54 32-29 14-70 39-63-21-59-55-30-34-50-60-10-52-39Z" fill="none" stroke="#d8e2ed" stroke-width="1.5"/>
+  <path d="m438 369 28 24-8 63-25 31-14-44Z" fill="url(#dots)" stroke="#d8e2ed" stroke-width="1.5"/>
+</svg>
