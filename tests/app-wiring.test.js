@@ -58,8 +58,8 @@ assert.equal(appSource.includes("const publicItems = publicNavItems();"), true, 
 assert.equal(appSource.includes('inputField("Confirm Password", "password_confirm"'), true, "Signup must require password confirmation.");
 assert.equal(appSource.includes("state.signupConfirmationEmail = email;"), true, "Signup must handle email confirmation before application submission.");
 assert.equal(appSource.includes('["Back to public site", "store"]'), true, "Admin login should point back to the public site instead of reseller application.");
-assert.equal(appSource.includes('inputField("Username", "username", "RAMOCHA")'), true, "Admin login must use a username field instead of exposing an email requirement.");
-assert.equal(appSource.includes("SupabaseClient.adminLoginEmail(username)"), true, "Admin username login must resolve through the tested Supabase identifier mapping.");
+assert.equal(appSource.includes('inputField("Admin Email", "email", "RAMOCHA@IRUNSVANAFRICA.COM", "email")'), true, "Admin login must show the configured admin email format.");
+assert.equal(appSource.includes("SupabaseClient.adminLoginEmail(username)"), false, "Admin login must submit its real Supabase email directly.");
 assert.equal(appSource.includes("SupabaseClient.consumeOAuthSessionFromUrl()"), true, "Startup must consume Supabase OAuth callback sessions.");
 assert.equal(appSource.includes("const hasOAuthError = Boolean(oauthResult.error || oauthError);"), true, "OAuth error handling must be explicit during startup.");
 assert.equal(appSource.includes('window.history.replaceState({}, "", `${window.location.pathname}${MobileNavigation.buildRouteUrl(state.route)}`);'), true, "OAuth errors must clean the visible URL before routing.");

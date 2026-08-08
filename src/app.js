@@ -1541,7 +1541,7 @@ function loginPageContent(route = state.route) {
     return {
       eyebrow: "Admin Login",
       title: "Sign in to operations.",
-      copy: "Only approved admin accounts can open product controls, inventory uploads, and reseller approvals.",
+      copy: "Use your admin email and password to open product controls, inventory uploads, and reseller approvals.",
       submitLabel: "Continue to Admin",
       linkOne: ["Back to reseller login", "login"],
       linkTwo: ["Back to public site", "store"],
@@ -2503,7 +2503,7 @@ function loginPage() {
         ${notice}
         ${helper}
         ${authError}
-        ${adminLogin ? inputField("Username", "username", "RAMOCHA") : inputField("Email", "email", "name@example.com", "email")}
+        ${adminLogin ? inputField("Admin Email", "email", "RAMOCHA@IRUNSVANAFRICA.COM", "email") : inputField("Email", "email", "name@example.com", "email")}
         ${inputField("Password", "password", "Password", "password")}
         <button class="button primary full" ${state.loginPending ? "disabled" : ""}>${state.loginPending ? "Signing In..." : escapeHtml(content.submitLabel)}</button>
         ${adminLogin ? "" : `<button type="button" class="button secondary full" data-action="google-login">Continue with Google</button>`}
@@ -6102,8 +6102,7 @@ async function handleLogin(form) {
   const data = new FormData(form);
   const password = String(data.get("password") || "");
   const adminOnly = isAdminLoginRoute();
-  const username = String(data.get("username") || "").trim();
-  const emailInput = String(data.get("email") || "").trim();
+  const email = String(data.get("email") || "").trim();
   state.loginPending = true;
   state.loginSubmitted = false;
   state.authError = null;
@@ -6111,10 +6110,9 @@ async function handleLogin(form) {
   render();
 
   try {
-    if (!(adminOnly ? username : emailInput) || !password) {
-      throw new Error(adminOnly ? "Enter both your username and password." : "Enter both your email and password.");
+    if (!email || !password) {
+      throw new Error(adminOnly ? "Enter both your admin email and password." : "Enter both your email and password.");
     }
-    const email = adminOnly ? SupabaseClient.adminLoginEmail(username) : emailInput;
     await SupabaseClient.signInWithPassword({
       url: SUPABASE_URL,
       key: SUPABASE_KEY,
@@ -6142,8 +6140,7 @@ async function handleLogin(form) {
     loadProtectedDataInBackground();
   } catch (error) {
     state.auth = Auth.normalizeAuthState();
-    const message = error instanceof Error ? error.message : "Unable to sign in";
-    state.authError = adminOnly ? message.replace(/email or password/gi, "username or password") : message;
+    state.authError = error instanceof Error ? error.message : "Unable to sign in";
   } finally {
     state.loginPending = false;
   }

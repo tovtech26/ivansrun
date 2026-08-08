@@ -1,10 +1,8 @@
-const { adminLoginEmail } = require("../src/supabase-client.js");
-
 const SUPABASE_URL = process.env.SUPABASE_URL || "https://llicocwonbokahpbireg.supabase.co";
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const username = String(process.env.IRUNSVAN_ADMIN_USERNAME || "RAMOCHA").trim().toUpperCase();
 const password = String(process.env.IRUNSVAN_ADMIN_PASSWORD || "");
-const email = adminLoginEmail(username);
+const email = String(process.env.IRUNSVAN_ADMIN_EMAIL || "ramocha@irunsvanafrica.com").trim().toLowerCase();
 
 function headers(extra = {}) {
   return {
@@ -104,6 +102,7 @@ async function verifyPasswordLogin() {
 
 async function main() {
   if (!SERVICE_ROLE_KEY) throw new Error("Set SUPABASE_SERVICE_ROLE_KEY before creating the admin login.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("IRUNSVAN_ADMIN_EMAIL must be a valid email address.");
   if (password.length < 12) throw new Error("IRUNSVAN_ADMIN_PASSWORD must be at least 12 characters.");
 
   const user = await createOrUpdateUser();

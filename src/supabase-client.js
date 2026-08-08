@@ -3,15 +3,6 @@
   const OAUTH_ERROR_STORAGE_KEY = "irunsvan_oauth_error";
   const LEGACY_AUTH_STORAGE_KEY = "ivan" + "srun_auth_session";
   const LEGACY_OAUTH_ERROR_STORAGE_KEY = "ivan" + "srun_oauth_error";
-  const ADMIN_LOGIN_DOMAIN = "irunsvan.africa";
-
-  function adminLoginEmail(username) {
-    const normalized = String(username || "").trim().toUpperCase();
-    if (!/^[A-Z][A-Z0-9_-]{2,31}$/.test(normalized)) {
-      throw new Error("Enter a valid admin username.");
-    }
-    return `${normalized.toLowerCase()}.admin@${ADMIN_LOGIN_DOMAIN}`;
-  }
 
   function headers(key, accessToken) {
     return {
@@ -310,8 +301,6 @@
   const api = {
     AUTH_STORAGE_KEY,
     OAUTH_ERROR_STORAGE_KEY,
-    ADMIN_LOGIN_DOMAIN,
-    adminLoginEmail,
     headers,
     readStoredSession,
     writeStoredSession,
