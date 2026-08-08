@@ -4,6 +4,7 @@ const SUPABASE_KEY = "sb_publishable_6V8LkQ_EwGCeYqtdqxcpqg_RcaqSINj";
 const ROUTES = [
   "store",
   "story",
+  "ambassador",
   "product",
   "product-flyers",
   "product-flyer",
@@ -89,7 +90,7 @@ function readStoredSiteContent() {
 }
 
 function readInitialRouteState() {
-  return MobileNavigation.parseRouteUrl(window.location.hash) || { route: "store", productId: null, orderId: null, storySlug: null, flyerSlug: null };
+  return MobileNavigation.parseRouteUrl(window.location.hash) || { route: "store", productId: null, orderId: null, storySlug: null, ambassadorSlug: null, flyerSlug: null };
 }
 
 function readApplicationDraft() {
@@ -144,12 +145,14 @@ const state = {
   selectedProductId: initialRouteState.productId,
   selectedOrderId: initialRouteState.orderId || null,
   selectedStorySlug: initialRouteState.storySlug || null,
+  selectedAmbassadorSlug: initialRouteState.ambassadorSlug || null,
   selectedProductFlyerSlug: initialRouteState.flyerSlug || null,
   products: [],
   variants: [],
   homepageFlyers: WebsiteContent.normalizeFlyers([]),
   homeFlyerIndex: 0,
   blogPosts: [],
+  brandAmbassadors: [],
   publicProductFlyers: [],
   publicProductFlyerImages: [],
   resellerDirectory: [],
@@ -197,6 +200,8 @@ const state = {
   homepageFlyerEditingId: null,
   storySavePending: false,
   storyEditingId: null,
+  ambassadorSavePending: false,
+  ambassadorEditingId: null,
   publicProductFlyerSavePending: false,
   publicProductFlyerEditingId: null,
   publicProductFlyerImageDrafts: {},
@@ -276,7 +281,8 @@ const CATALOG_PAGE_SIZE = 8;
 const SITE_CONTROL_SECTIONS = [
   ["product-flyers", "Product Flyers"],
   ["homepage-flyers", "Homepage Flyers"],
-  ["stories", "Stories"],
+  ["stories", "News"],
+  ["brand-ambassadors", "Brand Ambassadors"],
   ["about", "About"],
   ["hero-theme", "Hero & Theme"],
 ];
@@ -342,6 +348,33 @@ function storefrontProducts() {
     maxPrice: state.catalogMaxPrice,
     sort: state.catalogSort,
   });
+}
+
+function productCardImages(product) {
+  return uniqueImageNames([
+    ...(Array.isArray(product.image_names) ? product.image_names : []),
+    ...variantsFor(product.id).map((variant) => variant.image_name),
+  ]);
+}
+
+function productVisualCarousel({ key, label, imageNames = [] }) {
+  const selectedImage = selectedCarouselImage(key, imageNames);
+  const selectedIndex = Math.max(0, imageNames.indexOf(selectedImage));
+  const hasMultiple = imageNames.length > 1;
+  return `
+    <div class="product-card-gallery" data-gallery-key="${escapeHtml(key)}">
+      ${productVisual(label, selectedImage)}
+      ${
+        hasMultiple
+          ? `
+            <button class="gallery-arrow previous" type="button" data-action="catalog-image-step" data-gallery-key="${escapeHtml(key)}" data-direction="-1" aria-label="Previous image for ${escapeHtml(label)}">&lsaquo;</button>
+            <button class="gallery-arrow next" type="button" data-action="catalog-image-step" data-gallery-key="${escapeHtml(key)}" data-direction="1" aria-label="Next image for ${escapeHtml(label)}">&rsaquo;</button>
+            <span class="gallery-count">${escapeHtml(`${selectedIndex + 1}/${imageNames.length}`)}</span>
+          `
+          : ""
+      }
+    </div>
+  `;
 }
 
 function pagedStorefrontProducts() {
@@ -436,32 +469,6 @@ function selectedCarouselImage(key, imageNames = []) {
   return imageNames[((index % imageNames.length) + imageNames.length) % imageNames.length] || imageNames[0];
 }
 
-function productCardImages(product) {
-  return uniqueImageNames([
-    ...(Array.isArray(product.image_names) ? product.image_names : []),
-    ...variantsFor(product.id).map((variant) => variant.image_name),
-  ]);
-}
-
-function productVisualCarousel({ key, label, imageNames = [] }) {
-  const selectedImage = selectedCarouselImage(key, imageNames);
-  const selectedIndex = Math.max(0, imageNames.indexOf(selectedImage));
-  const hasMultiple = imageNames.length > 1;
-  return `
-    <div class="product-card-gallery" data-gallery-key="${escapeHtml(key)}">
-      ${productVisual(label, selectedImage)}
-      ${
-        hasMultiple
-          ? `
-            <button class="gallery-arrow previous" type="button" data-action="catalog-image-step" data-gallery-key="${escapeHtml(key)}" data-direction="-1" aria-label="Previous image for ${escapeHtml(label)}">&lsaquo;</button>
-            <button class="gallery-arrow next" type="button" data-action="catalog-image-step" data-gallery-key="${escapeHtml(key)}" data-direction="1" aria-label="Next image for ${escapeHtml(label)}">&rsaquo;</button>
-            <span class="gallery-count">${escapeHtml(`${selectedIndex + 1}/${imageNames.length}`)}</span>
-          `
-          : ""
-      }
-    </div>
-  `;
-}
 
 const SUPABASE_REST_PAGE_SIZE = 1000;
 
@@ -1266,7 +1273,7 @@ async function loadCatalog() {
   try {
     state.homepageContentLoading = true;
     state.homepageContentError = null;
-    const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows, flyerRows, blogRows, productFlyerRows, productFlyerImageRows] = await Promise.all([
+    const [productRows, variantRows, heroRows, themeRows, contentRows, directoryRows, flyerRows, blogRows, ambassadorRows, productFlyerRows, productFlyerImageRows] = await Promise.all([
       fetchOptionalSupabase("products", CatalogData.productSelectQuery()),
       fetchOptionalSupabase("product_variants", CatalogData.variantSelectQuery()),
       fetchOptionalSupabase(
@@ -1281,6 +1288,7 @@ async function loadCatalog() {
       fetchOptionalSupabase("reseller_directory", "select=id,company_name,country,phone,email,full_name&order=country.asc,company_name.asc&limit=200"),
       fetchOptionalSupabase("homepage_flyers", "select=id,title,image_path,sort_order,published,created_at&published=eq.true&order=sort_order.asc,created_at.desc&limit=20"),
       fetchOptionalSupabase("blog_posts", "select=id,title,slug,cover_image_path,summary,body,published,published_at,created_at&published=eq.true&order=published_at.desc,created_at.desc&limit=20"),
+      fetchOptionalSupabase("brand_ambassadors", "select=id,name,slug,role_title,country,city,short_bio,full_bio,image_path,cta_label,link_url,instagram_url,display_order,featured,published,published_at,created_at,updated_at&published=eq.true&order=featured.desc,display_order.asc,created_at.desc&limit=50"),
       fetchOptionalSupabaseResult("public_product_flyers", "select=id,title,slug,product_class,short_description,story,main_image_path,secondary_image_path,display_order,published,created_at,updated_at&published=eq.true&order=display_order.asc,created_at.desc&limit=100"),
       fetchOptionalSupabaseResult("public_product_flyer_images", "select=id,flyer_id,image_path,image_name,sku_reference,color_name,caption,display_order,is_cover,created_at,updated_at&order=is_cover.desc,display_order.asc,created_at.asc&limit=2000"),
     ]);
@@ -1295,6 +1303,7 @@ async function loadCatalog() {
     state.resellerDirectory = Array.isArray(directoryRows) ? directoryRows : [];
     state.homepageFlyers = WebsiteContent.normalizeFlyers(flyerRows);
     state.blogPosts = WebsiteContent.normalizeStories(blogRows);
+    state.brandAmbassadors = WebsiteContent.normalizeAmbassadors(ambassadorRows);
     state.publicProductFlyerImages = productFlyerImageRows.ok ? WebsiteContent.normalizeProductFlyerImages(productFlyerImageRows.rows) : [];
     state.publicProductFlyers = productFlyerRows.ok
       ? WebsiteContent.mergeProductFlyersWithDefaults(attachProductFlyerImages(productFlyerRows.rows, state.publicProductFlyerImages))
@@ -1316,6 +1325,7 @@ async function loadProtectedData() {
   if (!state.auth.isAuthenticated) {
     state.homepageFlyers = WebsiteContent.normalizeFlyers(state.homepageFlyers);
     state.blogPosts = WebsiteContent.normalizeStories(state.blogPosts);
+    state.brandAmbassadors = WebsiteContent.normalizeAmbassadors(state.brandAmbassadors);
     state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults(state.publicProductFlyers);
     state.inventory = [];
     state.orderRequests = [];
@@ -1384,6 +1394,7 @@ async function loadProtectedData() {
         ["adminInvites", fetchAuthedSupabase("admin_invites", "select=id,email,status,note,created_by,claimed_by,created_at,expires_at,used_at,revoked_at&order=created_at.desc&limit=200")],
         ["homepageFlyers", fetchAuthedSupabase("homepage_flyers", "select=id,title,image_path,sort_order,published,created_at,updated_at&order=sort_order.asc,created_at.desc&limit=200")],
         ["blogPosts", fetchAuthedSupabase("blog_posts", "select=id,title,slug,cover_image_path,summary,body,published,published_at,created_at,updated_at&order=created_at.desc&limit=200")],
+        ["brandAmbassadors", fetchAuthedSupabase("brand_ambassadors", "select=id,name,slug,role_title,country,city,short_bio,full_bio,image_path,cta_label,link_url,instagram_url,display_order,featured,published,published_at,created_at,updated_at&order=featured.desc,display_order.asc,created_at.desc&limit=200")],
         [
           "publicProductFlyers",
           fetchAuthedSupabase("public_product_flyers", "select=id,title,slug,product_class,short_description,story,main_image_path,secondary_image_path,display_order,published,created_at,updated_at&order=display_order.asc,created_at.desc&limit=200"),
@@ -1438,10 +1449,12 @@ async function loadProtectedData() {
     if (state.auth.isAdmin) {
       const adminFlyerRows = Array.isArray(data.homepageFlyers) ? data.homepageFlyers : [];
       const adminBlogRows = Array.isArray(data.blogPosts) ? data.blogPosts : [];
+      const adminAmbassadorRows = Array.isArray(data.brandAmbassadors) ? data.brandAmbassadors : [];
       const adminProductFlyerRows = Array.isArray(data.publicProductFlyers) ? data.publicProductFlyers : [];
       const adminProductFlyerImageRows = Array.isArray(data.publicProductFlyerImages) ? data.publicProductFlyerImages : [];
       state.homepageFlyers = adminFlyerRows.length ? WebsiteContent.normalizeFlyers(adminFlyerRows, { includeUnpublished: true }) : [];
       state.blogPosts = WebsiteContent.normalizeStories(adminBlogRows, { includeUnpublished: true });
+      state.brandAmbassadors = WebsiteContent.normalizeAmbassadors(adminAmbassadorRows, { includeUnpublished: true });
       state.publicProductFlyerImages = WebsiteContent.normalizeProductFlyerImages(adminProductFlyerImageRows);
       state.publicProductFlyers = WebsiteContent.mergeProductFlyersWithDefaults(
         attachProductFlyerImages(adminProductFlyerRows, state.publicProductFlyerImages),
@@ -1477,6 +1490,7 @@ function setRoute(route, params = {}, options = {}) {
   if (Object.prototype.hasOwnProperty.call(params, "orderId")) state.selectedOrderId = params.orderId || null;
   else if (nextRoute !== "order") state.selectedOrderId = null;
   state.selectedStorySlug = params.storySlug || null;
+  state.selectedAmbassadorSlug = params.ambassadorSlug || null;
   state.selectedProductFlyerSlug = params.flyerSlug || null;
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;
@@ -1486,6 +1500,7 @@ function setRoute(route, params = {}, options = {}) {
       productId: state.selectedProductId || null,
       orderId: state.selectedOrderId || null,
       storySlug: state.selectedStorySlug || null,
+      ambassadorSlug: state.selectedAmbassadorSlug || null,
       flyerSlug: state.selectedProductFlyerSlug || null,
     };
     const url = `${window.location.pathname}${MobileNavigation.buildRouteUrl(nextRoute, historyState)}`;
@@ -1557,9 +1572,22 @@ function loginPageContent(route = state.route) {
 
 function publicNavItems() {
   return [
-    ["Products", "product-flyers", ["product-flyers", "product-flyer"]],
+    ["Products", "product-flyers", ["product-flyers", "product-flyer", "product"]],
+    ["News", "store", ["story"]],
+    ["Brand Ambassadors", "store", ["ambassador"], "brand-ambassadors"],
     ["Stockists", "find-reseller", ["find-reseller"]],
   ];
+}
+
+function publicResellerAction() {
+  if (state.auth.isAdmin) return ["Admin Dashboard", "admin", ["admin", "team", "resellers", "requests", "requests-all", "requests-review", "requests-payment", "requests-supplier", "requests-completed", "applications", "products", "site", "approvals", "imports", "email"]];
+  if (state.auth.isReseller) return ["Request Products", "reseller", ["reseller", "reseller-product", "request-confirmation", "history", "current-orders", "expected-orders", "fulfillment", "order"]];
+  if (state.auth.isPending) return ["Application Status", "apply", ["apply"]];
+  return ["Become a Reseller", "apply", ["apply"]];
+}
+
+function publicAccountAction() {
+  return state.auth.isAuthenticated ? ["My Profile", "account", ["account"]] : ["Login", "login", ["login", "admin-login", "signup"]];
 }
 
 function campaignIcon(name) {
@@ -1578,32 +1606,31 @@ function campaignBagCount() {
 }
 
 function campaignPublicNav(active, drawerItems, drawerLabel) {
-  const resellerRoute = state.auth.isReseller || state.auth.isAdmin ? "reseller" : state.auth.isPending ? "apply" : "apply";
-  const accountRoute = state.auth.isAuthenticated ? "account" : "login";
-  const bagRoute = state.auth.isReseller || state.auth.isAdmin ? "reseller" : "login";
+  const resellerAction = publicResellerAction();
+  const accountAction = publicAccountAction();
   const bagCount = campaignBagCount();
   const campaignItems = [
-    ["Footwear", "product-flyers", ["product-flyers", "product-flyer", "product"]],
-    ["Collections", "product-flyers", ["product-flyers", "product-flyer"]],
+    ["Products", "product-flyers", ["product-flyers", "product-flyer", "product"]],
+    ["News", "store", ["story"], "news"],
+    ["Brand Ambassadors", "store", ["ambassador"], "brand-ambassadors"],
     ["Stockists", "find-reseller", ["find-reseller"]],
-    ["Reseller", resellerRoute, ["apply", "reseller", "reseller-product"]],
+    resellerAction,
   ];
   return `
     <a class="campaign-skip-link" href="#campaign-main">Skip to content</a>
     <header class="top-nav public-top-nav campaign-public-nav">
       <button class="logo-link bare-button campaign-logo-link" data-route="store" aria-label="Irunsvan Africa home">${logo("blue")}</button>
       <nav class="campaign-main-nav" aria-label="Primary navigation">
-        ${campaignItems.map(([label, route, routes]) => `<button class="${active(routes)}" data-route="${route}">${label}</button>`).join("")}
+        ${campaignItems.map(([label, route, routes, homeSection]) => `<button class="${active(routes)}" data-route="${route}"${homeSection ? ` data-home-section="${homeSection}"` : ""}>${label}</button>`).join("")}
       </nav>
       <div class="campaign-nav-actions">
-        <button class="campaign-account-action" data-route="${accountRoute}" aria-label="${state.auth.isAuthenticated ? "Open account" : "Sign in"}">
+        <button class="campaign-account-action" data-route="${accountAction[1]}" aria-label="${escapeHtml(accountAction[0])}">
           ${campaignIcon("account")}
-          <span>Account</span>
+          <span>${escapeHtml(accountAction[0])}</span>
         </button>
-        <button class="campaign-bag-action" data-route="${bagRoute}" aria-label="${bagCount ? `Open request bag with ${bagCount} pairs` : "Open request bag"}">
-          ${campaignIcon("bag")}
-          ${bagCount ? `<span class="campaign-bag-count">${escapeHtml(String(bagCount))}</span>` : ""}
-        </button>
+        ${state.auth.isReseller ? `<button class="campaign-bag-action" data-route="reseller" aria-label="${bagCount ? `Open request bag with ${bagCount} pairs` : "Open request bag"}">
+          ${campaignIcon("bag")}${bagCount ? `<span class="campaign-bag-count">${escapeHtml(String(bagCount))}</span>` : ""}
+        </button>` : ""}
         <button class="mobile-menu-button campaign-menu-button" data-action="toggle-mobile-nav" aria-label="${state.mobileNavOpen ? "Close menu" : `Open ${drawerLabel} menu`}" aria-expanded="${state.mobileNavOpen ? "true" : "false"}><span aria-hidden="true"></span><span aria-hidden="true"></span></button>
       </div>
     </header>
@@ -1611,8 +1638,8 @@ function campaignPublicNav(active, drawerItems, drawerLabel) {
     <aside class="${state.mobileNavOpen ? "mobile-nav-drawer campaign-mobile-nav open" : "mobile-nav-drawer campaign-mobile-nav"}" aria-label="${drawerLabel} navigation">
       <div class="mobile-drawer-head"><strong>${logo("blue")}</strong><button class="bare-button" data-action="close-mobile-nav">Close</button></div>
       <nav>
-        ${campaignItems.map(([label, route, routes]) => `<button class="${active(routes)}" data-route="${route}">${label}</button>`).join("")}
-        <button data-route="${accountRoute}">Account</button>
+        ${campaignItems.map(([label, route, routes, homeSection]) => `<button class="${active(routes)}" data-route="${route}"${homeSection ? ` data-home-section="${homeSection}"` : ""}>${label}</button>`).join("")}
+        <button data-route="${accountAction[1]}">${escapeHtml(accountAction[0])}</button>
         ${state.auth.isAdmin ? `<button data-route="admin">Back to Admin</button>` : ""}
       </nav>
     </aside>
@@ -1716,7 +1743,7 @@ function mobileDrawerItems() {
       ["Inventory Uploads", "imports", ["imports"]],
       ["Site Controls", "site", ["site"]],
       ["Account", "account", ["account"]],
-      ["View Public Site", "store", ["store", "story"]],
+      ["View Public Site", "store", ["store", "story", "ambassador"]],
     ];
   }
   if (currentPortalMode() === "reseller") {
@@ -1806,11 +1833,13 @@ function mobileContextBar() {
 }
 
 function publicHomePage() {
-  const featuredProducts = campaignFeaturedProducts();
+  const featuredFlyers = campaignFeaturedFlyers();
   return `
     <main class="campaign-home-v2" id="campaign-main">
       ${campaignHeroSection()}
-      ${campaignFeaturedSection(featuredProducts)}
+      ${campaignFeaturedSection(featuredFlyers)}
+      ${campaignNewsSection()}
+      ${campaignAmbassadorsSection()}
       ${campaignPurposeSection()}
       ${campaignCommerceSection()}
       ${campaignFooter()}
@@ -1825,9 +1854,6 @@ function campaignHeroSection() {
       <div class="campaign-hero-wash" aria-hidden="true"></div>
       <div class="campaign-hero-copy">
         <p class="campaign-kicker">Irunsvan Africa</p>
-        <div class="campaign-meta" aria-label="New season, edition one of one, performance footwear">
-          <span>New season</span><span>Edition 1/1</span><span>Performance footwear</span>
-        </div>
         <h1 id="campaign-hero-title" aria-label="Performance footwear built for Africa">
           <span>Performance</span>
           <span>Footwear</span>
@@ -1836,7 +1862,7 @@ function campaignHeroSection() {
         </h1>
         <p class="campaign-hero-intro">Engineered for movement.<br />Made for Africa.</p>
         <div class="campaign-hero-actions">
-          <button class="campaign-button campaign-button-primary" data-route="product-flyers">Explore collection <span aria-hidden="true">&rarr;</span></button>
+        <button class="campaign-button campaign-button-primary" data-route="product-flyers">Explore collection <span aria-hidden="true">&rarr;</span></button>
           <button class="campaign-button campaign-button-secondary" data-route="apply">Become a reseller</button>
         </div>
       </div>
@@ -1845,44 +1871,114 @@ function campaignHeroSection() {
   `;
 }
 
-function campaignFeaturedProducts() {
-  const published = catalogProducts().filter((product) => product.published !== false && productCardImages(product).length);
-  const preferredModels = ["028", "121", "026"];
-  const selected = preferredModels
-    .map((modelCode) => published.find((product) => String(product.model_code || "").padStart(3, "0") === modelCode))
-    .filter(Boolean);
-  published.forEach((product) => {
-    if (selected.length < 3 && !selected.some((entry) => entry.id === product.id)) selected.push(product);
-  });
-  return selected.slice(0, 3);
-}
-
-function campaignProductTitle(product) {
-  const name = String(product?.name || "").trim();
-  if (name && !/running shoe$/i.test(name)) return name.replace(/^IRUNSVAN\s+/i, "");
-  return `Irunsvan ${String(product?.model_code || product?.sku || "Performance").replace(/^IRUNSVAN[-\s]*/i, "")}`;
-}
-
-function campaignFeaturedCard(product, index) {
-  const imageName = productCardImages(product)[0] || "";
-  const imageUrl = ProductImages.resolveProductImageUrl(imageName, SUPABASE_URL);
-  const title = campaignProductTitle(product);
-  const category = String(product.category || (index === 1 ? "Training" : "Running")).replace(/\s+shoes?$/i, "");
+function campaignNewsCard(story, index) {
+  const coverImage = resolveContentImageUrl(story.coverImagePath || "");
+  const publishedLabel = story.publishedAt ? new Date(story.publishedAt).toLocaleDateString() : "Latest";
   return `
-    <article class="campaign-product-card">
-      <button class="campaign-product-image-button" data-route="product" data-product-id="${escapeHtml(product.id)}" aria-label="View ${escapeHtml(title)}">
-        ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" width="640" height="480" loading="lazy" />` : `<span class="campaign-product-missing">Product image coming soon</span>`}
+    <article class="campaign-news-card${index === 0 ? " campaign-news-card-featured" : ""}">
+      <button type="button" class="campaign-news-image" data-route="story" data-story-slug="${escapeHtml(story.slug)}" aria-label="Read ${escapeHtml(story.title)}">
+        ${coverImage ? `<img src="${escapeHtml(coverImage)}" alt="${escapeHtml(story.title)}" loading="lazy" />` : `<span>${logo("blue")}</span>`}
       </button>
-      <div class="campaign-product-copy">
-        <p>${escapeHtml(category)}</p>
-        <h3>${escapeHtml(title)}</h3>
-        <button data-route="product" data-product-id="${escapeHtml(product.id)}">Explore <span aria-hidden="true">&rarr;</span></button>
+      <div class="campaign-news-copy">
+        <p>${escapeHtml(publishedLabel)}</p>
+        <h3>${escapeHtml(story.title)}</h3>
+        <p>${escapeHtml(story.summary || "Read the latest Irunsvan Africa campaign dispatch.")}</p>
+        <button class="campaign-text-link" data-route="story" data-story-slug="${escapeHtml(story.slug)}">Read more <span aria-hidden="true">&rarr;</span></button>
       </div>
     </article>
   `;
 }
 
-function campaignFeaturedSection(products) {
+function campaignNewsSection() {
+  const stories = WebsiteContent.normalizeStories(state.blogPosts).slice(0, 3);
+  if (!stories.length) return "";
+  return `
+    <section class="campaign-news" id="news" aria-labelledby="campaign-news-title" tabindex="-1">
+      <div class="campaign-section-intro">
+        <p class="campaign-section-number">03 / News</p>
+        <h2 id="campaign-news-title">What&rsquo;s<br />moving.</h2>
+        <span class="campaign-heading-rule" aria-hidden="true"></span>
+        <button class="campaign-text-link" data-home-section="news" data-route="store">View all News <span aria-hidden="true">&rarr;</span></button>
+      </div>
+      <div class="campaign-news-grid">${stories.map(campaignNewsCard).join("")}</div>
+    </section>
+  `;
+}
+
+function ambassadorPublicUrl(value) {
+  const url = String(value || "").trim();
+  if (/^https:\/\//i.test(url)) return url;
+  if (/^\/(?!\/)/.test(url) || /^#\/?/.test(url)) return url;
+  return "";
+}
+
+function campaignAmbassadorCard(ambassador) {
+  const imageUrl = resolveContentImageUrl(ambassador.imagePath);
+  const location = [ambassador.city, ambassador.country].filter(Boolean).join(", ");
+  const linkUrl = ambassadorPublicUrl(ambassador.linkUrl);
+  const instagramUrl = ambassadorPublicUrl(ambassador.instagramUrl);
+  const profileAction = !linkUrl && ambassador.fullBio && ambassador.ctaLabel
+    ? `<button class="campaign-text-link" data-route="ambassador" data-ambassador-slug="${escapeHtml(ambassador.slug)}">${escapeHtml(ambassador.ctaLabel)} <span aria-hidden="true">&rarr;</span></button>`
+    : "";
+  return `
+    <article class="campaign-ambassador-card">
+      <div class="campaign-ambassador-image">
+        ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="Portrait of ${escapeHtml(ambassador.name)}" loading="lazy" />` : `<span>${logo("blue")}</span>`}
+      </div>
+      <div class="campaign-ambassador-copy">
+        <p>${escapeHtml(ambassador.roleTitle)}${location ? ` <span aria-hidden="true">/</span> ${escapeHtml(location)}` : ""}</p>
+        <h3>${escapeHtml(ambassador.name)}</h3>
+        <p>${escapeHtml(ambassador.shortBio)}</p>
+        <div class="campaign-ambassador-actions">
+          ${linkUrl && ambassador.ctaLabel ? (/^https:\/\//i.test(linkUrl) ? `<a class="campaign-text-link" href="${escapeHtml(linkUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(ambassador.ctaLabel)} <span aria-hidden="true">&rarr;</span></a>` : `<a class="campaign-text-link" href="${escapeHtml(linkUrl)}">${escapeHtml(ambassador.ctaLabel)} <span aria-hidden="true">&rarr;</span></a>`) : profileAction}
+          ${instagramUrl ? `<a class="campaign-ambassador-social" href="${escapeHtml(instagramUrl)}" target="_blank" rel="noopener noreferrer">Instagram</a>` : ""}
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function campaignAmbassadorsSection() {
+  const ambassadors = WebsiteContent.normalizeAmbassadors(state.brandAmbassadors).slice(0, 3);
+  if (!ambassadors.length) return "";
+  return `
+    <section class="campaign-ambassadors" id="brand-ambassadors" aria-labelledby="campaign-ambassadors-title" tabindex="-1">
+      <div class="campaign-section-intro">
+        <p class="campaign-section-number">04 / Brand Ambassadors</p>
+        <h2 id="campaign-ambassadors-title">The people<br />who move us.</h2>
+        <span class="campaign-heading-rule" aria-hidden="true"></span>
+        <button class="campaign-text-link" data-home-section="brand-ambassadors" data-route="store">Meet the team <span aria-hidden="true">&rarr;</span></button>
+      </div>
+      <div class="campaign-ambassador-grid">${ambassadors.map(campaignAmbassadorCard).join("")}</div>
+    </section>
+  `;
+}
+
+function campaignFeaturedFlyers() {
+  return publicProductFlyerItems()
+    .filter((flyer) => productFlyerCoverImage(flyer))
+    .slice(0, 3);
+}
+
+function campaignFeaturedCard(flyer) {
+  const imageUrl = resolveContentImageUrl(productFlyerCoverImage(flyer));
+  const title = String(flyer.title || "Irunsvan footwear").trim();
+  const category = String(flyer.productClass || "Product").trim();
+  return `
+    <article class="campaign-product-card">
+      <button class="campaign-product-image-button" data-route="product-flyer" data-flyer-slug="${escapeHtml(flyer.slug)}" aria-label="View ${escapeHtml(title)}">
+        ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" width="640" height="480" loading="lazy" />` : `<span class="campaign-product-missing">Product image coming soon</span>`}
+      </button>
+      <div class="campaign-product-copy">
+        <p>${escapeHtml(category)}</p>
+        <h3>${escapeHtml(title)}</h3>
+        <button data-route="product-flyer" data-flyer-slug="${escapeHtml(flyer.slug)}">Explore <span aria-hidden="true">&rarr;</span></button>
+      </div>
+    </article>
+  `;
+}
+
+function campaignFeaturedSection(flyers) {
   return `
     <section class="campaign-featured" aria-labelledby="campaign-featured-title">
       <div class="campaign-section-intro">
@@ -1892,7 +1988,7 @@ function campaignFeaturedSection(products) {
         <button class="campaign-text-link" data-route="product-flyers">View all collections <span aria-hidden="true">&rarr;</span></button>
       </div>
       <div class="campaign-product-grid">
-        ${products.length ? products.map(campaignFeaturedCard).join("") : `<div class="campaign-featured-empty"><p>The new collection is being prepared.</p><button class="campaign-text-link" data-route="product-flyers">Browse footwear <span aria-hidden="true">&rarr;</span></button></div>`}
+        ${flyers.length ? flyers.map(campaignFeaturedCard).join("") : `<div class="campaign-featured-empty"><p>The new collection is being prepared.</p><button class="campaign-text-link" data-route="product-flyers">Browse footwear <span aria-hidden="true">&rarr;</span></button></div>`}
       </div>
     </section>
   `;
@@ -1905,7 +2001,7 @@ function campaignPurposeSection() {
       <div class="campaign-purpose-overlay" aria-hidden="true"></div>
       <img class="campaign-purpose-map" src="public/homepage/africa-outline.svg" alt="" width="420" height="480" loading="lazy" />
       <div class="campaign-purpose-copy">
-        <p class="campaign-section-number">03 / Our purpose</p>
+        <p class="campaign-section-number">05 / Our purpose</p>
         <h2 id="campaign-purpose-title">Designed for<br />how Africa<br />moves.</h2>
         <p>From training tracks to city streets, Irunsvan footwear is designed to perform wherever movement takes you.</p>
       </div>
@@ -1920,7 +2016,7 @@ function campaignCommerceSection() {
         <img src="public/homepage/wholesale-box.png" alt="Irunsvan wholesale footwear box" width="1536" height="864" loading="lazy" />
         <div class="campaign-wholesale-overlay" aria-hidden="true"></div>
         <div class="campaign-commerce-copy">
-          <p class="campaign-section-number">04 / Wholesale</p>
+          <p class="campaign-section-number">06 / Wholesale</p>
           <h2>Built for<br />retailers too.</h2>
           <p>Join our network of approved stockists and get access to wholesale pricing, live stock, and dedicated support.</p>
           <button class="campaign-button campaign-button-primary" data-route="apply">Become a stockist <span aria-hidden="true">&rarr;</span></button>
@@ -1928,7 +2024,7 @@ function campaignCommerceSection() {
       </article>
       <article class="campaign-stockists">
         <div class="campaign-commerce-copy">
-          <p class="campaign-section-number">05 / Stockists</p>
+          <p class="campaign-section-number">07 / Stockists</p>
           <h2>Find Irunsvan<br />near you.</h2>
           <p>Browse our growing network of approved stockists across Africa.</p>
           <button class="campaign-text-link" data-route="find-reseller">Find a stockist <span aria-hidden="true">&rarr;</span></button>
@@ -1940,7 +2036,8 @@ function campaignCommerceSection() {
 }
 
 function campaignFooter() {
-  const accountRoute = state.auth.isAuthenticated ? "account" : "login";
+  const resellerAction = publicResellerAction();
+  const accountAction = publicAccountAction();
   return `
     <footer class="campaign-home-footer">
       <div class="campaign-footer-grid">
@@ -1948,8 +2045,8 @@ function campaignFooter() {
           ${logo("light")}
           <p>Performance footwear.<br />Built for Africa.</p>
         </div>
-        <nav aria-label="Shop links"><strong>Shop</strong><button data-route="product-flyers">All footwear</button><button data-route="product-flyers">Collections</button><button data-route="find-reseller">Stockists</button></nav>
-        <nav aria-label="Reseller links"><strong>Reseller</strong><button data-route="apply">Become a stockist</button><button data-route="reseller">Request products</button><button data-route="${accountRoute}">Account</button></nav>
+        <nav aria-label="Shop links"><strong>Shop</strong><button data-route="product-flyers">Products</button><button data-home-section="news" data-route="store">News</button><button data-home-section="brand-ambassadors" data-route="store">Brand Ambassadors</button><button data-route="find-reseller">Stockists</button></nav>
+        <nav aria-label="Reseller links"><strong>Access</strong><button data-route="${resellerAction[1]}">${escapeHtml(resellerAction[0])}</button><button data-route="${accountAction[1]}">${escapeHtml(accountAction[0])}</button>${state.auth.isReseller ? `<button data-route="reseller">Request Products</button>` : ""}</nav>
         <nav aria-label="Support links"><strong>Support</strong><button data-route="contact">Contact us</button><button data-route="terms">Terms</button><button data-route="privacy">Privacy</button></nav>
       </div>
       <div class="campaign-footer-bottom"><span>&copy; 2026 Irunsvan Africa. All rights reserved.</span><span>Proudly African. Globally driven. <i aria-hidden="true">/</i></span></div>
@@ -2044,11 +2141,11 @@ function storyCard(story, index) {
           : `<div class="story-card-image story-card-image-placeholder">${logo("blue")}</div>`
       }
       <div class="story-card-body">
-        <span class="story-card-tag">${index === 0 ? "Featured Story" : "Story"}</span>
+        <span class="story-card-tag">${index === 0 ? "Featured News" : "News"}</span>
         <p class="story-meta">${escapeHtml(publishedLabel)}</p>
         <h3>${escapeHtml(story.title)}</h3>
         <p>${escapeHtml(story.summary || "Read the latest Irunsvan Africa campaign dispatch.")}</p>
-        <button type="button" class="button secondary story-card-action" data-route="story" data-story-slug="${escapeHtml(story.slug)}">Read story</button>
+        <button type="button" class="button secondary story-card-action" data-route="story" data-story-slug="${escapeHtml(story.slug)}">Read more</button>
       </div>
     </article>
   `;
@@ -2060,13 +2157,13 @@ function storyCarousel(stories) {
     <section class="home-stories">
       <div class="home-section-heading">
         <span class="campaign-eyebrow">LATEST FROM IRUNSVAN</span>
-        <h2>Field Records</h2>
+        <h2>Latest News</h2>
         <p>Editorial notes, product signals, and performance updates from Irunsvan Africa.</p>
       </div>
       ${
         items.length
           ? `<div class="story-strip">${items.map((story, index) => storyCard(story, index)).join("")}</div>`
-          : `<div class="content-empty-state"><p>No stories are published yet.</p></div>`
+          : `<div class="content-empty-state"><p>No News is published yet.</p></div>`
       }
     </section>
   `;
@@ -2120,6 +2217,48 @@ function selectedStory() {
     return items.find((story) => story.slug === state.selectedStorySlug) || null;
   }
   return items[0];
+}
+
+function selectedBrandAmbassador() {
+  const items = WebsiteContent.normalizeAmbassadors(state.brandAmbassadors, { includeUnpublished: state.auth.isAdmin });
+  if (!items.length) return null;
+  if (state.selectedAmbassadorSlug) return items.find((ambassador) => ambassador.slug === state.selectedAmbassadorSlug) || null;
+  return items[0];
+}
+
+function brandAmbassadorDetailPage() {
+  const ambassador = selectedBrandAmbassador();
+  if (!ambassador) {
+    return `
+      <main class="public-home campaign-ambassador-detail-page">
+        <section class="content-empty-state"><p>This ambassador profile is not published yet.</p><button class="text-link" data-route="store">Back to home</button></section>
+        ${footer()}
+      </main>
+    `;
+  }
+  const imageUrl = resolveContentImageUrl(ambassador.imagePath);
+  const location = [ambassador.city, ambassador.country].filter(Boolean).join(", ");
+  const instagramUrl = ambassadorPublicUrl(ambassador.instagramUrl);
+  return `
+    <main class="public-home campaign-ambassador-detail-page">
+      <section class="campaign-ambassador-detail" aria-labelledby="ambassador-profile-title">
+        <button class="text-link" data-route="store" data-home-section="brand-ambassadors">Back to Brand Ambassadors</button>
+        <div class="campaign-ambassador-detail-grid">
+          <div class="campaign-ambassador-detail-image">${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="Portrait of ${escapeHtml(ambassador.name)}" />` : logo("blue")}</div>
+          <div class="campaign-ambassador-detail-copy">
+            <p class="campaign-section-number">Brand Ambassador${location ? ` / ${escapeHtml(location)}` : ""}</p>
+            <h1 id="ambassador-profile-title">${escapeHtml(ambassador.name)}</h1>
+            <h2>${escapeHtml(ambassador.roleTitle)}</h2>
+            <p>${escapeHtml(ambassador.fullBio || ambassador.shortBio)}</p>
+            <div class="campaign-ambassador-actions">
+              ${instagramUrl ? `<a class="campaign-text-link" href="${escapeHtml(instagramUrl)}" target="_blank" rel="noopener noreferrer">Follow on Instagram <span aria-hidden="true">&rarr;</span></a>` : ""}
+            </div>
+          </div>
+        </div>
+      </section>
+      ${footer()}
+    </main>
+  `;
 }
 
 function publicProductFlyerItems(options = {}) {
@@ -3787,7 +3926,7 @@ function flyerAdminList() {
 
 function storyAdminList() {
   const items = Array.isArray(state.blogPosts) ? state.blogPosts : [];
-  if (!items.length) return `<div class="content-empty-state"><p>No stories saved yet.</p></div>`;
+  if (!items.length) return `<div class="content-empty-state"><p>No News posts saved yet.</p></div>`;
   return `<div class="content-admin-list">${items.map((story) => contentAdminItem({
     title: story.title,
     imagePath: story.coverImagePath,
@@ -3985,6 +4124,7 @@ function siteControlSectionCount(key) {
   if (key === "product-flyers") return state.publicProductFlyers.length;
   if (key === "homepage-flyers") return state.homepageFlyers.length;
   if (key === "stories") return state.blogPosts.length;
+  if (key === "brand-ambassadors") return state.brandAmbassadors.length;
   return "";
 }
 
@@ -4032,22 +4172,84 @@ function siteStoriesPanel() {
   const storyEdit = storyBeingEdited();
   return `
     <div class="admin-card site-controls-card">
-      <div class="panel-toolbar"><h2>Stories</h2><span>${state.blogPosts.length} items</span></div>
+      <div class="panel-toolbar"><h2>News</h2><span>${state.blogPosts.length} items</span></div>
       <form class="workflow-form" data-form="blog-post">
         <input type="hidden" name="story_id" value="${escapeHtml(storyEdit?.id || "")}" />
-        <div class="form-section-title">${storyEdit ? "Edit Story" : "Add Story"}</div>
-        ${controlInput("Story Title", "story_title", storyEdit?.title || "")}
+        <div class="form-section-title">${storyEdit ? "Edit News Post" : "Add News Post"}</div>
+        ${controlInput("News Title", "story_title", storyEdit?.title || "")}
         ${storyEdit?.coverImagePath ? `<div class="content-editor-current-image"><img src="${escapeHtml(resolveContentImageUrl(storyEdit.coverImagePath))}" alt="${escapeHtml(storyEdit.title)}" /><span>Current cover</span></div>` : ""}
         <label><span>${storyEdit ? "Replace Cover Image" : "Cover Image"}</span><input name="story_cover_image" type="file" accept="image/*" /></label>
         ${controlTextarea("Summary", "story_summary", storyEdit?.summary || "")}
-        ${controlTextarea("Story Body", "story_body", storyEdit?.body || "")}
+        ${controlTextarea("News Body", "story_body", storyEdit?.body || "")}
         <label class="toggle-row"><input name="story_published" type="checkbox" ${storyEdit?.published ? "checked" : ""} /><span>Publish on the public site</span></label>
         <div class="form-actions-row">
-          <button class="button primary full" type="submit" ${state.storySavePending ? "disabled" : ""}>${state.storySavePending ? (storyEdit ? "Updating..." : "Saving...") : storyEdit ? "Update Story" : "Save Story"}</button>
+          <button class="button primary full" type="submit" ${state.storySavePending ? "disabled" : ""}>${state.storySavePending ? (storyEdit ? "Updating..." : "Saving...") : storyEdit ? "Update News" : "Save News"}</button>
           ${storyEdit ? `<button class="button secondary full" type="button" data-action="cancel-blog-post-edit">Cancel Edit</button>` : ""}
         </div>
       </form>
       ${storyAdminList()}
+    </div>
+  `;
+}
+
+function brandAmbassadorBeingEdited() {
+  const id = String(state.ambassadorEditingId || "").trim();
+  return id ? state.brandAmbassadors.find((ambassador) => ambassador.id === id) || null : null;
+}
+
+function brandAmbassadorAdminList() {
+  const items = Array.isArray(state.brandAmbassadors) ? state.brandAmbassadors : [];
+  if (!items.length) return `<div class="content-empty-state"><p>No brand ambassadors saved yet.</p></div>`;
+  return `<div class="content-admin-list">${items.map((ambassador) => contentAdminItem({
+    title: ambassador.name,
+    imagePath: ambassador.imagePath,
+    meta: `${ambassador.roleTitle} - ${ambassador.displayOrder} order - ${ambassador.featured ? "Featured - " : ""}${ambassador.published ? "Published" : "Draft"}`,
+    published: ambassador.published,
+    itemAction: "edit-brand-ambassador",
+    itemId: ambassador.id,
+    actions: `
+      <button type="button" class="button mini" data-action="edit-brand-ambassador" data-content-id="${escapeHtml(ambassador.id)}">Edit</button>
+      <button type="button" class="button mini secondary" data-action="delete-brand-ambassador" data-content-id="${escapeHtml(ambassador.id)}">Delete</button>
+    `,
+  })).join("")}</div>`;
+}
+
+function siteBrandAmbassadorsPanel() {
+  const ambassador = brandAmbassadorBeingEdited();
+  return `
+    <div class="admin-card site-controls-card">
+      <div class="panel-toolbar"><h2>Brand Ambassadors</h2><span>${state.brandAmbassadors.length} items</span></div>
+      <p class="form-note">Add the people representing Irunsvan Africa. Drafts stay private until published.</p>
+      <form class="workflow-form" data-form="brand-ambassador">
+        <input type="hidden" name="ambassador_id" value="${escapeHtml(ambassador?.id || "")}" />
+        <div class="form-section-title">${ambassador ? "Edit Brand Ambassador" : "Add Brand Ambassador"}</div>
+        ${controlInput("Name", "ambassador_name", ambassador?.name || "")}
+        ${controlInput("Public Slug", "ambassador_slug", ambassador?.slug || "")}
+        ${controlInput("Role / Title", "ambassador_role_title", ambassador?.roleTitle || "")}
+        <div class="two-fields">
+          ${controlInput("Country", "ambassador_country", ambassador?.country || "")}
+          ${controlInput("City", "ambassador_city", ambassador?.city || "")}
+        </div>
+        ${controlTextarea("Short Introduction", "ambassador_short_bio", ambassador?.shortBio || "")}
+        ${controlTextarea("Full Biography / Story", "ambassador_full_bio", ambassador?.fullBio || "")}
+        ${ambassador?.imagePath ? `<div class="content-editor-current-image"><img src="${escapeHtml(resolveContentImageUrl(ambassador.imagePath))}" alt="${escapeHtml(ambassador.name)}" /><span>Current portrait</span></div>` : ""}
+        <label><span>${ambassador ? "Replace Portrait" : "Portrait"}</span><input name="ambassador_image" type="file" accept="image/*" ${ambassador ? "" : "required"} /></label>
+        <div class="two-fields">
+          ${controlInput("CTA Label", "ambassador_cta_label", ambassador?.ctaLabel || "")}
+          ${controlInput("Display Order", "ambassador_display_order", String(ambassador?.displayOrder ?? 0), "number")}
+        </div>
+        ${controlInput("Link Destination", "ambassador_link_url", ambassador?.linkUrl || "", "url")}
+        ${controlInput("Instagram / Social URL", "ambassador_instagram_url", ambassador?.instagramUrl || "", "url")}
+        <div class="two-fields">
+          <label class="toggle-row"><input name="ambassador_featured" type="checkbox" ${ambassador?.featured ? "checked" : ""} /><span>Feature on homepage</span></label>
+          <label class="toggle-row"><input name="ambassador_published" type="checkbox" ${ambassador?.published ? "checked" : ""} /><span>Publish publicly</span></label>
+        </div>
+        <div class="form-actions-row">
+          <button class="button primary full" type="submit" ${state.ambassadorSavePending ? "disabled" : ""}>${state.ambassadorSavePending ? (ambassador ? "Updating..." : "Saving...") : ambassador ? "Update Ambassador" : "Save Ambassador"}</button>
+          ${ambassador ? `<button class="button secondary full" type="button" data-action="cancel-brand-ambassador-edit">Cancel Edit</button>` : ""}
+        </div>
+      </form>
+      ${brandAmbassadorAdminList()}
     </div>
   `;
 }
@@ -4147,6 +4349,7 @@ function siteHeroThemePanel(site, hero, theme) {
 function siteControlsPanel(section, site, hero, theme) {
   if (section === "homepage-flyers") return siteHomepageFlyersPanel();
   if (section === "stories") return siteStoriesPanel();
+  if (section === "brand-ambassadors") return siteBrandAmbassadorsPanel();
   if (section === "about") return siteAboutPanel(site);
   if (section === "hero-theme") return siteHeroThemePanel(site, hero, theme);
   return siteProductFlyersPanel();
@@ -5463,6 +5666,7 @@ function routeView() {
   const views = {
     "store": publicHomePage,
     "story": storyDetailPage,
+    "ambassador": brandAmbassadorDetailPage,
     "product": productDetail,
     "product-flyers": productFlyersPage,
     "product-flyer": productFlyerDetailPage,
@@ -5637,18 +5841,43 @@ function bindContentAdminAction(action, handler) {
   });
 }
 
+function navigateToHomeSection(section) {
+  const targetId = String(section || "").trim();
+  if (!targetId) return;
+  const reveal = () => {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    target.focus({ preventScroll: true });
+  };
+  if (state.route !== "store") {
+    setRoute("store", {}, { scroll: false });
+    window.requestAnimationFrame(reveal);
+    return;
+  }
+  state.mobileNavOpen = false;
+  render();
+  window.requestAnimationFrame(reveal);
+}
+
 function bindEvents() {
   bindResellerSearchEvents(document);
   document.querySelectorAll("[data-route]").forEach((button) => {
     if (button.dataset.searchRouteBound === "true") return;
-    button.addEventListener("click", () =>
+    button.addEventListener("click", () => {
+      const homeSection = button.getAttribute("data-home-section");
+      if (homeSection) {
+        navigateToHomeSection(homeSection);
+        return;
+      }
       setRoute(button.getAttribute("data-route"), {
-        productId: button.getAttribute("data-product-id"),
-        orderId: button.getAttribute("data-order-id"),
-        storySlug: button.getAttribute("data-story-slug"),
-        flyerSlug: button.getAttribute("data-flyer-slug"),
-      }),
-    );
+          productId: button.getAttribute("data-product-id"),
+          orderId: button.getAttribute("data-order-id"),
+          storySlug: button.getAttribute("data-story-slug"),
+          ambassadorSlug: button.getAttribute("data-ambassador-slug"),
+          flyerSlug: button.getAttribute("data-flyer-slug"),
+        });
+    });
   });
 
   document.querySelectorAll("[data-action='select-gallery-image']").forEach((button) => {
@@ -5804,6 +6033,8 @@ function bindEvents() {
   bindContentAdminAction("preview-homepage-flyer", async (id) => previewHomepageFlyer(id));
   bindContentAdminAction("edit-blog-post", async (id) => editBlogPost(id));
   bindContentAdminAction("delete-blog-post", async (id) => deleteBlogPost(id));
+  bindContentAdminAction("edit-brand-ambassador", async (id) => editBrandAmbassador(id));
+  bindContentAdminAction("delete-brand-ambassador", async (id) => deleteBrandAmbassador(id));
 
   document.querySelectorAll("[data-action='cancel-homepage-flyer-edit']").forEach((button) => {
     button.addEventListener("click", () => cancelHomepageFlyerEdit());
@@ -5811,6 +6042,10 @@ function bindEvents() {
 
   document.querySelectorAll("[data-action='cancel-blog-post-edit']").forEach((button) => {
     button.addEventListener("click", () => cancelBlogPostEdit());
+  });
+
+  document.querySelectorAll("[data-action='cancel-brand-ambassador-edit']").forEach((button) => {
+    button.addEventListener("click", () => cancelBrandAmbassadorEdit());
   });
 
   document.querySelectorAll("[data-action='edit-public-product-flyer']").forEach((button) => {
@@ -5918,6 +6153,14 @@ function bindEvents() {
         const storyId = String(new FormData(form).get("story_id") || "").trim();
         if (storyId) await updateBlogPost(form);
         else await saveBlogPost(form);
+        if (!state.adminContentError) state.siteControlsDirty = false;
+        render();
+        return;
+      }
+      if (formName === "brand-ambassador") {
+        const ambassadorId = String(new FormData(form).get("ambassador_id") || "").trim();
+        if (ambassadorId) await updateBrandAmbassador(form);
+        else await saveBrandAmbassador(form);
         if (!state.adminContentError) state.siteControlsDirty = false;
         render();
         return;
@@ -6239,6 +6482,7 @@ function syncRouteFromLocation(options = {}) {
   if (parsed.productId) state.selectedProductId = parsed.productId;
   state.selectedOrderId = parsed.orderId || (nextRoute === "order" ? state.selectedOrderId : null);
   state.selectedStorySlug = parsed.storySlug || null;
+  state.selectedAmbassadorSlug = parsed.ambassadorSlug || null;
   state.selectedProductFlyerSlug = parsed.flyerSlug || null;
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;
@@ -6247,6 +6491,7 @@ function syncRouteFromLocation(options = {}) {
       productId: state.selectedProductId,
       orderId: state.selectedOrderId,
       storySlug: state.selectedStorySlug,
+      ambassadorSlug: state.selectedAmbassadorSlug,
       flyerSlug: state.selectedProductFlyerSlug,
     })}`;
     window.history.replaceState(
@@ -6255,6 +6500,7 @@ function syncRouteFromLocation(options = {}) {
         productId: state.selectedProductId || null,
         orderId: state.selectedOrderId || null,
         storySlug: state.selectedStorySlug || null,
+        ambassadorSlug: state.selectedAmbassadorSlug || null,
         flyerSlug: state.selectedProductFlyerSlug || null,
       },
       "",
@@ -7314,6 +7560,169 @@ async function deleteBlogPost(storyId) {
   }
 }
 
+function isSafeAmbassadorUrl(value, { externalOnly = false } = {}) {
+  const url = String(value || "").trim();
+  if (!url) return true;
+  if (/^https:\/\//i.test(url)) return true;
+  return !externalOnly && (/^\/(?!\/)/.test(url) || /^#\/?/.test(url));
+}
+
+function validateAmbassadorForm(data, { requireImage = true } = {}) {
+  if (!String(data.get("ambassador_name") || "").trim()) throw new Error("Enter the ambassador's name before saving.");
+  if (!String(data.get("ambassador_role_title") || "").trim()) throw new Error("Enter the ambassador's role or title before saving.");
+  if (!String(data.get("ambassador_short_bio") || "").trim()) throw new Error("Enter a short introduction before saving.");
+  if (requireImage && !String(data.get("ambassador_image_path") || "").trim()) throw new Error("Choose a portrait before saving.");
+  if (!isSafeAmbassadorUrl(data.get("ambassador_link_url"))) throw new Error("Use an HTTPS URL or a safe internal path for the ambassador link.");
+  if (!isSafeAmbassadorUrl(data.get("ambassador_instagram_url"), { externalOnly: true })) throw new Error("Use an HTTPS URL for the ambassador social link.");
+  const displayOrder = Number(data.get("ambassador_display_order") || 0);
+  if (!Number.isInteger(displayOrder) || displayOrder < 0) throw new Error("Display order must be a whole number of zero or more.");
+}
+
+function editBrandAmbassador(ambassadorId) {
+  const id = String(ambassadorId || "").trim();
+  const ambassador = state.brandAmbassadors.find((item) => item.id === id);
+  if (!ambassador) {
+    state.adminContentError = "That brand ambassador could not be found.";
+    render();
+    return;
+  }
+  state.ambassadorEditingId = id;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  render();
+  focusSiteContentEditor("brand-ambassador");
+}
+
+function cancelBrandAmbassadorEdit() {
+  state.ambassadorEditingId = null;
+  state.adminContentError = null;
+  render();
+}
+
+async function saveBrandAmbassador(form) {
+  const data = new FormData(form);
+  state.ambassadorSavePending = true;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  render();
+  let uploadedPath = "";
+  try {
+    const file = form.elements.namedItem("ambassador_image")?.files?.[0];
+    if (!file) throw new Error("Choose a portrait before saving.");
+    const record = WebsiteContent.buildContentImageRecord({ folder: "ambassadors", file, uniquePrefix: new Date().toISOString().replace(/\D/g, "") });
+    await uploadContentImage(record);
+    uploadedPath = record.storagePath;
+    const nextData = new FormData(form);
+    nextData.set("ambassador_image_path", uploadedPath);
+    validateAmbassadorForm(nextData);
+    const [saved] = await insertAuthedSupabase(
+      "brand_ambassadors",
+      WebsiteContent.buildAmbassadorPayload({
+        name: data.get("ambassador_name"),
+        slug: data.get("ambassador_slug"),
+        roleTitle: data.get("ambassador_role_title"),
+        country: data.get("ambassador_country"),
+        city: data.get("ambassador_city"),
+        shortBio: data.get("ambassador_short_bio"),
+        fullBio: data.get("ambassador_full_bio"),
+        imagePath: uploadedPath,
+        ctaLabel: data.get("ambassador_cta_label"),
+        linkUrl: data.get("ambassador_link_url"),
+        instagramUrl: data.get("ambassador_instagram_url"),
+        displayOrder: data.get("ambassador_display_order"),
+        featured: data.get("ambassador_featured") === "on",
+        published: data.get("ambassador_published") === "on",
+      }, state.auth.user?.id || null),
+    );
+    if (!saved?.id) throw new Error("The brand ambassador save did not return a saved record.");
+    state.brandAmbassadors = WebsiteContent.normalizeAmbassadors([saved, ...state.brandAmbassadors], { includeUnpublished: true });
+    state.adminContentNotice = `Brand ambassador “${saved.name}” saved.`;
+  } catch (error) {
+    if (uploadedPath) await deleteContentImages([uploadedPath]).catch(() => {});
+    state.adminContentError = error instanceof Error ? error.message : "Unable to save brand ambassador";
+  } finally {
+    state.ambassadorSavePending = false;
+    render();
+  }
+}
+
+async function updateBrandAmbassador(form) {
+  const data = new FormData(form);
+  const id = String(data.get("ambassador_id") || state.ambassadorEditingId || "").trim();
+  const current = state.brandAmbassadors.find((ambassador) => ambassador.id === id);
+  state.ambassadorSavePending = true;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  render();
+  let uploadedPath = "";
+  try {
+    if (!current) throw new Error("Choose a brand ambassador before updating.");
+    const file = form.elements.namedItem("ambassador_image")?.files?.[0];
+    if (file) {
+      const record = WebsiteContent.buildContentImageRecord({ folder: "ambassadors", file, uniquePrefix: new Date().toISOString().replace(/\D/g, "") });
+      await uploadContentImage(record);
+      uploadedPath = record.storagePath;
+    }
+    const nextData = new FormData(form);
+    nextData.set("ambassador_image_path", uploadedPath || current.imagePath);
+    validateAmbassadorForm(nextData, { requireImage: true });
+    const payloadWithCreator = WebsiteContent.buildAmbassadorPayload({
+      name: data.get("ambassador_name"),
+      slug: data.get("ambassador_slug"),
+      roleTitle: data.get("ambassador_role_title"),
+      country: data.get("ambassador_country"),
+      city: data.get("ambassador_city"),
+      shortBio: data.get("ambassador_short_bio"),
+      fullBio: data.get("ambassador_full_bio"),
+      imagePath: uploadedPath || current.imagePath,
+      ctaLabel: data.get("ambassador_cta_label"),
+      linkUrl: data.get("ambassador_link_url"),
+      instagramUrl: data.get("ambassador_instagram_url"),
+      displayOrder: data.get("ambassador_display_order"),
+      featured: data.get("ambassador_featured") === "on",
+      published: data.get("ambassador_published") === "on",
+      publishedAt: current.publishedAt,
+    });
+    const { created_by: _createdBy, ...payload } = payloadWithCreator;
+    const [updated] = await updateAuthedSupabase("brand_ambassadors", id, payload);
+    if (!updated?.id) throw new Error("The brand ambassador update did not return a saved record.");
+    state.brandAmbassadors = WebsiteContent.normalizeAmbassadors(
+      state.brandAmbassadors.map((ambassador) => (ambassador.id === id ? updated : ambassador)),
+      { includeUnpublished: true },
+    );
+    if (uploadedPath && current.imagePath && current.imagePath !== uploadedPath) {
+      await queueContentImageCleanup([current.imagePath], "ambassador_replaced", current.id).catch(() => {});
+    }
+    state.ambassadorEditingId = null;
+    state.adminContentNotice = `Brand ambassador “${updated.name}” updated.`;
+  } catch (error) {
+    if (uploadedPath) await deleteContentImages([uploadedPath]).catch(() => {});
+    state.adminContentError = error instanceof Error ? error.message : "Unable to update brand ambassador";
+  } finally {
+    state.ambassadorSavePending = false;
+    render();
+  }
+}
+
+async function deleteBrandAmbassador(ambassadorId) {
+  const id = String(ambassadorId || "").trim();
+  const current = state.brandAmbassadors.find((ambassador) => ambassador.id === id);
+  if (!current || !window.confirm(`Delete “${current.name}”? This cannot be undone.`)) return;
+  state.adminContentError = null;
+  state.adminContentNotice = null;
+  try {
+    await deleteAuthedSupabase("brand_ambassadors", `id=eq.${encodeURIComponent(id)}`);
+    state.brandAmbassadors = state.brandAmbassadors.filter((ambassador) => ambassador.id !== id);
+    if (state.ambassadorEditingId === id) state.ambassadorEditingId = null;
+    await queueContentImageCleanup([current.imagePath], "ambassador_deleted", current.id).catch(() => {});
+    state.adminContentNotice = `Brand ambassador “${current.name}” deleted.`;
+  } catch (error) {
+    state.adminContentError = error instanceof Error ? error.message : "Unable to delete brand ambassador";
+  } finally {
+    render();
+  }
+}
+
 function productFlyerImageDraftsFromForm(form, existingImages = []) {
   const data = new FormData(form);
   const existingCount = Number(data.get("existing_product_flyer_image_count") || 0);
@@ -8168,6 +8577,7 @@ window.addEventListener("popstate", (event) => {
   if (routeState.productId) state.selectedProductId = routeState.productId;
   state.selectedOrderId = routeState.orderId || (state.route === "order" ? state.selectedOrderId : null);
   state.selectedStorySlug = routeState.storySlug || null;
+  state.selectedAmbassadorSlug = routeState.ambassadorSlug || null;
   state.selectedProductFlyerSlug = routeState.flyerSlug || null;
   state.mobileNavOpen = false;
   state.catalogFiltersOpen = false;

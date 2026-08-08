@@ -104,12 +104,14 @@ test("price save reports success and persists through refresh", async ({ page },
 test("site controls show unsaved feedback and all content sections", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name.includes("mobile"), "Desktop workflow test.");
   await openAdmin(page, "site");
-  for (const label of ["Product Flyers", "Homepage Flyers", "Stories", "About", "Hero & Theme"]) await expect(page.getByRole("button", { name: new RegExp(label) })).toBeVisible();
+  for (const label of ["Product Flyers", "Homepage Flyers", "News", "Brand Ambassadors", "About", "Hero & Theme"]) await expect(page.getByRole("button", { name: new RegExp(label) })).toBeVisible();
+  await page.getByRole("button", { name: /Brand Ambassadors/ }).click();
+  await expect(page.locator("form[data-form='brand-ambassador']")).toBeVisible();
   await page.getByRole("button", { name: /Homepage Flyers/ }).click();
   await page.locator("form[data-form='homepage-flyer'] input[name='flyer_title']").fill("Edited title");
   await expect(page.locator("[data-site-unsaved]")).toBeVisible();
   page.once("dialog", (dialog) => dialog.dismiss());
-  await page.getByRole("button", { name: /Stories/ }).click();
+  await page.getByRole("button", { name: /News/ }).click();
   await expect(page.locator("form[data-form='homepage-flyer']")).toBeVisible();
 });
 

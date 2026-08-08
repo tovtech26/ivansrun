@@ -189,6 +189,10 @@
     return titleSlugPart(title) || "product-flyer";
   }
 
+  function buildAmbassadorSlug(name) {
+    return titleSlugPart(name) || "ambassador";
+  }
+
   function normalizeFlyers(rows = [], options = {}) {
     const normalized = (Array.isArray(rows) ? rows : [])
       .map((row) => ({
@@ -220,6 +224,34 @@
       })
       .filter((row) => row.id && row.title && row.slug && row.body && (options.includeUnpublished === true || row.published))
       .sort((left, right) => String(right.publishedAt).localeCompare(String(left.publishedAt)));
+  }
+
+  function normalizeAmbassadors(rows = [], options = {}) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => {
+        const published = row.published === true || row.published === "true";
+        return {
+          id: safeText(row.id),
+          name: safeText(row.name),
+          slug: safeText(row.slug) || buildAmbassadorSlug(row.name),
+          roleTitle: safeText(row.role_title || row.roleTitle),
+          country: safeText(row.country),
+          city: safeText(row.city),
+          shortBio: safeText(row.short_bio || row.shortBio),
+          fullBio: safeText(row.full_bio || row.fullBio),
+          imagePath: safeText(row.image_path || row.imagePath),
+          ctaLabel: safeText(row.cta_label || row.ctaLabel),
+          linkUrl: safeText(row.link_url || row.linkUrl),
+          instagramUrl: safeText(row.instagram_url || row.instagramUrl),
+          displayOrder: safeInteger(row.display_order ?? row.displayOrder, 0),
+          featured: row.featured === true || row.featured === "true",
+          published,
+          createdAt: safeText(row.created_at || row.createdAt),
+          updatedAt: safeText(row.updated_at || row.updatedAt),
+        };
+      })
+      .filter((row) => row.id && row.name && row.slug && row.roleTitle && row.shortBio && row.imagePath && (options.includeUnpublished === true || row.published))
+      .sort((left, right) => Number(right.featured) - Number(left.featured) || left.displayOrder - right.displayOrder || left.name.localeCompare(right.name));
   }
 
   function normalizeProductFlyers(rows = [], options = {}) {
@@ -373,6 +405,29 @@
     };
   }
 
+  function buildAmbassadorPayload(input = {}, adminUserId = null) {
+    const name = safeText(input.name);
+    const published = safeBool(input.published);
+    return {
+      name: name || "Brand Ambassador",
+      slug: buildAmbassadorSlug(input.slug || name),
+      role_title: safeText(input.roleTitle || input.role_title) || "Brand Ambassador",
+      country: safeText(input.country) || null,
+      city: safeText(input.city) || null,
+      short_bio: safeText(input.shortBio || input.short_bio),
+      full_bio: safeText(input.fullBio || input.full_bio) || null,
+      image_path: safeText(input.imagePath || input.image_path),
+      cta_label: safeText(input.ctaLabel || input.cta_label) || null,
+      link_url: safeText(input.linkUrl || input.link_url) || null,
+      instagram_url: safeText(input.instagramUrl || input.instagram_url) || null,
+      display_order: safeInteger(input.displayOrder ?? input.display_order, 0),
+      featured: safeBool(input.featured),
+      published,
+      published_at: published ? safeText(input.publishedAt || input.published_at) || new Date().toISOString() : null,
+      created_by: adminUserId,
+    };
+  }
+
   function buildProductFlyerPayload(input = {}, adminUserId = null) {
     const title = safeText(input.title) || "Public Product Flyer";
     return {
@@ -442,8 +497,10 @@
     DEFAULT_ABOUT_CONTENT,
     buildStorySlug,
     buildProductFlyerSlug,
+    buildAmbassadorSlug,
     normalizeFlyers,
     normalizeStories,
+    normalizeAmbassadors,
     normalizeProductFlyers,
     normalizeProductFlyerImages,
     productFlyerImagesForFlyer,
@@ -452,6 +509,7 @@
     buildContentImageRecord,
     buildFlyerPayload,
     buildStoryPayload,
+    buildAmbassadorPayload,
     buildProductFlyerPayload,
     buildProductFlyerUpdatePayload,
     buildProductFlyerImagePayload,

@@ -54,7 +54,7 @@ test.describe("authenticated admin P0 workflows", () => {
 
   test("site controls expose all editable homepage sections", async ({ page }) => {
     await page.locator("[data-route='site']").first().click();
-    for (const label of ["Product Flyers", "Homepage Flyers", "Stories", "About", "Hero & Theme"]) {
+    for (const label of ["Product Flyers", "Homepage Flyers", "News", "Brand Ambassadors", "About", "Hero & Theme"]) {
       await expect(page.getByRole("button", { name: new RegExp(label) })).toBeVisible();
     }
     await page.getByRole("button", { name: /Homepage Flyers/ }).click();

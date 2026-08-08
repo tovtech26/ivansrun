@@ -2,6 +2,7 @@
   const ROUTES = new Set([
     "store",
     "story",
+    "ambassador",
     "product",
     "product-flyers",
     "product-flyer",
@@ -46,6 +47,7 @@
   function backTargetForRoute(route) {
     if (route === "store") return null;
     if (route === "story") return { route: "store" };
+    if (route === "ambassador") return { route: "store" };
     if (route === "product") return { route: "store" };
     if (route === "product-flyers") return { route: "store" };
     if (route === "product-flyer") return { route: "product-flyers" };
@@ -65,8 +67,10 @@
     const productId = String(params.productId || "").trim();
     const orderId = String(params.orderId || "").trim();
     const storySlug = String(params.storySlug || "").trim();
+    const ambassadorSlug = String(params.ambassadorSlug || "").trim();
     const flyerSlug = String(params.flyerSlug || "").trim();
     if (safeRoute === "story" && storySlug) return `#/${safeRoute}/${encodeURIComponent(storySlug)}`;
+    if (safeRoute === "ambassador" && ambassadorSlug) return `#/${safeRoute}/${encodeURIComponent(ambassadorSlug)}`;
     if (safeRoute === "product-flyer" && flyerSlug) return `#/${safeRoute}/${encodeURIComponent(flyerSlug)}`;
     if ((safeRoute === "product" || safeRoute === "reseller-product") && productId) return `#/${safeRoute}/${encodeURIComponent(productId)}`;
     if (safeRoute === "order" && orderId) return `#/${safeRoute}/${encodeURIComponent(orderId)}`;
@@ -82,6 +86,7 @@
       productId: (route === "product" || route === "reseller-product") && parts[1] ? decodeURIComponent(parts[1]) : null,
       orderId: route === "order" && parts[1] ? decodeURIComponent(parts[1]) : null,
       storySlug: route === "story" && parts[1] ? decodeURIComponent(parts[1]) : null,
+      ...(route === "ambassador" ? { ambassadorSlug: parts[1] ? decodeURIComponent(parts[1]) : null } : {}),
       ...(route === "product-flyer" ? { flyerSlug: parts[1] ? decodeURIComponent(parts[1]) : null } : {}),
     };
   }

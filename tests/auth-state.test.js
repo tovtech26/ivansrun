@@ -33,6 +33,7 @@ assert.deepEqual(
 
 assert.equal(canAccessRoute("store", { role: "public" }), true);
 assert.equal(canAccessRoute("story", { role: "public" }), true);
+assert.equal(canAccessRoute("ambassador", { role: "public" }), true);
 assert.equal(canAccessRoute("product", { role: "public" }), true);
 assert.equal(canAccessRoute("product-flyers", { role: "public" }), true);
 assert.equal(canAccessRoute("product-flyer", { role: "public" }), true);

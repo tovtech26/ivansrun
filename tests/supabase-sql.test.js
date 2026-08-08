@@ -27,6 +27,7 @@ const p0HandoverSql = readFileSync(join(__dirname, "..", "supabase", "sql", "031
 const storageCleanupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "032_storage_cleanup_queue.sql"), "utf8");
 const storageCleanupGrantsSql = readFileSync(join(__dirname, "..", "supabase", "sql", "033_lock_storage_cleanup_queue_grants.sql"), "utf8");
 const activeHeroCleanupSql = readFileSync(join(__dirname, "..", "supabase", "sql", "034_active_hero_brand_cleanup.sql"), "utf8");
+const brandAmbassadorsSql = readFileSync(join(__dirname, "..", "supabase", "sql", "035_brand_ambassadors.sql"), "utf8");
 
 assert.match(pricePrivacySql, /create or replace view public\.reseller_products\s+with \(security_invoker = true\)/i);
 assert.match(pricePrivacySql, /create or replace view public\.reseller_product_variants\s+with \(security_invoker = true\)/i);
@@ -158,6 +159,27 @@ assert.match(publicHomeContentSql, /alter table public\.site_content[\s\S]*add c
 assert.match(publicHomeContentSql, /alter table public\.site_content[\s\S]*add column if not exists about_body text/i);
 assert.match(publicHomeContentSql, /storage\.buckets[\s\S]*'product-images'/i);
 assert.match(publicHomeContentSql, /content\/%/i);
+
+assert.match(brandAmbassadorsSql, /create table if not exists public\.brand_ambassadors/i);
+assert.match(brandAmbassadorsSql, /slug text not null unique/i);
+assert.match(brandAmbassadorsSql, /role_title text not null/i);
+assert.match(brandAmbassadorsSql, /short_bio text not null/i);
+assert.match(brandAmbassadorsSql, /image_path text not null/i);
+assert.match(brandAmbassadorsSql, /display_order integer not null default 0/i);
+assert.match(brandAmbassadorsSql, /featured boolean not null default false/i);
+assert.match(brandAmbassadorsSql, /published boolean not null default false/i);
+assert.match(brandAmbassadorsSql, /create index if not exists brand_ambassadors_public_idx/i);
+assert.match(brandAmbassadorsSql, /alter table public\.brand_ambassadors enable row level security/i);
+assert.match(brandAmbassadorsSql, /grant select on table public\.brand_ambassadors to anon, authenticated/i);
+assert.match(brandAmbassadorsSql, /grant insert, update, delete on table public\.brand_ambassadors to authenticated/i);
+assert.match(brandAmbassadorsSql, /Anonymous can read published brand ambassadors/i);
+assert.match(brandAmbassadorsSql, /Authenticated can read brand ambassadors/i);
+assert.match(brandAmbassadorsSql, /Admins can insert brand ambassadors/i);
+assert.match(brandAmbassadorsSql, /Admins can update brand ambassadors/i);
+assert.match(brandAmbassadorsSql, /Admins can delete brand ambassadors/i);
+assert.match(brandAmbassadorsSql, /private\.is_admin\(\)/i);
+assert.match(brandAmbassadorsSql, /image_path like 'content\/%'/i);
+assert.match(brandAmbassadorsSql, /notify pgrst, 'reload schema'/i);
 
 assert.match(orderWorkflowSql, /alter type public\.order_request_status add value if not exists 'awaiting_payment'/i);
 assert.match(orderWorkflowSql, /alter type public\.order_request_status add value if not exists 'paid'/i);

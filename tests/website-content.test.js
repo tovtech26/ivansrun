@@ -5,14 +5,17 @@ const {
   DEFAULT_ABOUT_CONTENT,
   buildStorySlug,
   buildProductFlyerSlug,
+  buildAmbassadorSlug,
   normalizeFlyers,
   normalizeStories,
+  normalizeAmbassadors,
   normalizeProductFlyers,
   mergeProductFlyersWithDefaults,
   groupProductFlyersByClass,
   buildContentImageRecord,
   buildFlyerPayload,
   buildStoryPayload,
+  buildAmbassadorPayload,
   buildProductFlyerPayload,
   buildProductFlyerUpdatePayload,
   normalizeProductFlyerImages,
@@ -27,6 +30,8 @@ assert.equal(buildStorySlug("drop-v1.2"), "drop-v1-2");
 assert.equal(buildStorySlug(""), "story");
 assert.equal(buildProductFlyerSlug("IRUNSVAN 005 Running Shoe"), "irunsvan-005-running-shoe");
 assert.equal(buildProductFlyerSlug(""), "product-flyer");
+assert.equal(buildAmbassadorSlug("Mpho Kgatlana"), "mpho-kgatlana");
+assert.equal(buildAmbassadorSlug(""), "ambassador");
 
 assert.deepEqual(
   normalizeFlyers([
@@ -126,6 +131,16 @@ assert.equal(
   "",
   "Draft stories must not reuse their creation time as a publication time.",
 );
+
+assert.deepEqual(
+  normalizeAmbassadors([
+    { id: "2", name: "Second", slug: "second", role_title: "Coach", short_bio: "Second bio", image_path: "content/ambassadors/second.jpg", display_order: 2, featured: false, published: true },
+    { id: "1", name: "First", slug: "first", role_title: "Athlete", short_bio: "First bio", image_path: "content/ambassadors/first.jpg", display_order: 10, featured: true, published: true },
+    { id: "draft", name: "Draft", slug: "draft", role_title: "Creator", short_bio: "Draft bio", image_path: "content/ambassadors/draft.jpg", published: false },
+  ]).map((item) => item.name),
+  ["First", "Second"],
+);
+assert.equal(normalizeAmbassadors([{ id: "draft", name: "Draft", slug: "draft", role_title: "Creator", short_bio: "Draft bio", image_path: "content/ambassadors/draft.jpg", published: false }], { includeUnpublished: true }).length, 1);
 
 assert.deepEqual(
   normalizeProductFlyers([
@@ -345,6 +360,30 @@ const unpublishedStoryPayload = buildStoryPayload(
   "admin-1",
 );
 assert.equal(unpublishedStoryPayload.published_at, null);
+
+const ambassadorPayload = buildAmbassadorPayload({
+  name: "Mpho Kgatlana",
+  roleTitle: "Athlete",
+  country: "Botswana",
+  city: "Gaborone",
+  shortBio: "Moves with purpose.",
+  fullBio: "A longer profile.",
+  imagePath: "content/ambassadors/mpho.jpg",
+  ctaLabel: "View profile",
+  linkUrl: "/#/story/mpho",
+  instagramUrl: "https://instagram.com/mpho",
+  displayOrder: "3",
+  featured: true,
+  published: true,
+}, "admin-1");
+assert.equal(ambassadorPayload.slug, "mpho-kgatlana");
+assert.equal(ambassadorPayload.role_title, "Athlete");
+assert.equal(ambassadorPayload.image_path, "content/ambassadors/mpho.jpg");
+assert.equal(ambassadorPayload.display_order, 3);
+assert.equal(ambassadorPayload.featured, true);
+assert.equal(ambassadorPayload.published, true);
+assert.match(ambassadorPayload.published_at, /^\d{4}-\d{2}-\d{2}T/);
+assert.equal(ambassadorPayload.created_by, "admin-1");
 
 assert.deepEqual(
   buildProductFlyerPayload(
