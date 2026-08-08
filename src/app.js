@@ -2482,6 +2482,7 @@ function signupPage() {
 
 function loginPage() {
   const content = loginPageContent();
+  const adminLogin = isAdminLoginRoute();
   const notice = state.routeNotice
     ? `<p class="notice ${escapeHtml(state.routeNotice.type)}">${escapeHtml(state.routeNotice.message)}</p>`
     : "";
@@ -2502,11 +2503,11 @@ function loginPage() {
         ${notice}
         ${helper}
         ${authError}
-        ${inputField("Email", "email", "name@example.com", "email")}
+        ${adminLogin ? inputField("Username", "username", "RAMOCHA") : inputField("Email", "email", "name@example.com", "email")}
         ${inputField("Password", "password", "Password", "password")}
         <button class="button primary full" ${state.loginPending ? "disabled" : ""}>${state.loginPending ? "Signing In..." : escapeHtml(content.submitLabel)}</button>
-        <button type="button" class="button secondary full" data-action="google-login">Continue with Google</button>
-        <button type="button" class="text-link" data-action="toggle-password-recovery">${state.passwordRecoveryOpen ? "Hide password help" : "Forgot password?"}</button>
+        ${adminLogin ? "" : `<button type="button" class="button secondary full" data-action="google-login">Continue with Google</button>`}
+        ${adminLogin ? "" : `<button type="button" class="text-link" data-action="toggle-password-recovery">${state.passwordRecoveryOpen ? "Hide password help" : "Forgot password?"}</button>`}
         <div class="split-actions">
           <button type="button" class="text-link" data-route="${escapeHtml(content.linkOne[1])}">${escapeHtml(content.linkOne[0])}</button>
           <button type="button" class="text-link" data-route="${escapeHtml(content.linkTwo[1])}">${escapeHtml(content.linkTwo[0])}</button>
@@ -2514,7 +2515,7 @@ function loginPage() {
         ${state.loginSubmitted && state.auth.isAuthenticated ? `<p class="notice success">Signed in as ${escapeHtml(authDisplayName())}.</p>` : ""}
       </form>
       ${
-        state.passwordRecoveryOpen
+        !adminLogin && state.passwordRecoveryOpen
           ? `
             <form class="workflow-form password-help-card" data-form="password-recovery">
               <strong>Password reset</strong>
@@ -6099,9 +6100,10 @@ function clearBulkOrderQuantities(container) {
 
 async function handleLogin(form) {
   const data = new FormData(form);
-  const email = String(data.get("email") || "").trim();
   const password = String(data.get("password") || "");
   const adminOnly = isAdminLoginRoute();
+  const username = String(data.get("username") || "").trim();
+  const emailInput = String(data.get("email") || "").trim();
   state.loginPending = true;
   state.loginSubmitted = false;
   state.authError = null;
@@ -6109,9 +6111,10 @@ async function handleLogin(form) {
   render();
 
   try {
-    if (!email || !password) {
-      throw new Error("Enter both your email and password.");
+    if (!(adminOnly ? username : emailInput) || !password) {
+      throw new Error(adminOnly ? "Enter both your username and password." : "Enter both your email and password.");
     }
+    const email = adminOnly ? SupabaseClient.adminLoginEmail(username) : emailInput;
     await SupabaseClient.signInWithPassword({
       url: SUPABASE_URL,
       key: SUPABASE_KEY,
@@ -6139,7 +6142,8 @@ async function handleLogin(form) {
     loadProtectedDataInBackground();
   } catch (error) {
     state.auth = Auth.normalizeAuthState();
-    state.authError = error instanceof Error ? error.message : "Unable to sign in";
+    const message = error instanceof Error ? error.message : "Unable to sign in";
+    state.authError = adminOnly ? message.replace(/email or password/gi, "username or password") : message;
   } finally {
     state.loginPending = false;
   }

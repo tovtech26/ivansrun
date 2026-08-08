@@ -4,6 +4,7 @@
   "private": true,
   "description": "IRUNSVAN public catalog, reseller portal, and admin operations frontend.",
   "scripts": {
+    "admin:create": "node scripts/create-admin-login.js",
     "build": "node scripts/build-static.js",
     "serve:dist": "node scripts/serve-static.js dist",
     "test:e2e": "playwright test",

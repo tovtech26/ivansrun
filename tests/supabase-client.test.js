@@ -12,6 +12,8 @@ global.localStorage = {
 };
 
 const {
+  ADMIN_LOGIN_DOMAIN,
+  adminLoginEmail,
   authErrorMessage,
   buildOAuthUrl,
   clearStoredSession,
@@ -28,6 +30,12 @@ const {
   updatePassword,
   writeStoredSession,
 } = require("../src/supabase-client.js");
+
+assert.equal(ADMIN_LOGIN_DOMAIN, "irunsvan.africa");
+assert.equal(adminLoginEmail("RAMOCHA"), "ramocha.admin@irunsvan.africa");
+assert.equal(adminLoginEmail("  ramocha  "), "ramocha.admin@irunsvan.africa");
+assert.throws(() => adminLoginEmail("ra"), /valid admin username/i);
+assert.throws(() => adminLoginEmail("ramocha@example.com"), /valid admin username/i);
 
 const authUrl = buildOAuthUrl({
   url: "https://example.supabase.co",
